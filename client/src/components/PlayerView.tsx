@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
@@ -57,6 +57,8 @@ interface BingoSquare {
 
 interface BingoCard {
   id: string;
+  /** Stable id for multi-card mark/bingo (server-assigned). */
+  cardId?: string;
   squares: BingoSquare[];
 }
 
@@ -154,7 +156,31 @@ const PlayerView: React.FC = () => {
   const [socket, setSocket] = useState<any>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
   const [reconnectAttempts, setReconnectAttempts] = useState<number>(0);
-  const [bingoCard, setBingoCard] = useState<BingoCard | null>(null);
+  const [bingoCards, setBingoCards] = useState<BingoCard[]>([]);
+  const [activeCardIndex, setActiveCardIndex] = useState(0);
+  /** -1 / 1 for AnimatePresence slide direction (multi-card only). */
+  const [carouselDir, setCarouselDir] = useState(0);
+  const [maxPlayerCards, setMaxPlayerCards] = useState(1);
+  const bingoCard =
+    bingoCards.length > 0
+      ? bingoCards[Math.min(activeCardIndex, bingoCards.length - 1)] ?? null
+      : null;
+  const bingoCardRef = useRef<BingoCard | null>(null);
+  bingoCardRef.current = bingoCard;
+  const cardCarouselRef = useRef<HTMLDivElement | null>(null);
+  /** Multi-card chrome only when the player actually holds more than one card. */
+  const showMultiCardChrome = bingoCards.length > 1;
+
+  const goToCardIndex = (next: number) => {
+    const len = bingoCards.length;
+    if (len <= 1) return;
+    const clamped = Math.max(0, Math.min(len - 1, next));
+    setActiveCardIndex((i) => {
+      if (clamped === i) return i;
+      setCarouselDir(clamped > i ? 1 : -1);
+      return clamped;
+    });
+  };
   const [focusedSquare, setFocusedSquare] = useState<BingoSquare | null>(null);
   const longPressTimer = useRef<number | null>(null);
   const hoverTooltipTimer = useRef<number | null>(null);
@@ -358,13 +384,25 @@ const PlayerView: React.FC = () => {
     };
   }, []);
 
-  // Mark persistence functions
-  const getStoredMarks = (): Record<string, boolean> => {
+  // Mark persistence functions (per card when cardId is present)
+  const marksStorageKey = (card?: BingoCard | null) => {
+    const cid = card?.cardId || card?.id;
+    return cid ? `player_marks_${roomId}_${cid}` : `player_marks_${roomId}`;
+  };
+
+  const getStoredMarks = (card?: BingoCard | null): Record<string, boolean> => {
     try {
-      const stored = localStorage.getItem(`player_marks_${roomId}`);
+      const stored = localStorage.getItem(marksStorageKey(card));
       if (stored) {
         const parsed = JSON.parse(stored);
         if (typeof parsed === 'object' && parsed !== null) return parsed;
+      }
+      if (card?.cardId) {
+        const legacy = localStorage.getItem(`player_marks_${roomId}`);
+        if (legacy) {
+          const parsed = JSON.parse(legacy);
+          if (typeof parsed === 'object' && parsed !== null) return parsed;
+        }
       }
     } catch {}
     return {};
@@ -405,7 +443,7 @@ const PlayerView: React.FC = () => {
           marks[square.position] = true;
         }
       });
-      localStorage.setItem(`player_marks_${roomId}`, JSON.stringify(marks));
+      localStorage.setItem(marksStorageKey(normalizedCard), JSON.stringify(marks));
     } catch (e) {
       console.warn('Failed to persist marks:', e);
     }
@@ -414,7 +452,7 @@ const PlayerView: React.FC = () => {
   const applyStoredMarks = (card: BingoCard | null): BingoCard | null => {
     const normalizedCard = normalizeCardFreeSpaces(card);
     if (!normalizedCard) return normalizedCard;
-    const storedMarks = getStoredMarks();
+    const storedMarks = getStoredMarks(normalizedCard);
     if (Object.keys(storedMarks).length === 0) return normalizedCard;
     
     const updatedSquares = normalizedCard.squares.map(square => ({
@@ -426,6 +464,46 @@ const PlayerView: React.FC = () => {
         square.marked
     }));
     return { ...normalizedCard, squares: updatedSquares };
+  };
+
+  const cardKey = (card: BingoCard | null | undefined) =>
+    card?.cardId || card?.id || '';
+
+  const replaceBingoCards = (cards: BingoCard[], opts?: { focusLast?: boolean; keepIndex?: boolean }) => {
+    const normalized = cards
+      .map((c) => normalizeCardFreeSpaces(c))
+      .filter((c): c is BingoCard => !!c);
+    setBingoCards(normalized);
+    if (opts?.focusLast && normalized.length) {
+      setActiveCardIndex(normalized.length - 1);
+    } else if (!opts?.keepIndex) {
+      setActiveCardIndex(0);
+    } else {
+      setActiveCardIndex((i) => Math.min(i, Math.max(0, normalized.length - 1)));
+    }
+  };
+
+  const updateActiveBingoCard = (updater: (prev: BingoCard) => BingoCard | null) => {
+    setBingoCards((prev) => {
+      if (!prev.length) return prev;
+      const i = Math.min(activeCardIndex, prev.length - 1);
+      const updated = updater(prev[i]);
+      if (!updated) return prev;
+      const next = [...prev];
+      next[i] = updated;
+      return next;
+    });
+  };
+
+  const patchAllBingoCardsSquares = (
+    patcher: (squares: BingoSquare[]) => BingoSquare[],
+  ) => {
+    setBingoCards((prev) =>
+      prev.map((card) => ({
+        ...card,
+        squares: patcher(card.squares),
+      })),
+    );
   };
 
   const countUniqueSongs = (card: BingoCard): number => {
@@ -680,6 +758,10 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('room-state', (payload: any) => {
+      if (payload?.maxPlayerBingoCards != null) {
+        const n = Math.round(Number(payload.maxPlayerBingoCards));
+        if (Number.isFinite(n)) setMaxPlayerCards(Math.min(3, Math.max(1, n)));
+      }
       try {
         if (payload?.venueBranding !== undefined) {
           setVenueBranding(payload.venueBranding ?? null);
@@ -772,24 +854,14 @@ const PlayerView: React.FC = () => {
 
     newSocket.on('song-alias-updated', (data: { songId: string; title: string; artist: string }) => {
       if (!data?.songId) return;
-      setBingoCard((prev) => {
-        if (!prev?.squares) return prev;
-        return {
-          ...prev,
-          squares: patchSquaresWithAlias(prev.squares, data.songId, data.title, data.artist),
-        };
-      });
+      patchAllBingoCardsSquares((squares) =>
+        patchSquaresWithAlias(squares, data.songId, data.title, data.artist),
+      );
     });
 
     newSocket.on('song-alias-cleared', (data: { songId: string }) => {
       if (!data?.songId) return;
-      setBingoCard((prev) => {
-        if (!prev?.squares) return prev;
-        return {
-          ...prev,
-          squares: patchSquaresClearAlias(prev.squares, data.songId),
-        };
-      });
+      patchAllBingoCardsSquares((squares) => patchSquaresClearAlias(squares, data.songId));
     });
 
     newSocket.on('song-playing', (data: any) => {
@@ -821,57 +893,95 @@ const PlayerView: React.FC = () => {
       }
     });
 
+    newSocket.on('max-player-bingo-cards-updated', (data: any) => {
+      if (typeof data?.maxCards === 'number' && data.maxCards > 0) {
+        setMaxPlayerCards(Math.min(3, Math.max(1, Math.round(data.maxCards))));
+      }
+    });
+
+    newSocket.on('bingo-cards', (data: any) => {
+      const list = Array.isArray(data?.cards) ? data.cards : [];
+      if (typeof data?.maxCards === 'number' && data.maxCards > 0) {
+        setMaxPlayerCards(data.maxCards);
+      }
+      if (!list.length) {
+        replaceBingoCards([]);
+        return;
+      }
+      const isNew = data?.isNewCard === true;
+      const normalized = list.map((raw: any) => {
+        const clean = { ...raw };
+        delete clean.isNewCard;
+        const base = normalizeCardFreeSpaces(clean as BingoCard)!;
+        return isNew ? base : applyStoredMarks(base)!;
+      });
+      if (isNew) {
+        try {
+          for (const c of normalized) {
+            localStorage.removeItem(marksStorageKey(c));
+          }
+          localStorage.removeItem(`player_marks_${roomId}`);
+        } catch {}
+        for (const c of normalized) persistMarks(c);
+        replaceBingoCards(normalized, { keepIndex: false });
+      } else {
+        for (const c of normalized) persistMarks(c);
+        replaceBingoCards(normalized, { keepIndex: true });
+      }
+    });
+
     newSocket.on('bingo-card', (data: any) => {
       console.log('Received bingo card:', data);
-      // Check if this is a new card (different song IDs) vs an update to existing card
-      setBingoCard(prev => {
-        // Check if server explicitly marked this as a new card, or if it's actually a new card
+      // Prefer bingo-cards when both arrive; still handle legacy single-card emit.
+      setBingoCards((prev) => {
         const isExplicitNewCard = data.isNewCard === true;
-        const isNoPreviousCard = !prev;
-        
-        // Check if this is a new card (different songs) vs an update (same songs)
-        let isNewCardByContent = false;
-        if (prev && data.squares) {
-          const prevSongIds = new Set(prev.squares.map(s => s.songId));
-          const newSongIds = new Set(data.squares.map((s: any) => s.songId));
-          isNewCardByContent = prevSongIds.size !== newSongIds.size || 
-                                !Array.from(prevSongIds).every(id => newSongIds.has(id));
-        }
-        
-        if (isNoPreviousCard || isExplicitNewCard || isNewCardByContent) {
-          // Brand new card - start with blank marks (don't apply stored marks from previous round)
-          console.log('🔄 New card detected - clearing all marks', { isNoPreviousCard, isExplicitNewCard, isNewCardByContent });
-          // Clear any persisted marks for this room
+        const cleanCard = { ...data };
+        delete cleanCard.isNewCard;
+        const incoming = normalizeCardFreeSpaces(cleanCard as BingoCard);
+        if (!incoming) return prev;
+
+        const key = cardKey(incoming);
+        const existingIdx = prev.findIndex((c) => cardKey(c) === key);
+
+        if (isExplicitNewCard && prev.length <= 1) {
           try {
+            localStorage.removeItem(marksStorageKey(incoming));
             localStorage.removeItem(`player_marks_${roomId}`);
           } catch {}
-          // Remove isNewCard flag from card data before storing
-          const cleanCard = { ...data };
-          delete cleanCard.isNewCard;
-          const normalizedCleanCard = normalizeCardFreeSpaces(cleanCard);
-          persistMarks(normalizedCleanCard); // Persist blank marks (+ free space)
-          return normalizedCleanCard;
+          persistMarks(incoming);
+          setActiveCardIndex(0);
+          return [incoming];
         }
-        
-        // Same card structure - preserve marks from previous card, then apply stored marks
-        const mergedSquares = data.squares.map((newSquare: any) => {
-          const oldSquare = prev.squares.find((s: any) => s.position === newSquare.position);
-          return {
-            ...newSquare,
-            marked:
-              newSquare.isFreeSpace ||
-              newSquare.songId === '__FREE_SPACE__' ||
-              oldSquare?.marked ||
-              false // Preserve mark state from previous card
-          };
-        });
-        const mergedCard = { ...data, squares: mergedSquares };
-        // Remove isNewCard flag if present
-        delete mergedCard.isNewCard;
-        // Apply stored marks (localStorage takes precedence for persistence)
-        const cardWithStoredMarks = applyStoredMarks(mergedCard);
-        persistMarks(cardWithStoredMarks);
-        return cardWithStoredMarks;
+
+        if (existingIdx >= 0) {
+          const old = prev[existingIdx];
+          const mergedSquares = incoming.squares.map((newSquare) => {
+            const oldSquare = old.squares.find((s) => s.position === newSquare.position);
+            return {
+              ...newSquare,
+              marked:
+                newSquare.isFreeSpace ||
+                newSquare.songId === '__FREE_SPACE__' ||
+                oldSquare?.marked ||
+                false,
+            };
+          });
+          const merged = applyStoredMarks({ ...incoming, squares: mergedSquares })!;
+          persistMarks(merged);
+          const next = [...prev];
+          next[existingIdx] = merged;
+          return next;
+        }
+
+        if (prev.length === 0) {
+          const withMarks = applyStoredMarks(incoming)!;
+          persistMarks(withMarks);
+          setActiveCardIndex(0);
+          return [withMarks];
+        }
+
+        // Unknown single-card update while multi-card active: ignore (bingo-cards is source of truth)
+        return prev;
       });
     });
 
@@ -1001,21 +1111,29 @@ const PlayerView: React.FC = () => {
 
     // Listen for mark confirmation from server to ensure sync
     newSocket.on('mark-confirmed', (data: any) => {
-      const { position, songId, marked } = data;
+      const { position, songId, marked, cardId } = data || {};
       if (!position || !songId) return;
-      
-      setBingoCard(prev => {
-        if (!prev) return prev;
-        const square = prev.squares.find(s => s.position === position && s.songId === songId);
+
+      setBingoCards((prev) => {
+        if (!prev.length) return prev;
+        const targetIdx = cardId
+          ? prev.findIndex((c) => c.cardId === cardId || c.id === cardId)
+          : 0;
+        const i = targetIdx >= 0 ? targetIdx : 0;
+        const card = prev[i];
+        if (!card) return prev;
+        const square = card.squares.find((s) => s.position === position && s.songId === songId);
         if (square && square.marked !== marked) {
-          // Server state differs from local - sync to server state
-          console.log(`🔄 Mark sync: Server says position ${position} should be ${marked ? 'marked' : 'unmarked'}, updating local state`);
-          const updatedSquares = prev.squares.map(s => 
-            s.position === position && s.songId === songId ? { ...s, marked: marked } : s
-          );
-          const updatedCard = { ...prev, squares: updatedSquares };
+          const updatedCard = {
+            ...card,
+            squares: card.squares.map((s) =>
+              s.position === position && s.songId === songId ? { ...s, marked } : s,
+            ),
+          };
           persistMarks(updatedCard);
-          return updatedCard;
+          const next = [...prev];
+          next[i] = updatedCard;
+          return next;
         }
         return prev;
       });
@@ -1039,29 +1157,31 @@ const PlayerView: React.FC = () => {
       // For new round: clear card entirely (will be regenerated with new playlists)
       // For restart: reset marks but keep card structure
       if (data.message && data.message.includes('New round starting')) {
-        // New round - clear card completely and clear persisted marks
-        setBingoCard(null);
+        setBingoCards([]);
+        setActiveCardIndex(0);
         try {
           localStorage.removeItem(`player_marks_${roomId}`);
         } catch {}
         setBingoMessage('🔄 New round starting - waiting for new card...');
       } else {
-        // Regular restart - reset marks but keep card
-        if (bingoCard && bingoCard.squares) {
-          const resetCard = {
-            ...bingoCard,
-            squares: bingoCard.squares.map(square => ({
-              ...square,
-              marked: false
-            }))
-          };
-          // Clear persisted marks
+        setBingoCards((prev) => {
+          if (!prev.length) return prev;
           try {
+            for (const c of prev) localStorage.removeItem(marksStorageKey(c));
             localStorage.removeItem(`player_marks_${roomId}`);
           } catch {}
-          persistMarks(resetCard); // Persist empty marks
-          setBingoCard(resetCard);
-        }
+          return prev.map((card) => {
+            const resetCard = {
+              ...card,
+              squares: card.squares.map((square) => ({
+                ...square,
+                marked: !!(square.isFreeSpace || square.songId === '__FREE_SPACE__'),
+              })),
+            };
+            persistMarks(resetCard);
+            return resetCard;
+          });
+        });
         setBingoMessage('🔄 Game restarted by host');
       }
       setTimeout(() => setBingoMessage(''), 5000);
@@ -1076,7 +1196,8 @@ const PlayerView: React.FC = () => {
 
     newSocket.on('game-reset', () => {
       setGameState({ isPlaying: false, currentSong: null, playerCount: 0, hasBingo: false, pattern: 'full_card' });
-      setBingoCard(null);
+      setBingoCards([]);
+      setActiveCardIndex(0);
       // Clear persisted marks
       try {
         localStorage.removeItem(`player_marks_${roomId}`);
@@ -1489,16 +1610,17 @@ const PlayerView: React.FC = () => {
     socket.emit('mark-square', {
       roomId,
       songId: square.songId,
-      position
+      position,
+      cardId: bingoCard.cardId || bingoCard.id,
     });
 
     // Update local state optimistically (toggle)
     // Server will send mark-confirmed event to ensure sync
-    setBingoCard(prev => {
-      if (!prev) return prev;
-      const updatedSquares = prev.squares.map(s => s.position === position ? { ...s, marked: !s.marked } : s);
+    updateActiveBingoCard((prev) => {
+      const updatedSquares = prev.squares.map((sq) =>
+        sq.position === position ? { ...sq, marked: !sq.marked } : sq,
+      );
       const updatedCard = { ...prev, squares: updatedSquares };
-      // Persist marks to localStorage immediately
       persistMarks(updatedCard);
       return updatedCard;
     });
@@ -1699,7 +1821,10 @@ const PlayerView: React.FC = () => {
           bingoHoldSubmittedRef.current = true;
           setBingoStatus('checking');
           setBingoMessage('Checking your bingo...');
-          socket.emit('player-bingo', { roomId });
+          socket.emit('player-bingo', {
+            roomId,
+            cardId: bingoCardRef.current?.cardId || bingoCardRef.current?.id,
+          });
         }
         setBingoHolding(false);
         holdStartRef.current = null;
@@ -2232,7 +2357,108 @@ const PlayerView: React.FC = () => {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.35 }}
         >
-          <div className="bingo-section-measure">{renderBingoCard()}</div>
+          <div className="bingo-section-measure">
+            {showMultiCardChrome ? (
+              <div
+                className="player-card-carousel"
+                ref={cardCarouselRef}
+                onTouchStart={(e) => {
+                  const t = e.changedTouches[0];
+                  if (!t) return;
+                  (cardCarouselRef.current as any)._swipeX = t.clientX;
+                }}
+                onTouchEnd={(e) => {
+                  const startX = (cardCarouselRef.current as any)?._swipeX;
+                  const t = e.changedTouches[0];
+                  if (startX == null || !t) return;
+                  const dx = t.clientX - startX;
+                  (cardCarouselRef.current as any)._swipeX = null;
+                  if (Math.abs(dx) < 48) return;
+                  if (dx < 0) {
+                    goToCardIndex(activeCardIndex + 1);
+                  } else {
+                    goToCardIndex(activeCardIndex - 1);
+                  }
+                }}
+              >
+                <div className="player-card-carousel__chrome">
+                  <div className="player-card-carousel__label" aria-live="polite">
+                    Card {activeCardIndex + 1} of {bingoCards.length}
+                    {bingoCard && checkVisualPattern(bingoCard) ? (
+                      <span className="player-card-carousel__ready-badge"> Bingo ready</span>
+                    ) : null}
+                  </div>
+                  <div className="player-card-carousel__dots" role="tablist" aria-label="Bingo cards">
+                    {bingoCards.map((card, idx) => {
+                      const ready = checkVisualPattern(card);
+                      return (
+                        <button
+                          key={card.cardId || `dot-${idx}`}
+                          type="button"
+                          role="tab"
+                          aria-selected={idx === activeCardIndex}
+                          aria-label={
+                            ready ? `Card ${idx + 1}, bingo ready` : `Card ${idx + 1}`
+                          }
+                          title={ready ? 'Bingo ready' : undefined}
+                          className={`player-card-carousel__dot${idx === activeCardIndex ? ' is-active' : ''}${ready ? ' is-bingo-ready' : ''}`}
+                          onClick={() => goToCardIndex(idx)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="player-card-carousel__stage">
+                  <button
+                    type="button"
+                    className="player-card-carousel__arrow player-card-carousel__arrow--prev"
+                    aria-label="Previous card"
+                    disabled={activeCardIndex <= 0}
+                    onClick={() => goToCardIndex(activeCardIndex - 1)}
+                  >
+                    ‹
+                  </button>
+                  <div className="player-card-carousel__viewport">
+                    <AnimatePresence mode="wait" custom={carouselDir} initial={false}>
+                      <motion.div
+                        key={bingoCard?.cardId || bingoCard?.id || `card-${activeCardIndex}`}
+                        className="player-card-carousel__slide"
+                        custom={carouselDir}
+                        variants={{
+                          enter: (dir: number) => ({
+                            x: dir >= 0 ? 48 : -48,
+                            opacity: 0,
+                          }),
+                          center: { x: 0, opacity: 1 },
+                          exit: (dir: number) => ({
+                            x: dir >= 0 ? -48 : 48,
+                            opacity: 0,
+                          }),
+                        }}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ type: 'spring', stiffness: 420, damping: 36, mass: 0.8 }}
+                      >
+                        {renderBingoCard()}
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+                  <button
+                    type="button"
+                    className="player-card-carousel__arrow player-card-carousel__arrow--next"
+                    aria-label="Next card"
+                    disabled={activeCardIndex >= bingoCards.length - 1}
+                    onClick={() => goToCardIndex(activeCardIndex + 1)}
+                  >
+                    ›
+                  </button>
+                </div>
+              </div>
+            ) : (
+              renderBingoCard()
+            )}
+          </div>
         </motion.div>
 
         {(bingoStatus !== 'idle' || bingoMessage) && (

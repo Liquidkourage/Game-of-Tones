@@ -29,6 +29,7 @@ const spotifyPipelineLog = require('./spotifyPipelineLog');
 const catalogSpotify = require('./catalogSpotify');
 const youtubeMusic = require('./youtubeMusic');
 const { applyYoutubeCatalogTrackVerification } = require('./youtubeTrackCatalogVerify');
+const playerBingoCards = require('./playerBingoCards');
 
 /** Host-facing bingo patterns; `blackout` incoming values normalize to `full_card`. */
 const ALLOWED_BINGO_PATTERNS = new Set([
@@ -444,16 +445,57 @@ function resolvePlayerUserIdFromJoin(socket, data) {
   return null;
 }
 
-async function persistPlayerDataCard(room, player, card) {
-  if (!db || !player?.clientId || !room?.id || !card) return;
+async function persistPlayerDataCard(room, player, cardOrCards) {
+  if (!db || !player?.clientId || !room?.id || !cardOrCards) return;
+  const payload = playerBingoCards.cardPayloadForDb(cardOrCards);
+  if (!payload) return;
   try {
     await playersStore.savePlayerSession(db, {
       ...playerDataSessionContext(room, player),
-      card,
+      card: payload,
     });
   } catch (e) {
     console.error('persistPlayerDataCard:', e?.message || e);
   }
+}
+
+function storePlayerBingoCards(room, playerId, player, cardsOrCard) {
+  const list = playerBingoCards
+    .asBingoCardList(cardsOrCard)
+    .map((c) => playerBingoCards.ensureBingoCardIdentity(c, playerId));
+  if (!room.bingoCards) room.bingoCards = new Map();
+  room.bingoCards.set(playerId, list);
+  if (player) {
+    player.bingoCards = list;
+    player.bingoCard = list[0] || null;
+  }
+  if (player?.clientId) {
+    if (!room.clientCards) room.clientCards = new Map();
+    room.clientCards.set(player.clientId, list);
+  }
+  return list;
+}
+
+function emitBingoCardsToSocket(socketId, cardsOrCard, opts = {}) {
+  const list = playerBingoCards
+    .asBingoCardList(cardsOrCard)
+    .map((c) => playerBingoCards.ensureBingoCardIdentity({ ...c, squares: c.squares }, socketId));
+  const maxCards = playerBingoCards.normalizeMaxPlayerBingoCards(
+    opts.maxCards ?? opts.room?.maxPlayerBingoCards,
+    1,
+  );
+  io.to(socketId).emit('bingo-cards', {
+    cards: list,
+    maxCards,
+    isNewCard: opts.isNewCard === true,
+  });
+  if (list[0]) {
+    io.to(socketId).emit('bingo-card', { ...list[0], isNewCard: opts.isNewCard === true });
+  }
+}
+
+function maxPlayerBingoCardsForRoom(room) {
+  return playerBingoCards.normalizeMaxPlayerBingoCards(room?.maxPlayerBingoCards, 1);
 }
 
 async function recordPlayerDataJoin(room, player, preferences) {
@@ -477,7 +519,8 @@ async function tryRestorePlayerCardFromDb(room, clientId) {
       room.id,
       playerDataRoundTokenForRoom(room),
     );
-    return session?.card || null;
+    const list = playerBingoCards.asBingoCardList(session?.card);
+    return list.length ? list : null;
   } catch (e) {
     console.error('tryRestorePlayerCardFromDb:', e?.message || e);
     return null;
@@ -493,54 +536,55 @@ async function restoreAndEmitBingoCardForJoiner(room, socket, clientIdOpt) {
   if (!room.bingoCards) room.bingoCards = new Map();
   const clientId = clientIdOpt || player.clientId;
 
-  const bySocket = room.bingoCards.get(socket.id);
-  if (bySocket) {
-    if (!bingoCardMatchesCurrentRoundPool(room, bySocket)) {
+  const bySocket = playerBingoCards.asBingoCardList(room.bingoCards.get(socket.id));
+  if (bySocket.length) {
+    if (!bySocket.every((c) => bingoCardMatchesCurrentRoundPool(room, c))) {
       routineServerLog(
-        `🔄 Skipping stale in-memory card for ${player.name} — songs not in current round pool (not deleted)`,
+        `🔄 Skipping stale in-memory card(s) for ${player.name} — songs not in current round pool (not deleted)`,
       );
     } else {
-      player.bingoCard = bySocket;
-      io.to(socket.id).emit('bingo-card', bySocket);
+      storePlayerBingoCards(room, socket.id, player, bySocket);
+      emitBingoCardsToSocket(socket.id, bySocket, { room });
       return true;
     }
   }
 
   if (clientId && room.clientCards && room.clientCards.has(clientId)) {
-    const existingCard = room.clientCards.get(clientId);
-    if (!bingoCardMatchesCurrentRoundPool(room, existingCard)) {
-      const stillLive = Array.from(room.bingoCards.values()).includes(existingCard);
+    const existingCards = playerBingoCards.asBingoCardList(room.clientCards.get(clientId));
+    if (!existingCards.length || !existingCards.every((c) => bingoCardMatchesCurrentRoundPool(room, c))) {
+      const stillLive = Array.from(room.bingoCards.values()).some((v) => {
+        const list = playerBingoCards.asBingoCardList(v);
+        return list.some((c) => existingCards.includes(c));
+      });
       if (!stillLive) room.clientCards.delete(clientId);
       routineServerLog(
         `🔄 Dropped stale clientCards entry for ${player.name} — card songs not in current round pool`,
       );
     } else {
       for (const [pid, c] of room.bingoCards.entries()) {
-        if (pid !== socket.id && c === existingCard) {
+        if (pid === socket.id) continue;
+        const list = playerBingoCards.asBingoCardList(c);
+        if (list.length && list[0] === existingCards[0]) {
           room.bingoCards.delete(pid);
         }
       }
-      room.bingoCards.set(socket.id, existingCard);
-      player.bingoCard = existingCard;
-      io.to(socket.id).emit('bingo-card', existingCard);
-      void persistPlayerDataCard(room, player, existingCard);
+      storePlayerBingoCards(room, socket.id, player, existingCards);
+      emitBingoCardsToSocket(socket.id, existingCards, { room });
+      void persistPlayerDataCard(room, player, existingCards);
       return true;
     }
   }
 
   if (clientId && db) {
-    const dbCard = await tryRestorePlayerCardFromDb(room, clientId);
-    if (dbCard) {
-      if (!bingoCardMatchesCurrentRoundPool(room, dbCard)) {
+    const dbCards = await tryRestorePlayerCardFromDb(room, clientId);
+    if (dbCards) {
+      if (!dbCards.every((c) => bingoCardMatchesCurrentRoundPool(room, c))) {
         routineServerLog(
           `🔄 Ignored stale DB card for ${player.name} — round token or pool mismatch`,
         );
       } else {
-        if (!room.clientCards) room.clientCards = new Map();
-        room.clientCards.set(clientId, dbCard);
-        room.bingoCards.set(socket.id, dbCard);
-        player.bingoCard = dbCard;
-        io.to(socket.id).emit('bingo-card', dbCard);
+        storePlayerBingoCards(room, socket.id, player, dbCards);
+        emitBingoCardsToSocket(socket.id, dbCards, { room });
         return true;
       }
     }
@@ -554,15 +598,10 @@ async function restoreOrDealBingoCardForJoiner(room, roomId, socket, clientIdOpt
   if (!player || player.isHost || player.name === 'Display') return false;
 
   rebindBingoCardsToActivePlayers(room);
-  const bound = resolveActivePlayerCard(room, player, socket.id);
-  if (bound) {
-    player.bingoCard = bound;
-    room.bingoCards.set(socket.id, bound);
-    if (player.clientId) {
-      if (!room.clientCards) room.clientCards = new Map();
-      room.clientCards.set(player.clientId, bound);
-    }
-    io.to(socket.id).emit('bingo-card', bound);
+  const bound = resolveActivePlayerCards(room, player, socket.id);
+  if (bound.length) {
+    storePlayerBingoCards(room, socket.id, player, bound);
+    emitBingoCardsToSocket(socket.id, bound, { room });
     return true;
   }
 
@@ -582,12 +621,8 @@ async function restoreOrDealBingoCardForJoiner(room, roomId, socket, clientIdOpt
 
   if (!live || !hasPool) return false;
 
-  routineServerLog(`🎲 Dealing card after failed restore for ${player.name}`);
+  routineServerLog(`🎲 Dealing card(s) after failed restore for ${player.name}`);
   const card = await generateBingoCardForPlayer(roomId, socket.id);
-  if (card && player.clientId) {
-    if (!room.clientCards) room.clientCards = new Map();
-    room.clientCards.set(player.clientId, card);
-  }
   return !!card;
 }
 
@@ -1027,11 +1062,13 @@ function emitRoomPlayersRosterToHosts(roomId, room) {
   }
 }
 
-function hostPlayerCardEmitPayload(room, playerId, card, playedSongs) {
+function hostPlayerCardEmitPayload(room, playerId, cardsOrCard, playedSongs) {
   const player = room.players.get(playerId);
+  const cards = playerBingoCards.asBingoCardList(cardsOrCard);
   return {
     playerName: player?.name || 'Unknown',
-    card,
+    card: cards[0] || null,
+    cards,
     playedSongs,
     inPerson: player?.inPerson !== false,
   };
@@ -2483,28 +2520,34 @@ function bingoCardMatchesCurrentRoundPool(room, card) {
   return true;
 }
 
-/** Resolve a player's live card from socket map, player object, or stable clientId cache. */
-function resolveActivePlayerCard(room, player, playerId) {
-  if (!room || !player || player.isHost || player.name === 'Display') return null;
+/** Resolve a player's live card list from socket map, player object, or stable clientId cache. */
+function resolveActivePlayerCards(room, player, playerId) {
+  if (!room || !player || player.isHost || player.name === 'Display') return [];
 
-  const bySocket = room.bingoCards?.get(playerId);
-  if (bySocket && bingoCardMatchesCurrentRoundPool(room, bySocket)) {
+  const bySocket = playerBingoCards.asBingoCardList(room.bingoCards?.get(playerId));
+  if (bySocket.length && bySocket.every((c) => bingoCardMatchesCurrentRoundPool(room, c))) {
     return bySocket;
   }
 
-  if (player.bingoCard && bingoCardMatchesCurrentRoundPool(room, player.bingoCard)) {
-    return player.bingoCard;
+  const byPlayer = playerBingoCards.asBingoCardList(player.bingoCards || player.bingoCard);
+  if (byPlayer.length && byPlayer.every((c) => bingoCardMatchesCurrentRoundPool(room, c))) {
+    return byPlayer;
   }
 
   const clientId = player.clientId;
   if (clientId && room.clientCards?.has(clientId)) {
-    const byClient = room.clientCards.get(clientId);
-    if (byClient && bingoCardMatchesCurrentRoundPool(room, byClient)) {
+    const byClient = playerBingoCards.asBingoCardList(room.clientCards.get(clientId));
+    if (byClient.length && byClient.every((c) => bingoCardMatchesCurrentRoundPool(room, c))) {
       return byClient;
     }
   }
 
-  return null;
+  return [];
+}
+
+/** Resolve primary (first) card — legacy callers. */
+function resolveActivePlayerCard(room, player, playerId) {
+  return resolveActivePlayerCards(room, player, playerId)[0] || null;
 }
 
 /** Re-key in-memory cards onto current player socket ids (survives disconnect/reconnect). */
@@ -2517,14 +2560,10 @@ function rebindBingoCardsToActivePlayers(room) {
   for (const [playerId, player] of room.players.entries()) {
     if (!player || player.isHost || player.name === 'Display') continue;
 
-    const card = resolveActivePlayerCard(room, player, playerId);
-    if (!card) continue;
+    const cards = resolveActivePlayerCards(room, player, playerId);
+    if (!cards.length) continue;
 
-    player.bingoCard = card;
-    room.bingoCards.set(playerId, card);
-    if (player.clientId) {
-      room.clientCards.set(player.clientId, card);
-    }
+    storePlayerBingoCards(room, playerId, player, cards);
     rebound++;
   }
   return rebound;
@@ -2538,9 +2577,9 @@ function buildHostPlayerCardsData(room) {
   if (room?.players) {
     for (const [playerId, player] of room.players.entries()) {
       if (!player || player.isHost || player.name === 'Display') continue;
-      const card = resolveActivePlayerCard(room, player, playerId);
-      if (!card) continue;
-      playerCardsData[playerId] = hostPlayerCardEmitPayload(room, playerId, card, playedSongs);
+      const cards = resolveActivePlayerCards(room, player, playerId);
+      if (!cards.length) continue;
+      playerCardsData[playerId] = hostPlayerCardEmitPayload(room, playerId, cards, playedSongs);
     }
   }
 
@@ -2605,7 +2644,8 @@ async function ensureActivePlayersHaveCards(roomId, room) {
   let dealt = 0;
   for (const [playerId, player] of room.players.entries()) {
     if (!player || player.isHost || player.name === 'Display') continue;
-    if (resolveActivePlayerCard(room, player, playerId)) {
+    const have = resolveActivePlayerCards(room, player, playerId);
+    if (have.length >= maxPlayerBingoCardsForRoom(room)) {
       clearCardRecoveryCooldown(room, player, playerId);
       continue;
     }
@@ -2637,8 +2677,8 @@ function persistAllDealtCardsRoundToken(room) {
   refreshRoomRoundToken(room);
   for (const [pid, player] of room.players.entries()) {
     if (!player || player.isHost || player.name === 'Display') continue;
-    const card = room.bingoCards.get(pid);
-    if (card) void persistPlayerDataCard(room, player, card);
+    const cards = playerBingoCards.asBingoCardList(room.bingoCards.get(pid));
+    if (cards.length) void persistPlayerDataCard(room, player, cards);
   }
 }
 
@@ -2714,6 +2754,7 @@ function publicDisplayRoomStateExtras(room) {
     bingoVerificationPlayerName: head?.playerName ? String(head.playerName) : null,
     lastDisplayWinner: room.lastDisplayWinner || null,
     bingoColumnLetters: bingoColumnLettersForRoom(room),
+    maxPlayerBingoCards: maxPlayerBingoCardsForRoom(room),
   };
 }
 
@@ -4362,6 +4403,7 @@ io.on('connection', (socket) => {
         letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
         publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
         publicDisplayLetterRevealToast: true,
+        maxPlayerBingoCards: 1,
         createdAt: new Date().toISOString()
       };
       rooms.set(roomId, newRoom);
@@ -4423,6 +4465,12 @@ io.on('connection', (socket) => {
           }
           const seededLetters = sanitizeBingoColumnLetters(p.bingoColumnLetters);
           if (seededLetters) room.bingoColumnLetters = seededLetters;
+          if (p.maxPlayerBingoCards != null) {
+            room.maxPlayerBingoCards = playerBingoCards.normalizeMaxPlayerBingoCards(
+              p.maxPlayerBingoCards,
+              1,
+            );
+          }
           routineServerLog(
             `🔤 Seeded projector defaults from saved host prefs for room ${roomId} (letter reveal ${letterRevealIntervalSecForRoom(room)}s)`,
           );
@@ -4674,7 +4722,7 @@ io.on('connection', (socket) => {
 
         await restoreOrDealBingoCardForJoiner(room, roomId, socket, clientId, { allowDeal: true });
         if (
-          !room.bingoCards?.get(socket.id) &&
+          !playerBingoCards.asBingoCardList(room.bingoCards?.get(socket.id)).length &&
           !effectiveIsHost &&
           (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length)
         ) {
@@ -5318,6 +5366,33 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Host: cards per player (1–3). Locked while a round is live / paused for verification.
+  socket.on('set-max-player-bingo-cards', (data = {}) => {
+    try {
+      const { roomId, maxCards } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost =
+        room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+      if (room.gameState === 'playing' || room.gameState === 'paused_for_verification') {
+        socket.emit('max-player-bingo-cards-updated', {
+          maxCards: maxPlayerBingoCardsForRoom(room),
+          rejected: true,
+          reason: 'locked_while_live',
+        });
+        return;
+      }
+      const next = playerBingoCards.normalizeMaxPlayerBingoCards(maxCards, 1);
+      if (maxPlayerBingoCardsForRoom(room) === next) return;
+      room.maxPlayerBingoCards = next;
+      io.to(roomId).emit('max-player-bingo-cards-updated', { maxCards: next });
+      routineServerLog(`🃏 Max player bingo cards for room ${roomId}: ${next}`);
+    } catch (e) {
+      console.error('❌ Error setting max player bingo cards:', e?.message || e);
+    }
+  });
+
   // Player calls BINGO (validated server-side)
   socket.on('player-bingo', (data) => {
     const { roomId } = data || {};
@@ -5334,12 +5409,19 @@ io.on('connection', (socket) => {
       return;
     }
     if (player.inPerson === undefined) player.inPerson = true;
-    if (!player.bingoCard) {
+
+    const { cardId } = data || {};
+    const playerCards = resolveActivePlayerCards(room, player, socket.id);
+    let bingoCard = playerBingoCards.findBingoCardInList(playerCards, cardId);
+    if (!bingoCard && playerCards.length) bingoCard = playerCards[0];
+    if (!bingoCard) {
       console.error(`❌ Player ${player.name} (${socket.id}) has no bingo card`);
       routineServerLog(`Room bingo cards:`, Array.from(room.bingoCards?.keys() || []));
       socket.emit('bingo-result', { success: false, reason: 'No bingo card assigned. Please refresh and rejoin.' });
       return;
     }
+    player.bingoCard = bingoCard;
+    storePlayerBingoCards(room, socket.id, player, playerCards.length ? playerCards : [bingoCard]);
     
     if (player.hasBingo) {
       socket.emit('bingo-result', { success: false, reason: 'You have already called bingo!' });
@@ -5486,9 +5568,16 @@ io.on('connection', (socket) => {
         console.warn(`🚨 MISSING SONGS: [${missingFromPlaylist.join(', ')}] - This could indicate a data integrity issue`);
       }
       
-      // CRITICAL: Use room.bingoCards as source of truth (it's kept in sync with marks)
-      // Fallback to player.bingoCard if room card doesn't exist
-      const sourceCard = room.bingoCards?.get(socket.id) || player.bingoCard;
+      // CRITICAL: Use room.bingoCards list as source of truth (active card = bingo call cardId)
+      const sourceCardList = playerBingoCards.asBingoCardList(
+        room.bingoCards?.get(socket.id) || player.bingoCards || player.bingoCard,
+      );
+      const sourceCard =
+        playerBingoCards.findBingoCardInList(sourceCardList, bingoCard?.cardId || player.bingoCard?.cardId) ||
+        bingoCard ||
+        sourceCardList[0] ||
+        player.bingoCard ||
+        null;
       if (!sourceCard) {
         console.error(`❌ No card found for player ${player.name} (${socket.id})`);
         socket.emit('bingo-result', { success: false, reason: 'Card data not found' });
@@ -5604,8 +5693,16 @@ io.on('connection', (socket) => {
         }
       }
       
-      // Use room.bingoCards as source of truth
-      const sourceCard = room.bingoCards?.get(socket.id) || player.bingoCard;
+      // Use room.bingoCards list as source of truth
+      const sourceCardListFail = playerBingoCards.asBingoCardList(
+        room.bingoCards?.get(socket.id) || player.bingoCards || player.bingoCard,
+      );
+      const sourceCard =
+        playerBingoCards.findBingoCardInList(sourceCardListFail, bingoCard?.cardId || player.bingoCard?.cardId) ||
+        bingoCard ||
+        sourceCardListFail[0] ||
+        player.bingoCard ||
+        null;
       if (!sourceCard) {
         socket.emit('bingo-result', { success: false, reason: 'Card data not found' });
         return;
@@ -5756,7 +5853,14 @@ io.on('connection', (socket) => {
       });
       
       // Serialize winning card + pattern positions for public display modal
-      const sourceCard = room.bingoCards?.get(resolvedPlayerId) || player.bingoCard;
+      const sourceCardList = playerBingoCards.asBingoCardList(
+        room.bingoCards?.get(resolvedPlayerId) || player.bingoCards || player.bingoCard,
+      );
+      const sourceCard =
+        playerBingoCards.findBingoCardInList(sourceCardList, player.bingoCard?.cardId) ||
+        player.bingoCard ||
+        sourceCardList[0] ||
+        null;
       let winningCardPayload = null;
       let winningPositions = [];
       if (sourceCard && Array.isArray(sourceCard.squares)) {
@@ -6092,15 +6196,8 @@ io.on('connection', (socket) => {
     room.players.forEach((player) => {
       player.hasBingo = false;
       player.patternComplete = false; // Reset pattern completion flag
-      if (player.bingoCard) resetBingoCardMarks(player.bingoCard);
     });
-    
-    if (room.bingoCards) {
-      room.bingoCards.forEach((card) => resetBingoCardMarks(card));
-    }
-    if (room.clientCards) {
-      room.clientCards.forEach((card) => resetBingoCardMarks(card));
-    }
+    playerBingoCards.forEachBingoCardInRoomMaps(room, resetBingoCardMarks);
     
     // Notify all clients of the restart
     io.to(roomId).emit('game-restarted', {
@@ -6854,6 +6951,7 @@ io.on('connection', (socket) => {
           letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
           publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
           publicDisplayLetterRevealToast: true,
+          maxPlayerBingoCards: 1,
         };
         rooms.set(roomId, newRoom);
         socket.join(roomId);
@@ -7520,15 +7618,21 @@ io.on('connection', (socket) => {
 
   // Mark bingo square
   socket.on('mark-square', (data) => {
-    const { roomId, songId, position } = data;
+    const { roomId, songId, position, cardId } = data || {};
     const room = rooms.get(roomId);
     
     if (room) {
       const player = room.players.get(socket.id);
-      const roomCard = room.bingoCards?.get(socket.id) || player?.bingoCard || null;
+      const cards = resolveActivePlayerCards(room, player, socket.id);
+      const roomCard =
+        playerBingoCards.findBingoCardInList(cards, cardId) ||
+        playerBingoCards.findBingoCardInList(room.bingoCards?.get(socket.id), cardId) ||
+        player?.bingoCard ||
+        null;
       if (player && roomCard) {
-        player.bingoCard = roomCard;
         const card = roomCard;
+        player.bingoCard = card;
+        storePlayerBingoCards(room, socket.id, player, cards.length ? cards : [card]);
         const square = card.squares.find(s => s.position === position);
         if (square && (square.isFreeSpace || square.songId === FREE_SPACE_SONG_ID)) {
           return;
@@ -7537,28 +7641,18 @@ io.on('connection', (socket) => {
           // Toggle mark state to support unmarking (room.bingoCards is source of truth for host)
           square.marked = !square.marked;
           
-          // Persist to clientCards if clientId exists (for reconnection)
-          if (player.clientId && room.clientCards && room.clientCards.has(player.clientId)) {
-            const clientCard = room.clientCards.get(player.clientId);
-            if (clientCard !== card) {
-              const clientSquare = clientCard.squares.find(s => s.position === position);
-              if (clientSquare && clientSquare.songId === songId) {
-                clientSquare.marked = square.marked;
-              }
-            }
-          }
-          
           // CRITICAL: Send confirmation back to player to ensure their state matches server
           // This prevents desync where server has mark but player doesn't
           socket.emit('mark-confirmed', {
             position,
             songId,
-            marked: square.marked
+            marked: square.marked,
+            cardId: card.cardId || card.id,
           });
           
           // Send real-time player card updates to host (immediate so marks show without delay)
           sendPlayerCardUpdates(roomId, true);
-          void persistPlayerDataCard(room, player, card);
+          void persistPlayerDataCard(room, player, cards.length ? cards : [card]);
           if (player.playerUserId != null) {
             void playerAccountsStore.recordMark(db, player.playerUserId, playerStatsContext(room, player), 1);
           }
@@ -7576,15 +7670,18 @@ io.on('connection', (socket) => {
               hasPattern: true
             });
           } else if (!validationResult.valid && player.patternComplete) {
-            // Reset pattern completion flag if pattern is no longer valid (e.g., player unmarked a square)
-            player.patternComplete = false;
-            routineServerLog(`🎯 Player ${player.name} no longer has a valid bingo pattern`);
-            
-            // Notify player that pattern is no longer complete
-            socket.emit('pattern-complete', {
-              message: '',
-              hasPattern: false
-            });
+            // Reset only if none of the player's cards still complete the pattern
+            const stillComplete = (cards.length ? cards : [card]).some(
+              (c) => validateBingoForPattern(c, room).valid,
+            );
+            if (!stillComplete) {
+              player.patternComplete = false;
+              routineServerLog(`🎯 Player ${player.name} no longer has a valid bingo pattern`);
+              socket.emit('pattern-complete', {
+                message: '',
+                hasPattern: false
+              });
+            }
           }
         }
       }
@@ -8764,58 +8861,108 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         routineServerLog(`🎲 Generated TRULY FAIR blackout card for ${player.name} from ${pool.length} song pool`);
       }
 
-      // Build card
-      const card = { id: playerId, squares: [] };
-    let idx = 0;
-    for (let row = 0; row < 5; row++) {
-      for (let col = 0; col < 5; col++) {
-          if (useFreeSpace && row === 2 && col === 2) {
-            card.squares.push(makeFreeSpaceSquare());
-            continue;
+      // Build N cards for this player (dealt at start; N = room.maxPlayerBingoCards)
+      const cardsToDeal = maxPlayerBingoCardsForRoom(room);
+      const playerCardList = [];
+      for (let dealIdx = 0; dealIdx < cardsToDeal; dealIdx++) {
+        let pick25 = chosen25;
+        if (dealIdx > 0) {
+          pick25 = [];
+          if (mode === '1x75') {
+            const base = (rooms.get(roomId)?.oneBySeventyFivePool || []).map(x => perListGloballyUnique[0].songs.find(sg => sg.id === x.id)).filter(Boolean);
+            if (base.length < songsNeededPerCard) break;
+            pick25 = properShuffle(base).slice(0, songsNeededPerCard);
+          } else if (mode === '5x15') {
+            const used = new Set();
+            const columns = [];
+            let ok = true;
+            for (let col = 0; col < 5; col++) {
+              const need = useFreeSpace && col === 2 ? 4 : 5;
+              const pool = properShuffle(perListGloballyUnique[col].songs);
+              const colPicks = [];
+              for (const sng of pool) {
+                if (!used.has(sng.id)) { colPicks.push(sng); used.add(sng.id); }
+                if (colPicks.length === need) break;
+              }
+              if (colPicks.length < need) { ok = false; break; }
+              columns.push(colPicks);
+            }
+            if (!ok) break;
+            for (let row = 0; row < 5; row++) {
+              for (let col = 0; col < 5; col++) {
+                if (useFreeSpace && row === 2 && col === 2) continue;
+                if (useFreeSpace && col === 2) {
+                  const idxInCol = row < 2 ? row : row - 1;
+                  pick25.push(columns[2][idxInCol]);
+                } else {
+                  pick25.push(columns[col][row]);
+                }
+              }
+            }
+          } else {
+            const pool = buildGlobalPool();
+            if (pool.length < songsNeededPerCard) break;
+            pick25 = properShuffle(pool).slice(0, songsNeededPerCard);
           }
-          const s = chosen25[idx++];
-          if (!s || !s.id) {
-            console.error(`❌ Invalid song at position ${row}-${col} for player ${player.name}`);
-            continue;
+        }
+
+        const card = {
+          id: playerId,
+          cardId: playerBingoCards.newBingoCardId(),
+          squares: [],
+        };
+        let idx = 0;
+        for (let row = 0; row < 5; row++) {
+          for (let col = 0; col < 5; col++) {
+            if (useFreeSpace && row === 2 && col === 2) {
+              card.squares.push(makeFreeSpaceSquare());
+              continue;
+            }
+            const song = pick25[idx++];
+            if (!song || !song.id) {
+              console.error(`❌ Invalid song at position ${row}-${col} for player ${player.name}`);
+              continue;
+            }
+            card.squares.push({
+              position: `${row}-${col}`,
+              songId: song.id,
+              songName: song.name,
+              ...songAliasDisplayFields(song.id, song.name, song.artist, room.dbOrganizationId ?? null),
+              artistName: song.artist,
+              youtubeMusic: song.youtubeMusic === true,
+              ...bingoSquareOriginPlaylistFields(song),
+              ...(song.youtubeMusic === true &&
+              typeof song.youtubeRawTitle === 'string' &&
+              song.youtubeRawTitle.trim() !== ''
+                ? { youtubeRawTitle: song.youtubeRawTitle.trim() }
+                : {}),
+              ...(song.youtubeMusic === true && song.catalogDisplayVerified ? { catalogDisplayVerified: true } : {}),
+              marked: false
+            });
           }
-        card.squares.push({
-          position: `${row}-${col}`,
-          songId: s.id,
-          songName: s.name,
-          ...songAliasDisplayFields(s.id, s.name, s.artist, room.dbOrganizationId ?? null),
-          artistName: s.artist,
-          youtubeMusic: s.youtubeMusic === true,
-          ...bingoSquareOriginPlaylistFields(s),
-          ...(s.youtubeMusic === true &&
-          typeof s.youtubeRawTitle === 'string' &&
-          s.youtubeRawTitle.trim() !== ''
-            ? { youtubeRawTitle: s.youtubeRawTitle.trim() }
-            : {}),
-          ...(s.youtubeMusic === true && s.catalogDisplayVerified ? { catalogDisplayVerified: true } : {}),
-          marked: false
-        });
+        }
+
+        if (card.squares.length < 25) {
+          console.error(`❌ Card incomplete for player ${player.name}: only ${card.squares.length}/25 squares`);
+          break;
+        }
+
+        const uniqueOnCard = new Set(card.squares.map(q => q.songId));
+        routineServerLog(`✅ Generated card ${dealIdx + 1}/${cardsToDeal} for ${player.name} with ${uniqueOnCard.size} unique songs (mode=${mode})`);
+        playerCardList.push(card);
       }
-    }
 
-      if (card.squares.length < 25) {
-        console.error(`❌ Card incomplete for player ${player.name}: only ${card.squares.length}/25 squares`);
+      if (!playerCardList.length) {
         continue; // Skip this player
-    }
+      }
 
-    const uniqueOnCard = new Set(card.squares.map(q => q.songId));
-      routineServerLog(`✅ Generated card for ${player.name} with ${uniqueOnCard.size} unique songs (mode=${mode})`);
-      routineServerLog(`🎲 Card generation method: ${mode === '5x15' ? '5x15 column-based' : mode === '1x75' ? '1x75 pool-based' : 'global pool'}`);
+      routineServerLog(`🎲 Card generation method: ${mode === '5x15' ? '5x15 column-based' : mode === '1x75' ? '1x75 pool-based' : 'global pool'} (dealt ${playerCardList.length})`);
 
       if (!room.bingoCards) room.bingoCards = new Map();
-    player.bingoCard = card;
-    cards.set(playerId, card);
-      // Persist by clientId if available to survive refreshes
-      if (player.clientId) {
-        room.clientCards.set(player.clientId, card);
-      }
-    // Emit card with isNewCard flag to help client detect new rounds
-    io.to(playerId).emit('bingo-card', { ...card, isNewCard: true });
-      void persistPlayerDataCard(room, player, card);
+      storePlayerBingoCards(room, playerId, player, playerCardList);
+      cards.set(playerId, playerCardList);
+      emitBingoCardsToSocket(playerId, playerCardList, { isNewCard: true, room });
+      void persistPlayerDataCard(room, player, playerCardList);
     } catch (e) {
       console.error(`❌ Error generating card for player ${player.name} (${playerId}):`, e?.message || e);
       // Continue with other players
@@ -9323,8 +9470,26 @@ async function fetchTracksForLateJoinPlaylist(roomId, room, playlist) {
   }
 }
 
-// Generate a single bingo card for one player (if they join mid-game)
-async function generateBingoCardForPlayer(roomId, playerId) {
+/**
+ * Build one additional bingo card for a player (same geometry as generateBingoCardForPlayer),
+ * append to their list, emit, and persist. Used to fill dealt-at-start N for late join.
+ */
+async function appendBingoCardsUntilCap(roomId, playerId) {
+  const room = rooms.get(roomId);
+  if (!room) return null;
+  const p = room.players.get(playerId);
+  const existing = resolveActivePlayerCards(room, p, playerId);
+  const maxCards = maxPlayerBingoCardsForRoom(room);
+  if (existing.length >= maxCards) {
+    emitBingoCardsToSocket(playerId, existing, { room });
+    return existing[0] || null;
+  }
+  // generateBingoCardForPlayer builds one fresh card and replaces or appends via options.
+  return generateBingoCardForPlayer(roomId, playerId, { append: true, fillToMax: true });
+}
+
+// Generate bingo card(s) for one player (late join / recovery). Deals up to room.maxPlayerBingoCards.
+async function generateBingoCardForPlayer(roomId, playerId, options = {}) {
   const room = rooms.get(roomId);
   if (!room) return;
   
@@ -9510,7 +9675,11 @@ async function generateBingoCardForPlayer(roomId, playerId) {
       routineServerLog(`🎲 Generated TRULY FAIR late-join card from ${pool.length} song pool`);
     }
 
-    const card = { id: playerId, squares: [] };
+    const card = {
+      id: playerId,
+      cardId: playerBingoCards.newBingoCardId(),
+      squares: [],
+    };
     let idx = 0;
     for (let row = 0; row < 5; row++) {
       for (let col = 0; col < 5; col++) {
@@ -9538,17 +9707,39 @@ async function generateBingoCardForPlayer(roomId, playerId) {
       }
     }
     if (!room.bingoCards) room.bingoCards = new Map();
-    room.bingoCards.set(playerId, card);
-    // Also store on player if present
     const p = room.players.get(playerId);
-    if (p) p.bingoCard = card;
-    if (p?.clientId) {
-      if (!room.clientCards) room.clientCards = new Map();
-      room.clientCards.set(p.clientId, card);
+    const existing = resolveActivePlayerCards(room, p, playerId);
+    const maxCards = maxPlayerBingoCardsForRoom(room);
+    const append = options.append === true || existing.length > 0;
+    let nextList;
+    if (append && existing.length > 0) {
+      if (existing.length >= maxCards) {
+        emitBingoCardsToSocket(playerId, existing, { room });
+        return existing[0];
+      }
+      nextList = [...existing, card];
+    } else {
+      nextList = [card];
     }
-    // Emit card with isNewCard flag to help client detect new rounds
-    io.to(playerId).emit('bingo-card', { ...card, isNewCard: true });
-    if (p) void persistPlayerDataCard(room, p, card);
+    storePlayerBingoCards(room, playerId, p, nextList);
+    emitBingoCardsToSocket(playerId, nextList, { isNewCard: true, room });
+    if (p) void persistPlayerDataCard(room, p, nextList);
+
+    // Dealt-at-start: after a fresh deal (or recovery), fill until N without player request.
+    if (options.fillToMax !== false && nextList.length < maxCards) {
+      while (resolveActivePlayerCards(room, p, playerId).length < maxCards) {
+        const before = resolveActivePlayerCards(room, p, playerId).length;
+        const more = await generateBingoCardForPlayer(roomId, playerId, {
+          append: true,
+          fillToMax: false,
+        });
+        if (!more) break;
+        const after = resolveActivePlayerCards(room, p, playerId).length;
+        if (after <= before) break;
+      }
+      const finalList = resolveActivePlayerCards(room, p, playerId);
+      return finalList[0] || card;
+    }
     return card;
   } catch (e) {
     console.error('❌ Error generating single player card:', e?.message || e);
@@ -12728,6 +12919,7 @@ app.post('/api/host/rooms', async (req, res) => {
         pattern: 'line',
         customPattern: undefined,
         patternComposite: undefined,
+        maxPlayerBingoCards: 1,
         createdAt: new Date().toISOString(),
       };
       rooms.set(code, newRoom);

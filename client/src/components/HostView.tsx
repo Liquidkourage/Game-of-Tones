@@ -86,6 +86,7 @@ import {
   DEFAULT_PLAYLIST_TITLE_FLAGS,
   DEFAULT_BINGO_COLUMN_LETTERS,
   normalizeBingoColumnLetters,
+  normalizeMaxPlayerBingoCards,
   loadHostPreferences,
   saveHostPreferences,
   sanitizeHostPreferences,
@@ -780,14 +781,25 @@ function bingoSquaresInGridOrder<T extends { position?: string }>(
 /** Stable fingerprint for host player-card payloads so we detect mark changes, not only played-song count. */
 function hostPlayerCardSnapshot(cardData: {
   card?: { squares?: Array<{ position?: string; marked?: boolean }> };
+  cards?: Array<{ squares?: Array<{ position?: string; marked?: boolean }> }>;
   playedSongs?: string[];
   inPerson?: boolean;
 }) {
   const played = [...(cardData.playedSongs || [])].sort().join(',');
-  const marks = (cardData.card?.squares || [])
-    .map((s) => `${s.position ?? ''}:${s.marked ? 1 : 0}`)
-    .sort()
-    .join('|');
+  const cards =
+    Array.isArray(cardData.cards) && cardData.cards.length > 0
+      ? cardData.cards
+      : cardData.card
+        ? [cardData.card]
+        : [];
+  const marks = cards
+    .map((c) =>
+      (c?.squares || [])
+        .map((s) => `${s.position ?? ''}:${s.marked ? 1 : 0}`)
+        .sort()
+        .join('|'),
+    )
+    .join('||');
   return `${cardData.inPerson === false ? '0' : '1'}#${played}#${marks}`;
 }
 
@@ -1249,6 +1261,8 @@ const HostView: React.FC = () => {
   const [publicDisplayLetterRevealToast, setPublicDisplayLetterRevealToast] = useState<boolean>(true);
   /** Five column letters for cards / call list headers (org-customizable: BINGO, TEMPO, TONES, …). */
   const [bingoColumnLetters, setBingoColumnLetters] = useState<string>(DEFAULT_BINGO_COLUMN_LETTERS);
+  /** Cards dealt per player at round start (1–3); locked while live. */
+  const [maxPlayerBingoCards, setMaxPlayerBingoCards] = useState(1);
 
   // Handler to update public display font size
   const updatePublicDisplayFontSize = (newSize: number) => {
@@ -1290,6 +1304,13 @@ const HostView: React.FC = () => {
     const valid = normalizeBingoColumnLetters(cleaned);
     if (valid && socket && roomId) {
       socket.emit('set-bingo-column-letters', { roomId, letters: valid });
+    }
+  };
+  const updateMaxPlayerBingoCards = (raw: number) => {
+    const next = normalizeMaxPlayerBingoCards(raw, 1);
+    setMaxPlayerBingoCards(next);
+    if (socket && roomId) {
+      socket.emit('set-max-player-bingo-cards', { roomId, maxCards: next });
     }
   };
   /** Letters as a 5-tuple for rendering (falls back to BINGO until input is 5 chars). */
@@ -4050,6 +4071,15 @@ const HostView: React.FC = () => {
         // Don't clobber a partial value the host is mid-typing in Settings.
         setBingoColumnLetters((prev) => (normalizeBingoColumnLetters(prev) ? roomLetters : prev));
       }
+      if (payload?.maxPlayerBingoCards != null) {
+        setMaxPlayerBingoCards(normalizeMaxPlayerBingoCards(payload.maxPlayerBingoCards, 1));
+      }
+    });
+
+    newSocket.on('max-player-bingo-cards-updated', (data: any) => {
+      if (data?.maxCards != null) {
+        setMaxPlayerBingoCards(normalizeMaxPlayerBingoCards(data.maxCards, 1));
+      }
     });
 
     newSocket.on('fiveby15-pool', (data: any) => {
@@ -4065,15 +4095,23 @@ const HostView: React.FC = () => {
         if (data && typeof data === 'object') {
           const newPlayerCards = new Map();
           Object.entries(data).forEach(([playerId, cardData]: [string, any]) => {
-            if (cardData && cardData.card) {
+            const cardsList: any[] =
+              Array.isArray(cardData?.cards) && cardData.cards.length > 0
+                ? cardData.cards
+                : cardData?.card
+                  ? [cardData.card]
+                  : [];
+            if (cardData && cardsList.length > 0) {
               console.log(`?? Host received player card for ${cardData.playerName}:`, {
                 playedSongs: cardData.playedSongs,
                 playedSongsLength: cardData.playedSongs?.length || 0,
-                cardSquares: cardData.card.squares?.length || 0
+                cardCount: cardsList.length,
+                cardSquares: cardsList[0]?.squares?.length || 0,
               });
               newPlayerCards.set(playerId, {
                 playerName: cardData.playerName || 'Unknown',
-                card: cardData.card,
+                card: cardsList[0],
+                cards: cardsList,
                 playedSongs: cardData.playedSongs || [],
                 inPerson: cardData.inPerson !== false,
               });
@@ -5657,11 +5695,38 @@ const HostView: React.FC = () => {
             </div>
 
             {(() => {
-              const progress = calculateWinProgress(
-                playerData.card,
-                pattern,
-                playerData.playedSongs || [],
-                pattern === 'composite' ? patternComposite : undefined,
+              const hostCards =
+                Array.isArray(playerData.cards) && playerData.cards.length > 0
+                  ? playerData.cards
+                  : playerData.card
+                    ? [playerData.card]
+                    : [];
+              const progresses = hostCards.map((c: any) =>
+                calculateWinProgress(
+                  c,
+                  pattern,
+                  playerData.playedSongs || [],
+                  pattern === 'composite' ? patternComposite : undefined,
+                ),
+              );
+              const progress =
+                progresses.length === 0
+                  ? calculateWinProgress(
+                      playerData.card,
+                      pattern,
+                      playerData.playedSongs || [],
+                      pattern === 'composite' ? patternComposite : undefined,
+                    )
+                  : progresses.reduce((best: any, cur: any) =>
+                      cur.needed < best.needed ||
+                      (cur.needed === best.needed && cur.progress > best.progress)
+                        ? cur
+                        : best,
+                    );
+              const aggregateMarked = progresses.reduce((n: number, p: any) => n + (p.marked || 0), 0);
+              const aggregateLegit = progresses.reduce(
+                (n: number, p: any) => n + (p.legitimate || 0),
+                0,
               );
               const progressColor =
                 progress.needed === 0
@@ -5677,7 +5742,7 @@ const HostView: React.FC = () => {
                   : progress.needed === 1
                     ? '1 more needed!'
                     : `${progress.needed} more needed`;
-              const cheatingCount = progress.marked - progress.legitimate;
+              const cheatingCount = aggregateMarked - aggregateLegit;
               const patternText =
                 pattern === 'line' && linesRequired > 1
                   ? `${progress.patternProgress}/${progress.totalNeeded} lines (${progress.progress}%)`
@@ -5751,9 +5816,9 @@ const HostView: React.FC = () => {
                     }}
                   >
                     {patternText}
-                    {progress.marked !== progress.legitimate && (
+                    {aggregateMarked !== aggregateLegit && (
                       <span style={{ color: '#ff8888', marginLeft: '4px' }}>
-                        ({progress.marked} total marked)
+                        ({aggregateMarked} total marked)
                       </span>
                     )}
                   </div>
@@ -5761,154 +5826,180 @@ const HostView: React.FC = () => {
               );
             })()}
             <div style={{ maxWidth: innerMax, margin: '0 auto', width: '100%' }}>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(5, 1fr)',
-                  gap: '4px',
-                  marginBottom: compact ? 3 : 4,
-                }}
-                aria-hidden
-              >
-                {bingoColumnLettersArr.map((letter, colIdx) => {
-                  const raw = hostBingoColumnHeaders[colIdx] || '';
-                  const playlistLabel = stripGotPlaylistPrefix(raw);
-                  return (
+              {(Array.isArray(playerData.cards) && playerData.cards.length > 0
+                ? playerData.cards
+                : playerData.card
+                  ? [playerData.card]
+                  : []
+              ).map((card: any, cardIdx: number, allCards: any[]) => (
+                <div
+                  key={card.cardId || card.id || `host-card-${cardIdx}`}
+                  style={{ marginBottom: allCards.length > 1 ? 14 : 0 }}
+                >
+                  {allCards.length > 1 ? (
                     <div
-                      key={`${letter}-${colIdx}`}
                       style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
                         textAlign: 'center',
-                        gap: compact ? 2 : 3,
-                        minWidth: 0,
-                        userSelect: 'none',
+                        fontSize: compact ? '0.72rem' : '0.8rem',
+                        color: 'rgba(0,255,136,0.85)',
+                        fontWeight: 700,
+                        marginBottom: 6,
+                        letterSpacing: '0.04em',
                       }}
                     >
-                      <span
-                        style={{
-                          fontSize: compact ? '0.58rem' : '0.7rem',
-                          fontWeight: 800,
-                          letterSpacing: '0.06em',
-                          color: 'rgba(0, 255, 163, 0.95)',
-                          lineHeight: 1.1,
-                        }}
-                      >
-                        {letter}
-                      </span>
-                      {playlistLabel ? (
-                        <span
-                          title={playlistLabel}
+                      Card {cardIdx + 1}/{allCards.length}
+                    </div>
+                  ) : null}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(5, 1fr)',
+                      gap: '4px',
+                      marginBottom: compact ? 3 : 4,
+                    }}
+                    aria-hidden
+                  >
+                    {bingoColumnLettersArr.map((letter, colIdx) => {
+                      const raw = hostBingoColumnHeaders[colIdx] || '';
+                      const playlistLabel = stripGotPlaylistPrefix(raw);
+                      return (
+                        <div
+                          key={`${letter}-${colIdx}-${cardIdx}`}
                           style={{
-                            fontSize: compact ? '0.5rem' : '0.6rem',
-                            fontWeight: 600,
-                            lineHeight: 1.15,
-                            color: 'rgba(220, 230, 240, 0.9)',
-                            wordBreak: 'break-word',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical' as const,
-                            overflow: 'hidden',
-                            width: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            textAlign: 'center',
+                            gap: compact ? 2 : 3,
+                            minWidth: 0,
+                            userSelect: 'none',
                           }}
                         >
-                          {playlistLabel}
-                        </span>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(5, 1fr)',
-                  gap: '4px',
-                  aspectRatio: '1/1',
-                }}
-              >
-              {bingoSquaresInGridOrder(playerData.card.squares).map((square: any) => {
-                const isFree = !!(square.isFreeSpace || square.songId === '__FREE_SPACE__');
-                const isPlayed = (playerData.playedSongs || []).includes(square.songId);
-                const isMarked = square.marked;
-                const isLegitimate = isMarked && (isFree || isPlayed);
-
-                let bgColor: string;
-                let borderColor: string;
-                let textColor: string;
-                let icon: string;
-                let statusText: string;
-
-                if (isLegitimate) {
-                  bgColor = 'linear-gradient(135deg, #00ff88, #00cc6d)';
-                  borderColor = '#00ff88';
-                  textColor = '#001a0d';
-                  icon = '?';
-                  statusText = isFree ? 'Free space' : 'Legitimate';
-                } else if (isMarked && !isFree && !isPlayed) {
-                  bgColor = 'linear-gradient(135deg, #ff6b6b, #ff4757)';
-                  borderColor = '#ff4757';
-                  textColor = '#ffffff';
-                  icon = '?';
-                  statusText = 'Invalid - Not played yet!';
-                } else if (!isMarked && isPlayed) {
-                  bgColor = 'linear-gradient(135deg, #4dabf7, #339af0)';
-                  borderColor = '#339af0';
-                  textColor = '#ffffff';
-                  icon = '?';
-                  statusText = 'Played but not marked';
-                } else {
-                  bgColor = 'rgba(255,255,255,0.1)';
-                  borderColor = 'rgba(255,255,255,0.3)';
-                  textColor = '#ffffff';
-                  icon = '';
-                  statusText = 'Not played';
-                }
-
-                const cellVis = youtubeBingoSquareDisplay({
-                  customSongName: square.customSongName,
-                  customArtistName: square.customArtistName,
-                  songName: square.songName,
-                  artistName: square.artistName,
-                  youtubeMusic: square.youtubeMusic === true,
-                  youtubeRawTitle: square.youtubeRawTitle,
-                  catalogDisplayVerified: square.catalogDisplayVerified === true,
-                  isFreeSpace: isFree,
-                });
-                const cellTitle = `${cellVis.title}${cellVis.artist ? ` — ${cellVis.artist}` : ''}`;
-
-                return (
-                  <div
-                    key={square.position}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: bgColor,
-                      border: `2px solid ${borderColor}`,
-                      borderRadius: '8px',
-                      padding: '4px',
-                      fontSize: cellFont,
-                      fontWeight: isMarked ? 700 : 400,
-                      color: textColor,
-                      textAlign: 'center',
-                      lineHeight: 1.1,
-                      overflow: 'hidden'
-                    }}
-                    title={`${cellTitle}\nStatus: ${statusText}`}
-                  >
-                    {icon && <span style={{ marginRight: 2 }}>{icon}</span>}
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {(() => {
-                        const label = cellVis.title;
-                        return label.length > labelMax ? label.substring(0, labelMax) + '...' : label;
-                      })()}
-                    </span>
+                          <span
+                            style={{
+                              fontSize: compact ? '0.58rem' : '0.7rem',
+                              fontWeight: 800,
+                              letterSpacing: '0.06em',
+                              color: 'rgba(0, 255, 163, 0.95)',
+                              lineHeight: 1.1,
+                            }}
+                          >
+                            {letter}
+                          </span>
+                          {playlistLabel ? (
+                            <span
+                              title={playlistLabel}
+                              style={{
+                                fontSize: compact ? '0.5rem' : '0.6rem',
+                                fontWeight: 600,
+                                lineHeight: 1.15,
+                                color: 'rgba(220, 230, 240, 0.9)',
+                                wordBreak: 'break-word',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical' as const,
+                                overflow: 'hidden',
+                                width: '100%',
+                              }}
+                            >
+                              {playlistLabel}
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-              </div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(5, 1fr)',
+                      gap: '4px',
+                      aspectRatio: '1/1',
+                    }}
+                  >
+                    {bingoSquaresInGridOrder(card.squares).map((square: any) => {
+                      const isFree = !!(square.isFreeSpace || square.songId === '__FREE_SPACE__');
+                      const isPlayed = (playerData.playedSongs || []).includes(square.songId);
+                      const isMarked = square.marked;
+                      const isLegitimate = isMarked && (isFree || isPlayed);
+
+                      let bgColor: string;
+                      let borderColor: string;
+                      let textColor: string;
+                      let icon: string;
+                      let statusText: string;
+
+                      if (isLegitimate) {
+                        bgColor = 'linear-gradient(135deg, #00ff88, #00cc6d)';
+                        borderColor = '#00ff88';
+                        textColor = '#001a0d';
+                        icon = '?';
+                        statusText = isFree ? 'Free space' : 'Legitimate';
+                      } else if (isMarked && !isFree && !isPlayed) {
+                        bgColor = 'linear-gradient(135deg, #ff6b6b, #ff4757)';
+                        borderColor = '#ff4757';
+                        textColor = '#ffffff';
+                        icon = '?';
+                        statusText = 'Invalid - Not played yet!';
+                      } else if (!isMarked && isPlayed) {
+                        bgColor = 'linear-gradient(135deg, #4dabf7, #339af0)';
+                        borderColor = '#339af0';
+                        textColor = '#ffffff';
+                        icon = '?';
+                        statusText = 'Played but not marked';
+                      } else {
+                        bgColor = 'rgba(255,255,255,0.1)';
+                        borderColor = 'rgba(255,255,255,0.3)';
+                        textColor = '#ffffff';
+                        icon = '';
+                        statusText = 'Not played';
+                      }
+
+                      const cellVis = youtubeBingoSquareDisplay({
+                        customSongName: square.customSongName,
+                        customArtistName: square.customArtistName,
+                        songName: square.songName,
+                        artistName: square.artistName,
+                        youtubeMusic: square.youtubeMusic === true,
+                        youtubeRawTitle: square.youtubeRawTitle,
+                        catalogDisplayVerified: square.catalogDisplayVerified === true,
+                        isFreeSpace: isFree,
+                      });
+                      const cellTitle = `${cellVis.title}${cellVis.artist ? ` — ${cellVis.artist}` : ''}`;
+
+                      return (
+                        <div
+                          key={`${card.cardId || cardIdx}-${square.position}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: bgColor,
+                            border: `2px solid ${borderColor}`,
+                            borderRadius: '8px',
+                            padding: '4px',
+                            fontSize: cellFont,
+                            fontWeight: isMarked ? 700 : 400,
+                            color: textColor,
+                            textAlign: 'center',
+                            lineHeight: 1.1,
+                            overflow: 'hidden'
+                          }}
+                          title={`${cellTitle}\nStatus: ${statusText}`}
+                        >
+                          {icon && <span style={{ marginRight: 2 }}>{icon}</span>}
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {(() => {
+                              const label = cellVis.title;
+                              return label.length > labelMax ? label.substring(0, labelMax) + '...' : label;
+                            })()}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         ))}
@@ -9057,6 +9148,7 @@ const HostView: React.FC = () => {
       if (p.venueSpotifyJamMode != null) setVenueSpotifyJamMode(p.venueSpotifyJamMode);
       if (p.playlistTitleFlags != null) setPlaylistTitleFlags(p.playlistTitleFlags);
       if (p.bingoColumnLetters != null) setBingoColumnLetters(p.bingoColumnLetters);
+      if (p.maxPlayerBingoCards != null) setMaxPlayerBingoCards(p.maxPlayerBingoCards);
     };
     apply(loadHostPreferences(hostId));
     hostPrefsHydratedRef.current = true;
@@ -9098,6 +9190,7 @@ const HostView: React.FC = () => {
       venueSpotifyJamMode,
       playlistTitleFlags,
       bingoColumnLetters: normalizeBingoColumnLetters(bingoColumnLetters) ?? DEFAULT_BINGO_COLUMN_LETTERS,
+      maxPlayerBingoCards,
     };
     saveHostPreferences(hostAccount.id, prefs);
     try {
@@ -9142,6 +9235,7 @@ const HostView: React.FC = () => {
     venueSpotifyJamMode,
     playlistTitleFlags,
     bingoColumnLetters,
+    maxPlayerBingoCards,
   ]);
 
   /** Sync venue Jam mode to server when pref or socket changes. */
@@ -9174,6 +9268,7 @@ const HostView: React.FC = () => {
     updatePublicDisplayLetterRevealInterval(saved.letterRevealIntervalSec ?? letterRevealIntervalSec);
     updatePublicDisplayLetterRevealToast(saved.publicDisplayLetterRevealToast ?? publicDisplayLetterRevealToast);
     updateBingoColumnLetters(saved.bingoColumnLetters ?? bingoColumnLetters);
+    updateMaxPlayerBingoCards(saved.maxPlayerBingoCards ?? maxPlayerBingoCards);
     updatePublicDisplayCallListMode('auto');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- room sync after socket ready / prefs hydrate
   }, [socket, roomId, hostAccount?.id, hostPrefsHydrationNonce]);
@@ -11662,6 +11757,9 @@ const HostView: React.FC = () => {
                 onLetterRevealToastChange={updatePublicDisplayLetterRevealToast}
                 bingoColumnLetters={bingoColumnLetters}
                 onBingoColumnLettersChange={updateBingoColumnLetters}
+                maxPlayerBingoCards={maxPlayerBingoCards}
+                onMaxPlayerBingoCardsChange={updateMaxPlayerBingoCards}
+                maxPlayerBingoCardsLocked={gameState === 'playing'}
               />
               </div>
             ) : null}

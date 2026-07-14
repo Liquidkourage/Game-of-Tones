@@ -17,7 +17,16 @@ export type HostPreferencesV1 = {
   playlistTitleFlags: string;
   /** Five column letters shown on cards / call list headers (e.g. BINGO, TEMPO, TONES). */
   bingoColumnLetters: string;
+  /** How many bingo cards each player is dealt at round start (1–3). Default 1. */
+  maxPlayerBingoCards: number;
 };
+
+/** Clamp host cards-per-player to 1–3. */
+export function normalizeMaxPlayerBingoCards(raw: unknown, fallback = 1): number {
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(3, Math.max(1, n));
+}
 
 export const DEFAULT_PLAYLIST_TITLE_FLAGS = 'GoT, Game of Tones';
 export const DEFAULT_BINGO_COLUMN_LETTERS = 'BINGO';
@@ -48,6 +57,7 @@ export function defaultHostPreferences(): HostPreferencesV1 {
     venueSpotifyJamMode: false,
     playlistTitleFlags: DEFAULT_PLAYLIST_TITLE_FLAGS,
     bingoColumnLetters: DEFAULT_BINGO_COLUMN_LETTERS,
+    maxPlayerBingoCards: 1,
   };
 }
 
@@ -90,6 +100,10 @@ export function sanitizeHostPreferences(raw: unknown): Partial<HostPreferencesV1
           ? parsed.playlistTitleFlags.slice(0, 200)
           : undefined,
       bingoColumnLetters: normalizeBingoColumnLetters(parsed.bingoColumnLetters) ?? undefined,
+      maxPlayerBingoCards:
+        parsed.maxPlayerBingoCards != null
+          ? normalizeMaxPlayerBingoCards(parsed.maxPlayerBingoCards, 1)
+          : undefined,
     };
 }
 

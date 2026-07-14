@@ -27,6 +27,10 @@ type HostSettingsPanelProps = {
   onLetterRevealToastChange: (v: boolean) => void;
   bingoColumnLetters: string;
   onBingoColumnLettersChange: (v: string) => void;
+  maxPlayerBingoCards: number;
+  onMaxPlayerBingoCardsChange: (n: number) => void;
+  /** True while a round is live — cards-per-player cannot change. */
+  maxPlayerBingoCardsLocked?: boolean;
 };
 
 const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
@@ -50,6 +54,9 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
   onLetterRevealToastChange,
   bingoColumnLetters,
   onBingoColumnLettersChange,
+  maxPlayerBingoCards,
+  onMaxPlayerBingoCardsChange,
+  maxPlayerBingoCardsLocked = false,
 }) => {
   const lettersIncomplete = bingoColumnLetters.length > 0 && bingoColumnLetters.length < 5;
   return (
@@ -108,6 +115,25 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
           />
           <span>
             <strong>Hybrid</strong>
+          </span>
+        </label>
+        <label className="host-host-prefs__field">
+          <span className="host-host-prefs__label">Cards per player</span>
+          <select
+            className="host-host-prefs__select"
+            value={maxPlayerBingoCards}
+            disabled={maxPlayerBingoCardsLocked}
+            onChange={(e) => onMaxPlayerBingoCardsChange(Number(e.target.value))}
+          >
+            <option value={1}>1 card</option>
+            <option value={2}>2 cards</option>
+            <option value={3}>3 cards</option>
+          </select>
+          <span className="host-host-prefs__hint">
+            Dealt to every player at round start / finalize / late-join.
+            {maxPlayerBingoCardsLocked
+              ? ' Locked while this round is live.'
+              : ' Cannot change while a round is live.'}
           </span>
         </label>
         <label className="host-host-prefs__field">
