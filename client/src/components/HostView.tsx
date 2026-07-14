@@ -4253,6 +4253,28 @@ const HostView: React.FC = () => {
       });
     });
 
+    newSocket.on('spotify-api-quarantined', (data: any) => {
+      const retrySec = Number(data?.retryAfterSec);
+      const waitHint =
+        Number.isFinite(retrySec) && retrySec > 0
+          ? retrySec >= 3600
+            ? ` (~${Math.round(retrySec / 3600)}h cooldown)`
+            : ` (~${Math.round(retrySec / 60)} min cooldown)`
+          : '';
+      const msg =
+        (typeof data?.message === 'string' && data.message) ||
+        'Spotify rate-limited this host. Auto-advance paused — DJ from the Spotify app until the cooldown ends.';
+      console.warn('Spotify API quarantined (server):', data);
+      setSpotifyError(msg);
+      addLog(`Spotify host quarantine${waitHint}: ${msg}`, 'error');
+      showHostAckNotificationSocketRef.current({
+        id: 'server-spotify-api-quarantined',
+        title: `Spotify rate limit — auto-advance paused${waitHint}`,
+        variant: 'error',
+        message: `${msg}\n\nDo not spam Skip/Resume. Play from Spotify on the locked speaker. Bingo/cards still work.`,
+      });
+    });
+
     newSocket.on('playback-warning', (data: any) => {
       const msg = data?.message || 'Playback warning occurred';
       const type = data?.type || 'general';

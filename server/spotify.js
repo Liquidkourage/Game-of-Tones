@@ -293,6 +293,7 @@ const NON_ESSENTIAL_WEB_API_CALLERS = new Set([
   'replaceTrackInPlaylist',
   'addToQueue',
   'clearQueue',
+  'getTrack',
 ]);
 
 class SpotifyService {
@@ -355,6 +356,14 @@ class SpotifyService {
      * is mid-show. Blocks NON_ESSENTIAL_WEB_API_CALLERS before they can burn quota / 429.
      */
     this._nonEssentialBlockedChecker = null;
+    /** Optional () => void — fires after applyRateLimitQuarantine so rooms can halt advance storms. */
+    this._onQuarantineApplied = null;
+    /** Coalesce parallel ensureValidToken → refreshAccessToken. */
+    this._refreshInflight = null;
+  }
+
+  setOnQuarantineApplied(fn) {
+    this._onQuarantineApplied = typeof fn === 'function' ? fn : null;
   }
 
   /** Wire from server after construct: () => orgHasAnyLiveRoom(orgKey). */
@@ -512,6 +521,14 @@ class SpotifyService {
           raSec || 'n/a'
         }s${capped ? `; capped to ${SPOTIFY_QUARANTINE_MAX_MS / 1000}s for in-process backoff` : ''}). See [SPOTIFY_429_DIAGNOSTIC] JSON above/below for route + headers.`
       );
+    }
+
+    if (typeof this._onQuarantineApplied === 'function') {
+      try {
+        this._onQuarantineApplied(this);
+      } catch (e) {
+        console.warn('⚠️ onQuarantineApplied hook failed:', e?.message || e);
+      }
     }
   }
 
@@ -1029,10 +1046,17 @@ class SpotifyService {
 
   // Check if token needs refresh
   async ensureValidToken() {
+    if (this._refreshInflight) {
+      await this._refreshInflight;
+      return;
+    }
     // If we don't have an access token but we do have a refresh token, try to refresh
     if (!this.accessToken) {
       if (this.refreshToken) {
-        await this.refreshAccessToken();
+        this._refreshInflight = this.refreshAccessToken().finally(() => {
+          this._refreshInflight = null;
+        });
+        await this._refreshInflight;
         return;
       }
       throw new Error('No access token available');
@@ -1040,7 +1064,10 @@ class SpotifyService {
 
     // If we don't know the expiry yet, proactively refresh using the refresh token
     if ((!this.tokenExpirationTime || Date.now() >= this.tokenExpirationTime - 60000) && this.refreshToken) {
-      await this.refreshAccessToken();
+      this._refreshInflight = this.refreshAccessToken().finally(() => {
+        this._refreshInflight = null;
+      });
+      await this._refreshInflight;
     }
   }
 
@@ -1495,6 +1522,7 @@ class SpotifyService {
   }
 
   async _transferPlaybackDirect(deviceId, play) {
+    if (this.isQuarantined()) throw this._makeQuarantineError('transferPlaybackDirect');
     await this._paceBeforeWebApiRequest();
     return new Promise((resolve, reject) => {
       const body = JSON.stringify({ device_ids: [deviceId], play: !!play });
@@ -1763,18 +1791,15 @@ class SpotifyService {
   // Get full current playback state (raw Spotify shape)
   async getCurrentPlaybackState() {
     await this.ensureValidToken();
-    const now = Date.now();
-    if (this.isQuarantined() && this._lastPlaybackStateCache != null) {
-      this._playbackNullDueToRateLimit = false;
-      return this._lastPlaybackStateCache;
-    }
-    if (this.isQuarantined() && !this._lastPlaybackStateCache) {
+    // Never feed monitors stale cache during quarantine — that caused wrong-track restore → 429 storms.
+    if (this.isQuarantined()) {
       this._playbackNullDueToRateLimit = true;
       return null;
     }
-    if (now < this._playbackStateBackoffUntil && this._lastPlaybackStateCache != null) {
-      this._playbackNullDueToRateLimit = false;
-      return this._lastPlaybackStateCache;
+    const now = Date.now();
+    if (now < this._playbackStateBackoffUntil) {
+      this._playbackNullDueToRateLimit = true;
+      return null;
     }
     try {
       const response = await this.spotifyApi.getMyCurrentPlaybackState();
@@ -1787,10 +1812,6 @@ class SpotifyService {
       if (this.isRateLimitError(error)) {
         this._playbackState429Streak = Math.min(6, (this._playbackState429Streak || 0) + 1);
         this.applyRateLimitQuarantine(error, 'getCurrentPlaybackState');
-        if (this._lastPlaybackStateCache) {
-          this._playbackNullDueToRateLimit = false;
-          return this._lastPlaybackStateCache;
-        }
         this._playbackNullDueToRateLimit = true;
         return null;
       }

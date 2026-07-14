@@ -1345,11 +1345,21 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     startSimpleProgression(roomId, targetDeviceId, room.snippetLength);
   } catch (error) {
     console.error('❌ Error playing song at index:', error);
-    // Try to continue with next song after a delay using simple system
-    setTimeout(() => {
-      if (!roomStillPlaying(roomId)) return;
-      playNextSongSimple(roomId, deviceId);
-    }, 3000);
+    const room = rooms.get(roomId);
+    const sp = room ? spotifyFor(roomId) : null;
+    if (room && isSpotifyRateLimitOrQuarantineError(error, sp)) {
+      lockRoomSpotifyPlayback(roomId, room, 'play_at_index_429', sp);
+      return;
+    }
+    // Soft one-shot only (never infinite 3s 429 storm)
+    clearSpotifyCallRetryTimer(room);
+    if (room) {
+      room._spotifyCallRetryTimer = setTimeout(() => {
+        room._spotifyCallRetryTimer = null;
+        if (!roomStillPlaying(roomId) || room._spotifyAdvanceLocked) return;
+        playNextSongSimple(roomId, deviceId, { retrying: true });
+      }, 3000);
+    }
   }
 }
 
@@ -1402,6 +1412,9 @@ class MultiTenantSpotifyManager {
       }
       const service = new SpotifyService(credentialOverride);
       service.setNonEssentialBlockedChecker(() => orgHasAnyLiveRoom(organizationId));
+      service.setOnQuarantineApplied(() => {
+        lockAllLiveRoomsForSpotifyOrg(organizationId, 'spotify_429_quarantine');
+      });
       this.orgServices.set(organizationId, service);
       // Tokens are applied via setTokens() after OAuth, or ensureOrgTokensLoaded() from DB.
       // Do NOT call async loadOrgTokens here without await (would store a Promise in orgTokens).
@@ -1409,6 +1422,11 @@ class MultiTenantSpotifyManager {
     const service = this.orgServices.get(organizationId);
     if (service && typeof service.setNonEssentialBlockedChecker === 'function') {
       service.setNonEssentialBlockedChecker(() => orgHasAnyLiveRoom(organizationId));
+    }
+    if (service && typeof service.setOnQuarantineApplied === 'function') {
+      service.setOnQuarantineApplied(() => {
+        lockAllLiveRoomsForSpotifyOrg(organizationId, 'spotify_429_quarantine');
+      });
     }
     // After invalidateUserService, the new SpotifyService has no tokens even though orgTokens may still hold them.
     const tok = this.orgTokens.get(organizationId);
@@ -3085,11 +3103,84 @@ function monitorPlaybackStateIsFresh(sp) {
   return true;
 }
 
+function isSpotifyRateLimitOrQuarantineError(error, sp) {
+  if (sp && typeof sp.isQuarantined === 'function' && sp.isQuarantined()) return true;
+  if (sp && typeof sp.isRateLimitError === 'function' && sp.isRateLimitError(error)) return true;
+  const sc = Number(error?.statusCode || error?.body?.error?.status || 0);
+  if (sc === 429) return true;
+  const msg = String(error?.message || error?.code || '');
+  return /quarantin|rate.?limit|429/i.test(msg);
+}
+
+function clearSpotifyCallRetryTimer(room) {
+  if (room?._spotifyCallRetryTimer) {
+    clearTimeout(room._spotifyCallRetryTimer);
+    room._spotifyCallRetryTimer = null;
+  }
+}
+
+/**
+ * Hard stop auto-advance + context monitor for a live room after Spotify 429.
+ * Bingo/projector keep running; host must DJ Spotify manually until cooldown ends.
+ */
+function lockRoomSpotifyPlayback(roomId, room, reason, sp) {
+  if (!room) return;
+  const already = !!room._spotifyAdvanceLocked;
+  room._spotifyAdvanceLocked = true;
+  room._spotifyAdvanceLockedAt = Date.now();
+  room._spotifyAdvanceLockReason = reason || 'spotify_api_quarantined';
+  clearSpotifyCallRetryTimer(room);
+  stopLiveRoundTimers(roomId, room);
+  const retryAfterSec =
+    sp && typeof sp.getQuarantineRemainingSec === 'function' ? sp.getQuarantineRemainingSec() : 0;
+  const untilMs =
+    sp && typeof sp.isQuarantined === 'function' && sp.isQuarantined()
+      ? Date.now() + retryAfterSec * 1000
+      : null;
+  const payload = {
+    code: 'spotify_api_quarantined',
+    message:
+      'Spotify rate-limited this host. TEMPO paused auto-advance and speaker API calls for this room. Play/skip from the Spotify app on the locked device until the cooldown ends — do not spam Skip/Resume.',
+    reason: reason || '429',
+    retryAfterSec,
+    untilIso: untilMs ? new Date(untilMs).toISOString() : null,
+    roomId,
+  };
+  try {
+    io.to(roomId).emit('spotify-api-quarantined', payload);
+  } catch (e) {
+    console.warn('emit spotify-api-quarantined failed:', e?.message || e);
+  }
+  if (!already) {
+    console.warn(
+      `🛑 Spotify HOST QUARANTINE LOCK room ${roomId}: ${payload.reason}` +
+        (retryAfterSec ? ` (~${retryAfterSec}s)` : ''),
+    );
+  }
+}
+
+/** On service 429 — lock every live room sharing that Spotify org key. */
+function lockAllLiveRoomsForSpotifyOrg(orgKey, reason) {
+  const key = orgKey || 'DEFAULT';
+  let locked = 0;
+  for (const [roomId, room] of rooms.entries()) {
+    if (!roomIsLiveRound(room)) continue;
+    if (spotifyOrgForRoom(room) !== key) continue;
+    const sp = multiTenantSpotify.getService(key);
+    lockRoomSpotifyPlayback(roomId, room, reason, sp);
+    locked++;
+  }
+  if (locked > 0) {
+    routineServerLog(`🛑 Locked ${locked} live room(s) for Spotify org ${key} (${reason})`);
+  }
+}
+
 function stopLiveRoundTimers(roomId, room) {
   if (!room) return;
   room.simpleProgressionActive = false;
   room._playbackEpoch = (room._playbackEpoch || 0) + 1;
   releaseSongAdvance(room);
+  clearSpotifyCallRetryTimer(room);
   clearRoomTimer(roomId);
   clearPlaybackWatcher(roomId);
 }
@@ -3201,11 +3292,18 @@ function startSimpleContextMonitor(roomId, deviceId) {
           ? room.playlistSongs[idx]
           : null;
       if (songUsesYoutubePlayback(activeSong)) return;
+
+      const spMon = spotifyFor(roomId);
+      if (room._spotifyAdvanceLocked || spMon.isQuarantined()) {
+        // Halt restorations — do not poll or correct while rate-limited.
+        clearMonitorSuspect();
+        return;
+      }
       
       // Get current playback state to check device
-      const spMon = spotifyFor(roomId);
       const state = await spMon.getCurrentPlaybackState();
       if (state == null && spMon._playbackNullDueToRateLimit) return;
+      if (!monitorPlaybackStateIsFresh(spMon)) return;
       const currentDeviceId = state?.device?.id;
       const targetDeviceId = await spotifyDevices.resolveMonitorTargetDeviceId(
         roomId,
@@ -3285,6 +3383,10 @@ function startSimpleContextMonitor(roomId, deviceId) {
       
       // Case 1: Wrong playlist context
       if (expectedContext && currentContext && currentContext !== expectedContext && currentTrackId && currentTrackId !== expectedTrackId) {
+        if (!monitorPlaybackStateIsFresh(spMon)) {
+          clearMonitorSuspect();
+          return;
+        }
         if (!confirmMonitorSuspect('context-loss', `${currentContext}->${expectedContext}`)) {
           routineServerLog(`🕵️ Context loss suspected once (${currentContext} → ${expectedContext}); waiting for confirmation before correction`);
           return;
@@ -3292,7 +3394,7 @@ function startSimpleContextMonitor(roomId, deviceId) {
         console.warn(`🔄 Context lost. Expected: ${expectedContext}, Got: ${currentContext}. Restoring...`);
         
         try {
-          if (!roomStillPlaying(roomId)) return;
+          if (!roomStillPlaying(roomId) || spMon.isQuarantined() || room._spotifyAdvanceLocked) return;
           // Ensure we're on the correct device first
           await transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, currentDeviceId, state, spMon);
           if (!roomStillPlaying(roomId)) return;
@@ -3305,6 +3407,9 @@ function startSimpleContextMonitor(roomId, deviceId) {
           clearMonitorSuspect();
         } catch (e) {
           console.warn('⚠️ Context restore failed:', e?.message);
+          if (isSpotifyRateLimitOrQuarantineError(e, spMon)) {
+            lockRoomSpotifyPlayback(roomId, room, 'context_restore_429', spMon);
+          }
         }
       }
       // Case 2: Same track restarted from beginning (back button pressed)
@@ -3377,6 +3482,14 @@ function startSimpleContextMonitor(roomId, deviceId) {
         room.temporaryPlaylistId &&
         typeof room.currentSongIndex === 'number'
       ) {
+        if (!monitorPlaybackStateIsFresh(spMon)) {
+          clearMonitorSuspect();
+          return;
+        }
+        const nowRestore = Date.now();
+        if (room._lastWrongTrackRestoreAt && nowRestore - room._lastWrongTrackRestoreAt < 45_000) {
+          return;
+        }
         if (!confirmMonitorSuspect('wrong-track', `${expectedTrackId}->${currentTrackId}`)) {
           routineServerLog(
             `🕵️ Wrong track in playlist suspected once (expected ${expectedTrackId}, got ${currentTrackId}); waiting for confirmation`,
@@ -3388,6 +3501,7 @@ function startSimpleContextMonitor(roomId, deviceId) {
         );
         try {
           if (!roomStillPlaying(roomId)) return;
+          if (spMon.isQuarantined() || room._spotifyAdvanceLocked) return;
           await transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, currentDeviceId, state, spMon);
           if (!roomStillPlaying(roomId)) return;
           const resumeMs = Math.min(
@@ -3400,9 +3514,13 @@ function startSimpleContextMonitor(roomId, deviceId) {
             room.currentSongIndex,
             resumeMs,
           );
+          room._lastWrongTrackRestoreAt = Date.now();
           clearMonitorSuspect();
         } catch (e) {
           console.warn('⚠️ Wrong-track playlist restore failed:', e?.message);
+          if (isSpotifyRateLimitOrQuarantineError(e, spMon)) {
+            lockRoomSpotifyPlayback(roomId, room, 'wrong_track_restore_429', spMon);
+          }
         }
       } else {
         clearMonitorSuspect();
@@ -3479,6 +3597,20 @@ async function endGamePlaylistComplete(roomId, deviceId) {
 function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
   const room = rooms.get(roomId);
   if (!room || !roomStillPlaying(roomId)) return;
+  if (room._spotifyAdvanceLocked) {
+    routineServerLog('🛑 Simple progression not started — Spotify host quarantine lock active');
+    return;
+  }
+  let spProg = null;
+  try {
+    spProg = spotifyFor(roomId);
+  } catch {
+    /* ignore */
+  }
+  if (spProg && spProg.isQuarantined()) {
+    lockRoomSpotifyPlayback(roomId, room, 'progression_quarantine', spProg);
+    return;
+  }
   room.simpleProgressionActive = true;
 
   const total = Array.isArray(room.playlistSongs) ? room.playlistSongs.length : 0;
@@ -3520,10 +3652,29 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     return;
   }
 
+  let spGate = null;
+  try {
+    spGate = spotifyFor(roomId);
+  } catch {
+    /* ignore */
+  }
+  if (room._spotifyAdvanceLocked || (spGate && spGate.isQuarantined())) {
+    lockRoomSpotifyPlayback(
+      roomId,
+      room,
+      room._spotifyAdvanceLocked ? room._spotifyAdvanceLockReason : 'spotify_quarantine_block_advance',
+      spGate,
+    );
+    routineServerLog('🛑 Simple advance aborted — Spotify host quarantine lock active');
+    return;
+  }
+
   if (!tryAcquireSongAdvance(room, { retrying })) {
     if (!retrying) {
       routineServerLog('⏭️ Advance in flight — retrying same timer tick in 500ms');
-      setTimeout(() => {
+      clearSpotifyCallRetryTimer(room);
+      room._spotifyCallRetryTimer = setTimeout(() => {
+        room._spotifyCallRetryTimer = null;
         if (!roomStillPlaying(roomId)) return;
         playNextSongSimple(roomId, deviceId);
       }, 500);
@@ -3574,37 +3725,70 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     
     await new Promise(resolve => setTimeout(resolve, 100));
     if (!roomStillPlaying(roomId)) return;
+
+    const spPlay = spotifyFor(roomId);
+    if (spPlay.isQuarantined()) {
+      lockRoomSpotifyPlayback(roomId, room, 'spotify_quarantine_before_start', spPlay);
+      return;
+    }
     
     if (room.temporaryPlaylistId) {
       routineServerLog(`🎼 Using playlist context: ${room.temporaryPlaylistId}, track ${room.currentSongIndex}`);
-      await spotifyFor(roomId).startPlaybackFromPlaylist(resolvedDeviceId, room.temporaryPlaylistId, room.currentSongIndex, room.currentSongStartMs);
+      await spPlay.startPlaybackFromPlaylist(resolvedDeviceId, room.temporaryPlaylistId, room.currentSongIndex, room.currentSongStartMs);
     } else {
       routineServerLog(`🎵 Using individual track: ${nextSong.id}`);
-      await spotifyFor(roomId).startPlayback(resolvedDeviceId, [`spotify:track:${nextSong.id}`], room.currentSongStartMs);
+      await spPlay.startPlayback(resolvedDeviceId, [`spotify:track:${nextSong.id}`], room.currentSongStartMs);
     }
 
     routineServerLog(`✅ Playback started successfully for: ${nextSong.name}`);
     routineServerLog(`✅ Simple advance: ${nextSong.name} by ${nextSong.artist}`);
+    room._spotifyAdvanceSoftRetries = 0;
     if (roomStillPlaying(roomId)) {
       startSimpleProgression(roomId, resolvedDeviceId, room.snippetLength);
     }
 
   } catch (error) {
     showLog.logSpotifyApiError('simple song advance', error);
-    
-    if (roomStillPlaying(roomId)) {
+    const spErr = spotifyFor(roomId);
+    if (isSpotifyRateLimitOrQuarantineError(error, spErr)) {
+      lockRoomSpotifyPlayback(roomId, room, 'advance_429', spErr);
+      routineServerLog('🛑 No auto-retry — Spotify 429/quarantine host lock engaged');
+      return;
+    }
+
+    if (roomStillPlaying(roomId) && !room._spotifyAdvanceLocked) {
       try {
-        routineServerLog('🔄 Attempting to resume playback after song advance failure...');
-        await spotifyFor(roomId).resumePlayback(resolvedDeviceId);
-        routineServerLog('✅ Resume attempt completed');
+        if (!spErr.isQuarantined()) {
+          routineServerLog('🔄 Attempting to resume playback after song advance failure...');
+          await spErr.resumePlayback(resolvedDeviceId);
+          routineServerLog('✅ Resume attempt completed');
+        }
       } catch (resumeError) {
         console.warn('⚠️ Failed to resume playback:', showLog.spotifyErrorSummary(resumeError));
+        if (isSpotifyRateLimitOrQuarantineError(resumeError, spErr)) {
+          lockRoomSpotifyPlayback(roomId, room, 'resume_after_advance_429', spErr);
+          return;
+        }
       }
     }
-    
-    routineServerLog('🔄 Retrying same call in 3 seconds (will not skip index)...');
-    setTimeout(() => {
-      if (!roomStillPlaying(roomId)) return;
+
+    if (room._spotifyAdvanceLocked || (spErr && spErr.isQuarantined())) {
+      lockRoomSpotifyPlayback(roomId, room, 'advance_fail_quarantine', spErr);
+      return;
+    }
+
+    const retries = Number(room._spotifyAdvanceSoftRetries || 0);
+    if (retries >= 2) {
+      console.warn('⚠️ Soft advance retries exhausted — host must Skip/Resume manually');
+      clearRoomTimer(roomId);
+      return;
+    }
+    room._spotifyAdvanceSoftRetries = retries + 1;
+    routineServerLog(`🔄 Retrying same call in 3 seconds (soft retry ${room._spotifyAdvanceSoftRetries}/2)...`);
+    clearSpotifyCallRetryTimer(room);
+    room._spotifyCallRetryTimer = setTimeout(() => {
+      room._spotifyCallRetryTimer = null;
+      if (!roomStillPlaying(roomId) || room._spotifyAdvanceLocked) return;
       playNextSongSimple(roomId, deviceId, { retrying: true });
     }, 3000);
   }
@@ -4712,7 +4896,7 @@ io.on('connection', (socket) => {
         socket.emit('finalize-mix-failed', {
           code: 'bingo_generation_failed',
           message:
-            'Could not generate bingo cards (Spotify rate limit or missing playlist tracks). Wait for cooldown, reconnect Spotify, then finalize again.',
+            'Could not build the bingo pool or deal cards. Check playlist tracks (1×75 needs 75; 5×15 needs 15 unique per column). Host-only rooms can Save after the pool builds — if this keeps failing, reload playlists and try again.',
         });
         return;
       }
@@ -9627,6 +9811,10 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     room.currentSongIndex = 0;
     room.finalSongNotified = false;
     room.gameState = 'playing';
+    room._spotifyAdvanceLocked = false;
+    room._spotifyAdvanceSoftRetries = 0;
+    room._spotifyAdvanceLockReason = null;
+    clearSpotifyCallRetryTimer(room);
     if (room.mixFinalized) {
       room.finalizedSongOrder = allSongs.map((s) => ({ ...s }));
       emitFinalizedOrderFromRoomState(roomId, room);
@@ -14340,10 +14528,18 @@ app.post('/api/spotify/refresh', async (req, res) => {
       refreshToken: svc.refreshToken || tok.refreshToken,
       expiresIn: 3600,
     });
-    svc.clearRateLimitQuarantine();
+    // Never punch through Spotify Retry-After — clearing quarantine mid-cooldown restarts 429 death spirals.
+    if (svc.isQuarantined()) {
+      return res.json({
+        success: true,
+        message: 'Access token refreshed; Spotify API quarantine still active until Retry-After elapses.',
+        webApiQuarantine: svc.getWebApiQuarantineInfo(),
+        quarantineCleared: false,
+      });
+    }
 
     routineServerLog('✅ Spotify access token refreshed successfully');
-    res.json({ success: true, message: 'Spotify connection refreshed' });
+    res.json({ success: true, message: 'Spotify connection refreshed', quarantineCleared: false });
   } catch (error) {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error refreshing Spotify connection:', error);
@@ -14469,20 +14665,8 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
     let playlistInfo = null;
     if (nameFromClient) {
       playlistInfo = { id: playlistId, name: nameFromClient };
-    } else if (
-      !svc.isQuarantined() &&
-      !(typeof svc.isNonEssentialTrafficBlocked === 'function' && svc.isNonEssentialTrafficBlocked())
-    ) {
-      try {
-        const playlistResponse = await svc.spotifyApi.getPlaylist(playlistId);
-        playlistInfo = {
-          id: playlistResponse.body.id,
-          name: playlistResponse.body.name,
-        };
-      } catch (error) {
-        console.warn('⚠️ Could not fetch playlist info for', playlistId, ':', error.message);
-      }
     }
+    // Never call raw spotifyApi.getPlaylist here — bypasses quarantine / live-show locks.
 
     const forceRefresh =
       req.query.refresh === '1' ||
@@ -14914,8 +15098,20 @@ app.post('/api/spotify/replace-song', async (req, res) => {
     if (!room) {
       return res.status(404).json({ error: 'Room not found' });
     }
+
+    const svcReplace = spotifyForRequest(req);
+    if (
+      roomIsLiveRound(room) ||
+      (svcReplace && typeof svcReplace.isNonEssentialTrafficBlocked === 'function' && svcReplace.isNonEssentialTrafficBlocked())
+    ) {
+      return respondSpotifyNonEssentialBlocked(
+        res,
+        svcReplace,
+        'Cannot replace playlist tracks via Spotify API during a live round or API quarantine.',
+      );
+    }
     
-    await spotifyForRequest(req).ensureValidToken();
+    await svcReplace.ensureValidToken();
     
     // Find the old song in various possible data structures
     let oldSong = null;
