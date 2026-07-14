@@ -8628,7 +8628,34 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
   routineServerLog(`✅ Generated ${cards.size} bingo cards for room ${roomId}`);
   routineServerLog(`📋 Players with cards: ${Array.from(cards.keys()).map(id => room.players.get(id)?.name || id).join(', ')}`);
   routineServerLog(`⚠️ Players without cards: ${Array.from(room.players.keys()).filter(id => !cards.has(id)).map(id => room.players.get(id)?.name || id).join(', ') || 'None'}`);
-    return cards.size > 0;
+
+  // Host / Display never receive cards. Prep + Save Round must still finalize the 75-pool
+  // when there are zero eligible player seats (cards deal on join / Start Game).
+  if (cards.size > 0) return true;
+  let eligibleSeats = 0;
+  for (const p of room.players.values()) {
+    if (p && !p.isHost && !isDisplayConnectionPlayer(p)) eligibleSeats++;
+  }
+  if (eligibleSeats === 0) {
+    const poolOk =
+      (mode === '1x75' &&
+        Array.isArray(room.oneBySeventyFivePool) &&
+        room.oneBySeventyFivePool.length >= songsNeededPerCard) ||
+      (mode === '5x15' &&
+        Array.isArray(room.fiveByFifteenColumnsIds) &&
+        room.fiveByFifteenColumnsIds.length === 5) ||
+      (mode === 'fallback' &&
+        ((Array.isArray(room.playlistSongs) && room.playlistSongs.length >= songsNeededPerCard) ||
+          (Array.isArray(songOrder) && songOrder.length >= songsNeededPerCard) ||
+          (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length >= songsNeededPerCard)));
+    if (poolOk) {
+      routineServerLog(
+        `✅ Pool finalized with 0 eligible player seats (host/Display only) — mix OK; cards deal when players join`,
+      );
+      return true;
+    }
+  }
+  return false;
   } catch (error) {
     console.error('❌ Error generating bingo cards:', error);
     return false;
