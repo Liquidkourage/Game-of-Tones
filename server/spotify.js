@@ -265,6 +265,36 @@ function mapPlaylistItemRowToHostSong(row, playlistId, playlistInfo) {
   return parsed.song || null;
 }
 
+/**
+ * Callers that may paginate / list / mutate library playlists — never allowed while a show for
+ * this org is live or while 429 quarantine is active. Playback transport uses other labels.
+ */
+const NON_ESSENTIAL_WEB_API_CALLERS = new Set([
+  'getUserPlaylists',
+  'getPlaylistSnapshot',
+  'getPlaylistTracks',
+  'getPlaylistMetadataBrief',
+  'searchTracks',
+  'searchPlaylists',
+  'createTemporaryPlaylist',
+  'createOutputPlaylist',
+  'addTracksToPlaylist',
+  'deleteTemporaryPlaylist',
+  'deleteAllGameOfTonesOutputPlaylists',
+  'getGameOfTonesPlaylists',
+  'deleteMultiplePlaylists',
+  'getCurrentUserProfileBrief',
+  'getCurrentUserProfile',
+  'getCurrentTrack',
+  'unfollowPlaylist',
+  'deletePlaylist',
+  'removeTracksFromPlaylist',
+  'changePlaylistDetails',
+  'replaceTrackInPlaylist',
+  'addToQueue',
+  'clearQueue',
+]);
+
 class SpotifyService {
   /**
    * @param {undefined | null | { clientId: string; clientSecret: string }} options - If object with id+secret, use tenant's Spotify Developer app; else env SPOTIFY_*.
@@ -320,6 +350,52 @@ class SpotifyService {
     /** Cached GET /v1/me/player/devices — short TTL to collapse parallel host polls. */
     this._userDevicesCache = null;
     this._lastDevicesFromCache = false;
+    /**
+     * Optional () => boolean from MultiTenantSpotifyManager — true when any room for this org
+     * is mid-show. Blocks NON_ESSENTIAL_WEB_API_CALLERS before they can burn quota / 429.
+     */
+    this._nonEssentialBlockedChecker = null;
+  }
+
+  /** Wire from server after construct: () => orgHasAnyLiveRoom(orgKey). */
+  setNonEssentialBlockedChecker(fn) {
+    this._nonEssentialBlockedChecker = typeof fn === 'function' ? fn : null;
+  }
+
+  /** Quarantine or live-show lock — non-essential library/playlist traffic must not hit the wire. */
+  isNonEssentialTrafficBlocked() {
+    if (this.isQuarantined()) return true;
+    try {
+      return typeof this._nonEssentialBlockedChecker === 'function' && !!this._nonEssentialBlockedChecker();
+    } catch {
+      return false;
+    }
+  }
+
+  isNonEssentialCaller(caller) {
+    return NON_ESSENTIAL_WEB_API_CALLERS.has(String(caller || ''));
+  }
+
+  _makeNonEssentialBlockedError(caller) {
+    const live =
+      typeof this._nonEssentialBlockedChecker === 'function' && !!this._nonEssentialBlockedChecker();
+    const reason = this.isQuarantined()
+      ? 'spotify_quarantine'
+      : live
+        ? 'live_show_api_locked'
+        : 'non_essential_blocked';
+    const err = new Error(
+      reason === 'live_show_api_locked'
+        ? `Spotify non-essential API blocked during live show (${caller})`
+        : `Spotify non-essential API blocked (${caller}): ${reason}`,
+    );
+    err.statusCode = reason === 'spotify_quarantine' ? 429 : 503;
+    err.code = reason;
+    err.headers =
+      reason === 'spotify_quarantine'
+        ? { 'retry-after': String(Math.max(1, this.getQuarantineRemainingSec())) }
+        : {};
+    return err;
   }
 
   invalidateUserDevicesCache() {
@@ -509,10 +585,19 @@ class SpotifyService {
   }
 
   /**
-   * Block all api.spotify.com traffic while a 429 / Retry-After quarantine is active
+   * Block api.spotify.com traffic while 429 quarantine is active
    * (token refresh to accounts.spotify.com still uses ensureValidToken elsewhere).
+   * Non-essential callers (playlist library / pagination / GOT cleanup) are also blocked
+   * while any room for this org is mid-show — those paths burned the shared quota mid-live.
+   * @param {string} caller
+   * @param {{ nonEssential?: boolean }} [opts]
    */
-  async _ensureCanCallWebApi(caller) {
+  async _ensureCanCallWebApi(caller, opts = {}) {
+    const nonEssential =
+      opts.nonEssential === true || this.isNonEssentialCaller(caller);
+    if (nonEssential && this.isNonEssentialTrafficBlocked()) {
+      throw this._makeNonEssentialBlockedError(caller);
+    }
     if (this.isQuarantined()) throw this._makeQuarantineError(caller);
     await this.ensureValidToken();
   }
@@ -1009,6 +1094,10 @@ class SpotifyService {
    *   429 quarantine (still honors Spotify’s own 429 on the wire).
    */
   async getPlaylistMetadataBrief(playlistId, options = {}) {
+    // Live-show lock always wins — never punch through mid-round for add-by-link.
+    if (this.isNonEssentialTrafficBlocked()) {
+      throw this._makeNonEssentialBlockedError('getPlaylistMetadataBrief');
+    }
     const emergency = Boolean(options && options.emergencyBypassQuarantine);
     if (emergency) {
       await this.ensureValidToken();
@@ -2177,5 +2266,6 @@ Object.assign(SpotifyService, {
   SPOTIFY_SEARCH_LIMIT_MAX,
   clampSearchLimit,
   normalizeSearchOffset,
+  NON_ESSENTIAL_WEB_API_CALLERS,
 });
 module.exports = SpotifyService; 

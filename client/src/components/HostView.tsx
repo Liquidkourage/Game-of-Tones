@@ -1975,6 +1975,13 @@ const HostView: React.FC = () => {
   const loadCatalogPacks = useCallback(
     async (opts?: { forceRefresh?: boolean }) => {
       const forceRefresh = opts?.forceRefresh === true;
+      if (forceRefresh && gameStateRef.current === 'playing') {
+        addLog(
+          'Catalog pack refresh is locked during a live round (protects Spotify rate limits).',
+          'warn',
+        );
+        return;
+      }
       if (forceRefresh) {
         if (catalogPacksRefreshInFlightRef.current) return;
         catalogPacksRefreshInFlightRef.current = true;
@@ -2191,6 +2198,14 @@ const HostView: React.FC = () => {
   const loadPlaylists = useCallback(async (opts?: { forceRefresh?: boolean }) => {
     const forceRefresh = opts?.forceRefresh === true;
     if (!readHostSpotifyWebEnabled()) return;
+    if (forceRefresh && gameStateRef.current === 'playing') {
+      addLog(
+        'Spotify library refresh is locked during a live round (protects rate limits). Between rounds is fine.',
+        'warn',
+      );
+      if (forceRefresh) setSpotifyPlaylistsRefreshing(false);
+      return;
+    }
     if (forceRefresh) setSpotifyPlaylistsRefreshing(true);
     try {
       const assignedForQuery = eventRoundsRef.current
@@ -7439,13 +7454,15 @@ const HostView: React.FC = () => {
   //   return () => clearInterval(volumeSyncInterval);
   // }, [isPlaying, currentSong, fetchCurrentVolume]);
 
-  // Periodic playback state synchronization
+  // Periodic playback state synchronization (lobby / between rounds only — never mid-show)
   useEffect(() => {
     if (!currentSong) return;
+    if (gameState === 'playing') return;
     const playbackSyncInterval = setInterval(async () => {
       try {
         if (!isSpotifyConnectedRef.current) return;
         if (!readHostSpotifyWebEnabled()) return;
+        if (gameStateRef.current === 'playing') return;
         if (Date.now() < spotifyPollBackoffUntilRef.current) return;
         const resp = await hostFetch(`${API_BASE || ''}/api/spotify/current-playback`);
         if (resp.status === 429) {
@@ -7493,7 +7510,7 @@ const HostView: React.FC = () => {
       }
     }, 120_000); // 120s: minimize /me/player via /api/spotify/current-playback (was 60s)
     return () => clearInterval(playbackSyncInterval);
-  }, [currentSong, isPlaying, isPausedByInterface]);
+  }, [currentSong, gameState, isPlaying, isPausedByInterface]);
 
   // Build master setlist when selection changes. Debounced: ticking several playlists in a row = one import wave.
   // Depends on playlistSelectionKey + Spotify connectivity gates + mixNeedsHostSpotify — NOT generateSongList — so callback identity churn does not reschedule this effect (was causing 3× identical playlist-tracks bursts).

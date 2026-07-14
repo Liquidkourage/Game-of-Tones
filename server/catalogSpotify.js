@@ -48,6 +48,21 @@ const crypto = require('crypto');
 const SpotifyService = require('./spotify');
 const organizationsStore = require('./organizations');
 
+let anyLiveShowChecker = () => false;
+
+/** Wired from server/index.js so catalog refresh never runs during a live round. */
+function setAnyLiveShowChecker(fn) {
+  anyLiveShowChecker = typeof fn === 'function' ? fn : () => false;
+}
+
+function isAnyLiveShowActive() {
+  try {
+    return !!anyLiveShowChecker();
+  } catch {
+    return false;
+  }
+}
+
 /** Railway/env sometimes wraps tokens in quotes — normalize for refresh_token grant. */
 function normalizeCatalogRefreshTokenFromEnv() {
   let s = String(process.env.TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN || '').trim();
@@ -224,6 +239,12 @@ async function resolveCatalogAllowlistEntries() {
   let playlists;
 
   try {
+    if (isAnyLiveShowActive()) {
+      const err = new Error('Catalog Spotify refresh locked during live show');
+      err.statusCode = 503;
+      err.code = 'live_show_api_locked';
+      throw err;
+    }
     if (ownerOnly) {
       const prof = await svc.getCurrentUserProfileBrief();
       catalogSpotifyUserId = prof.spotifyUserId;
@@ -513,6 +534,12 @@ async function loadCatalogPackSummariesForApi() {
 async function fetchCatalogPlaylistTracks(playlistId, playlistInfo = null) {
   await assertCatalogPlaylistAllowlisted(playlistId);
   const svc = await ensureCatalogAccessToken();
+  if (isAnyLiveShowActive() || (typeof svc.isNonEssentialTrafficBlocked === 'function' && svc.isNonEssentialTrafficBlocked())) {
+    const err = new Error('Catalog playlist tracks locked during live show');
+    err.statusCode = 503;
+    err.code = 'live_show_api_locked';
+    throw err;
+  }
   return svc.getPlaylistTracks(String(playlistId).trim(), playlistInfo);
 }
 
@@ -528,4 +555,5 @@ module.exports = {
   assertCatalogPlaylistAllowlisted,
   ensureCatalogAccessToken,
   primeCatalogSpotifyCredentialsFromOrg,
+  setAnyLiveShowChecker,
 };

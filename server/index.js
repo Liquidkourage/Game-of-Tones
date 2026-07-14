@@ -1401,11 +1401,15 @@ class MultiTenantSpotifyManager {
         });
       }
       const service = new SpotifyService(credentialOverride);
+      service.setNonEssentialBlockedChecker(() => orgHasAnyLiveRoom(organizationId));
       this.orgServices.set(organizationId, service);
       // Tokens are applied via setTokens() after OAuth, or ensureOrgTokensLoaded() from DB.
       // Do NOT call async loadOrgTokens here without await (would store a Promise in orgTokens).
     }
     const service = this.orgServices.get(organizationId);
+    if (service && typeof service.setNonEssentialBlockedChecker === 'function') {
+      service.setNonEssentialBlockedChecker(() => orgHasAnyLiveRoom(organizationId));
+    }
     // After invalidateUserService, the new SpotifyService has no tokens even though orgTokens may still hold them.
     const tok = this.orgTokens.get(organizationId);
     if (tok && tok.accessToken && (!service.accessToken || !service.refreshToken)) {
@@ -1919,13 +1923,13 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
     }
   }
 
-  if (svc.isQuarantined()) {
+  if (svc.isQuarantined() || (typeof svc.isNonEssentialTrafficBlocked === 'function' && svc.isNonEssentialTrafficBlocked())) {
     if (dbRow && Array.isArray(dbRow.tracks) && dbRow.tracks.length > 0) {
       if (spotifyPipelineLog.isEnabled()) {
         spotifyPipelineLog.log('playlist_tracks_serving_from_db_cache', {
           org_key: orgId,
           playlist_id: String(playlistId),
-          reason: 'in_process_quarantine',
+          reason: svc.isQuarantined() ? 'in_process_quarantine' : 'live_show_api_locked',
         });
       }
       return {
@@ -1935,9 +1939,15 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
         cacheUpdatedAt: dbRow.updatedAt,
       };
     }
-    const err = new Error('Spotify API quarantined (getPlaylistTracks)');
-    err.statusCode = 429;
-    err.headers = { 'retry-after': String(Math.max(1, svc.getQuarantineRemainingSec())) };
+    if (svc.isQuarantined()) {
+      const err = new Error('Spotify API quarantined (getPlaylistTracks)');
+      err.statusCode = 429;
+      err.headers = { 'retry-after': String(Math.max(1, svc.getQuarantineRemainingSec())) };
+      throw err;
+    }
+    const err = new Error('Spotify playlist tracks locked during live show');
+    err.statusCode = 503;
+    err.code = 'live_show_api_locked';
     throw err;
   }
 
@@ -2214,6 +2224,56 @@ function spotifyOrgForRoom(room) {
   if (!room) return 'DEFAULT';
   if (room.ownerUserId != null && Number.isFinite(Number(room.ownerUserId))) return `user_${room.ownerUserId}`;
   return room.organizationId || 'DEFAULT';
+}
+
+/** Playing / bingo-verify — same live lock as late-join pool-only deal. */
+function roomIsLiveRound(room) {
+  return room?.gameState === 'playing' || room?.gameState === 'paused_for_verification';
+}
+
+/** Any in-progress bingo round for this Spotify org key (shared Web API quota / quarantine). */
+function orgHasAnyLiveRoom(orgKey) {
+  const key = orgKey || 'DEFAULT';
+  for (const room of rooms.values()) {
+    if (spotifyOrgForRoom(room) !== key) continue;
+    if (roomIsLiveRound(room)) return true;
+  }
+  return false;
+}
+
+catalogSpotify.setAnyLiveShowChecker(() => {
+  for (const room of rooms.values()) {
+    if (roomIsLiveRound(room)) return true;
+  }
+  return false;
+});
+
+/** True when this SpotifyService must refuse library/playlist traffic (live show or quarantine). */
+function spotifyNonEssentialBlockedForOrg(orgKey, svc) {
+  if (svc && typeof svc.isNonEssentialTrafficBlocked === 'function' && svc.isNonEssentialTrafficBlocked()) {
+    return true;
+  }
+  if (svc && typeof svc.isQuarantined === 'function' && svc.isQuarantined()) return true;
+  return orgHasAnyLiveRoom(orgKey);
+}
+
+function respondSpotifyNonEssentialBlocked(res, svc, message) {
+  const quarantined = svc && typeof svc.isQuarantined === 'function' && svc.isQuarantined();
+  const retryAfterSec =
+    quarantined && typeof svc.getQuarantineRemainingSec === 'function'
+      ? svc.getQuarantineRemainingSec()
+      : undefined;
+  const status = quarantined ? 429 : 503;
+  return res.status(status).json({
+    error: quarantined ? 'spotify_quarantine' : 'live_show_api_locked',
+    code: quarantined ? 'spotify_quarantine' : 'live_show_api_locked',
+    message:
+      message ||
+      (quarantined
+        ? 'Spotify API quarantine active (recent 429).'
+        : 'Playlist/library Spotify API is locked while a live round is in progress for this host. Playback controls still work; refresh playlists between rounds.'),
+    ...(retryAfterSec != null ? { retryAfterSec } : {}),
+  });
 }
 
 function spotifyFor(roomId) {
@@ -8960,10 +9020,6 @@ function normalizeSongSnapshotForPrint(raw) {
   return out.length ? out : null;
 }
 
-function roomIsLiveRound(room) {
-  return room?.gameState === 'playing' || room?.gameState === 'paused_for_verification';
-}
-
 /** Live show + shared org quarantine: never burn Web API on late-join card deal. */
 function lateJoinMustUseRoomPoolOnly(roomId, room) {
   if (roomIsLiveRound(room)) return true;
@@ -9571,7 +9627,11 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           void (async () => {
             try {
               const sp = spotifyFor(roomId);
-              if (!sp || sp.isQuarantined()) return;
+              // Never burn library/playlist quota mid-show — URI playback is enough.
+              if (!sp || sp.isNonEssentialTrafficBlocked()) {
+                routineServerLog('📋 Deferred temp playlist skipped (live-show lock or Spotify quarantine)');
+                return;
+              }
               const id = await sp.createTemporaryPlaylist(playlistName, trackUris);
               const r = rooms.get(roomId);
               if (r && r.gameState === 'playing') {
@@ -9588,14 +9648,22 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         }, deferTempPlaylistMs);
         room._gotPlaylistCleanupTimer = setTimeout(() => {
           room._gotPlaylistCleanupTimer = null;
-          void spotifyFor(roomId)
-            .deleteAllGameOfTonesOutputPlaylists()
-            .catch((clearErr) => {
+          void (async () => {
+            try {
+              const r = rooms.get(roomId);
+              const sp = spotifyFor(roomId);
+              if (!sp || sp.isNonEssentialTrafficBlocked() || (r && roomIsLiveRound(r))) {
+                routineServerLog('🧹 Deferred GOT playlist cleanup skipped (live-show lock or quarantine)');
+                return;
+              }
+              await sp.deleteAllGameOfTonesOutputPlaylists();
+            } catch (clearErr) {
               console.warn(
                 '⚠️ Deferred GOT output playlist cleanup failed (non-fatal):',
                 clearErr?.message || clearErr
               );
-            });
+            }
+          })();
         }, deferGotCleanupMs);
         routineServerLog(
           `📋 First track via URIs; temp playlist in ${Math.round(deferTempPlaylistMs / 1000)}s (${snippetSec}s snippets, song 2 ~${snippetSec}s) — first 5: ${trackUris.slice(0, 5).join(', ')}`,
@@ -13597,6 +13665,16 @@ function sendSpotifyUpstreamUnavailableIfNeeded(res, error) {
 /** Map Web API / HTTP layer errors to JSON for clients; returns true if response was sent. */
 function sendSpotifyWebApiErrorIfNeeded(res, error) {
   if (sendSpotify429IfNeeded(res, error)) return true;
+  if (error?.code === 'live_show_api_locked' || /live show/i.test(String(error?.message || ''))) {
+    res.status(503).json({
+      error: 'live_show_api_locked',
+      code: 'live_show_api_locked',
+      message:
+        error?.message ||
+        'Playlist/library Spotify API is locked while a live round is in progress for this host.',
+    });
+    return true;
+  }
   // Transient upstream outage (502/503/504) → friendly 503, distinct from 429 quarantine.
   if (sendSpotifyUpstreamUnavailableIfNeeded(res, error)) return true;
   const sc = Number(
@@ -13700,10 +13778,13 @@ app.get('/api/spotify/playlists', async (req, res) => {
       Array.isArray(playlistListCacheRow.playlists) &&
       playlistListCacheRow.playlists.length > 0;
 
-    if (svc.isQuarantined()) {
+    if (svc.isQuarantined() || (typeof svc.isNonEssentialTrafficBlocked === 'function' && svc.isNonEssentialTrafficBlocked())) {
       if (playlistListCacheUsable) {
         if (spotifyPipelineLog.isEnabled()) {
-          spotifyPipelineLog.log('playlists_serving_from_list_cache', { org_key: orgId, reason: 'in_process_quarantine' });
+          spotifyPipelineLog.log('playlists_serving_from_list_cache', {
+            org_key: orgId,
+            reason: svc.isQuarantined() ? 'in_process_quarantine' : 'live_show_api_locked',
+          });
         }
         return res.json({
           success: true,
@@ -13713,25 +13794,21 @@ app.get('/api/spotify/playlists', async (req, res) => {
             playlistListCacheRow.spotifyListTotal != null ? playlistListCacheRow.spotifyListTotal : undefined,
           fromSpotifyListCache: true,
           stale: true,
+          liveShowLocked: !svc.isQuarantined(),
           cacheUpdatedAt: playlistListCacheRow.updatedAt,
-          cacheMessage:
-            'TEMPO is pausing Spotify calls after a recent rate limit. Showing the last library list we saved. Use Add by link below or tap Refresh Spotify library after cooldown.',
+          cacheMessage: svc.isQuarantined()
+            ? 'Spotify quarantine active — serving last saved playlist list.'
+            : 'Live round in progress — playlist library refresh is locked. Showing last saved list.',
           webApiQuarantine: svc.getWebApiQuarantineInfo(),
         });
       }
-      if (spotifyPipelineLog.isEnabled()) {
-        spotifyPipelineLog.log('playlists_route_skip_quarantined', {
-          org_key: orgId,
-          host_user_id: String(uid),
-          remaining_s: String(svc.getQuarantineRemainingSec()),
-        });
-      }
-      return res.status(429).json({
-        error: 'spotify_rate_limited',
-        message: 'Spotify API quarantine active (recent 429). Try again after Retry-After.',
-        retryAfterSec: svc.getQuarantineRemainingSec(),
-        webApiQuarantine: svc.getWebApiQuarantineInfo(),
-      });
+      return respondSpotifyNonEssentialBlocked(
+        res,
+        svc,
+        svc.isQuarantined()
+          ? 'Spotify API quarantine active (recent 429).'
+          : 'Cannot refresh Spotify playlists while a live round is in progress.',
+      );
     }
 
     if (!forceLivePlaylistList && playlistListCacheUsable) {
@@ -13825,6 +13902,13 @@ app.post('/api/spotify/playlist-lookup', async (req, res) => {
     if (!svc) {
       return res.status(401).json({ error: 'login_required' });
     }
+    if (typeof svc.isNonEssentialTrafficBlocked === 'function' && svc.isNonEssentialTrafficBlocked()) {
+      return respondSpotifyNonEssentialBlocked(
+        res,
+        svc,
+        'Cannot look up Spotify playlists while a live round is in progress (or during Spotify quarantine).',
+      );
+    }
     const raw = req.body && (req.body.urlOrId != null ? String(req.body.urlOrId) : String(req.body.input || ''));
     const pid = parseSpotifyPlaylistIdFromUserInput(raw);
     if (!pid) {
@@ -13889,12 +13973,19 @@ app.get('/api/spotify/devices', async (req, res) => {
         webApiQuarantine: spotifyReq.getWebApiQuarantineInfo(),
       });
     }
+    if (forceRefresh && orgHasAnyLiveRoom(orgId)) {
+      return respondSpotifyNonEssentialBlocked(
+        res,
+        spotifyReq,
+        'Device refresh is locked while a live round is in progress. Use the locked speaker already selected.',
+      );
+    }
     routineServerLog(
       `📱 Fetching available Spotify devices (org ${orgId}${forceRefresh ? ', refresh=1' : ''})...`,
     );
     const devices = await spotifyReq.getUserDevices({ forceRefresh });
     let currentPlayback = null;
-    if (!spotifyReq.wasLastUserDevicesFromCache()) {
+    if (!spotifyReq.wasLastUserDevicesFromCache() && !orgHasAnyLiveRoom(orgId)) {
       try {
         currentPlayback = await spotifyReq.getCurrentPlaybackState();
       } catch (_) {}
@@ -14302,12 +14393,23 @@ app.get('/api/spotify/current-playback', async (req, res) => {
     if (!hostSpotifyHasTokens(req)) {
       return res.status(401).json({ success: false, error: 'Spotify not connected' });
     }
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    const orgId = uid != null ? `user_${uid}` : null;
     const s = spotifyForRequest(req);
     if (s && s.isQuarantined() && s.getQuarantineRemainingSec() > 0) {
       return res.status(429).json({
         success: false,
         error: 'spotify_rate_limited',
         retryAfterSec: s.getQuarantineRemainingSec(),
+      });
+    }
+    // Host HTTP poll must not burn /me/player while a live round uses the same org quota.
+    if (orgId && orgHasAnyLiveRoom(orgId)) {
+      return res.json({
+        success: true,
+        playbackState: null,
+        liveShowLocked: true,
+        message: 'Playback sync poll skipped during live round — Tempo controls the speaker.',
       });
     }
     await s.ensureValidToken();
@@ -14340,7 +14442,10 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
     let playlistInfo = null;
     if (nameFromClient) {
       playlistInfo = { id: playlistId, name: nameFromClient };
-    } else if (!svc.isQuarantined()) {
+    } else if (
+      !svc.isQuarantined() &&
+      !(typeof svc.isNonEssentialTrafficBlocked === 'function' && svc.isNonEssentialTrafficBlocked())
+    ) {
       try {
         const playlistResponse = await svc.spotifyApi.getPlaylist(playlistId);
         playlistInfo = {
@@ -15527,7 +15632,7 @@ function startDeviceKeepAlive() {
         await spotifyServiceDefault.ensureValidToken();
         
         // Only activate device if no active games are playing (to avoid interrupting songs)
-        const hasActiveGames = Array.from(rooms.values()).some(room => room.gameState === 'playing');
+        const hasActiveGames = Array.from(rooms.values()).some((room) => roomIsLiveRound(room));
         if (!hasActiveGames) {
         await activatePreferredDevice();
         } else {
@@ -15607,6 +15712,10 @@ const PORT = process.env.PORT || 7093;
         );
         const runCatalogPackCacheWarm = async () => {
           try {
+            if (Array.from(rooms.values()).some((room) => roomIsLiveRound(room))) {
+              routineServerLog('[catalog] Background pack warm skipped — live round in progress');
+              return;
+            }
             const catalogResult = await catalogSpotify.loadCatalogPackSummariesForApi();
             await persistCatalogPackSummariesToPostgresIfAllowed(catalogResult);
           } catch (e) {
