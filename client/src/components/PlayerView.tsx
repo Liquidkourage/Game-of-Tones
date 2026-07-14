@@ -51,6 +51,8 @@ interface BingoSquare {
   youtubeMusic?: boolean;
   /** Server: center square pre-marked for classic bingo */
   isFreeSpace?: boolean;
+  /** Leftovers rounds: original playlist before remapping into the virtual leftovers pool. */
+  originPlaylistName?: string;
 }
 
 interface BingoCard {
@@ -2146,6 +2148,14 @@ const PlayerView: React.FC = () => {
                 const artistText = free
                   ? (venueBranding?.eventTitle?.trim() || 'Free space')
                   : softHyphenateLongWords(vis.artist || '\u00a0');
+                const originRaw =
+                  typeof square.originPlaylistName === 'string'
+                    ? square.originPlaylistName.trim()
+                    : '';
+                const originText =
+                  !free && originRaw && !compactCardCells
+                    ? softHyphenateLongWords(stripGotPlaylistPrefix(originRaw))
+                    : '';
                 return (
                   <div className="square-content">
                     <div className="player-square-title">
@@ -2154,6 +2164,9 @@ const PlayerView: React.FC = () => {
                     <div className="player-square-artist">
                       {artistText}
                     </div>
+                    {originText ? (
+                      <div className="player-square-playlist">{originText}</div>
+                    ) : null}
                   </div>
                 );
               })()}

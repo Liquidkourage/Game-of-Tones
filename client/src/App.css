@@ -519,6 +519,38 @@ body {
   align-content: stretch;
 }
 
+/**
+ * Full-card / blackout: match 5×15 — stack auto-height call cards and scroll the column
+ * instead of locking five 1fr rows (which clips the larger uncapped titles).
+ */
+.App .call-carousel-col-static.call-carousel-col--full-card,
+.App .call-carousel-col.call-carousel-col--full-card {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.App .call-carousel-col-inner--full-card {
+  display: flex;
+  flex-direction: column;
+  grid-template-rows: none;
+  gap: 0;
+  align-content: flex-start;
+  overflow: visible;
+}
+
+.App .call-carousel-col-inner--full-card > .call-item,
+.App .call-carousel-col-inner--full-card > .call-item-slot {
+  flex: 0 0 auto;
+  overflow: visible;
+  height: auto;
+  max-height: none;
+}
+
+.App .call-carousel-col-inner--full-card .call-song-info {
+  overflow: visible;
+}
+
 .App .call-carousel-col-inner > .call-item,
 .App .call-carousel-col-inner > .call-item-slot {
   width: 100%;
@@ -5893,7 +5925,8 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-container--v2 .bingo-card .bingo-square.marked .player-square-title,
-.player-container--v2 .bingo-card .bingo-square.marked .player-square-artist {
+.player-container--v2 .bingo-card .bingo-square.marked .player-square-artist,
+.player-container--v2 .bingo-card .bingo-square.marked .player-square-playlist {
   color: var(--player-v2-marked-text);
   text-shadow: var(--player-v2-marked-text-shadow);
 }
@@ -5976,6 +6009,21 @@ button.conn-chip.conn-chip-compact {
   line-height: 1.14;
   font-weight: 600;
   color: var(--player-v2-text-secondary);
+  max-width: 100%;
+  white-space: normal;
+  text-wrap: pretty;
+  word-break: normal;
+  overflow-wrap: break-word;
+  -webkit-hyphens: none;
+  hyphens: none;
+}
+
+.player-container--v2 .player-square-playlist {
+  width: 100%;
+  font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 1) * clamp(9px, 3.6cqi, 12px));
+  line-height: 1.12;
+  font-weight: 600;
+  color: var(--player-v2-text-muted);
   max-width: 100%;
   white-space: normal;
   text-wrap: pretty;
@@ -6656,6 +6704,10 @@ button.conn-chip.conn-chip-compact {
     font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 1) * clamp(11px, 4.4cqi, 14px));
   }
 
+  .player-container--v2 .player-square-playlist {
+    font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 1) * clamp(8px, 3.2cqi, 11px));
+  }
+
   .player-container--v2 .player-v2-action-bar {
     padding: 8px;
     gap: 5px;
@@ -6674,6 +6726,10 @@ button.conn-chip.conn-chip-compact {
 
 .player-container--v2.player-container--light .player-square-artist {
   color: var(--player-v2-text-secondary) !important;
+}
+
+.player-container--v2.player-container--light .player-square-playlist {
+  color: var(--player-v2-text-muted) !important;
 }
 
 .player-container--v2.player-container--light .bingo-column-headers__letter {

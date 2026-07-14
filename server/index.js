@@ -6801,6 +6801,9 @@ io.on('connection', (socket) => {
           sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
           sourcePlaylistName:
             typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
+          ...(typeof s.originPlaylistName === 'string' && s.originPlaylistName.trim() !== ''
+            ? { originPlaylistName: s.originPlaylistName.trim() }
+            : {}),
         }));
 
         io.to(roomId).emit('game-started', {
@@ -7844,6 +7847,13 @@ function makeFreeSpaceSquare() {
   };
 }
 
+/** Leftovers rounds: original playlist name for a third bingo-square line. */
+function bingoSquareOriginPlaylistFields(s) {
+  const origin =
+    typeof s?.originPlaylistName === 'string' ? s.originPlaylistName.trim() : '';
+  return origin ? { originPlaylistName: origin } : {};
+}
+
 function resetBingoCardMarks(card) {
   if (!card?.squares) return;
   for (const square of card.squares) {
@@ -8653,6 +8663,9 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
                 typeof s.sourcePlaylistName === 'string' && s.sourcePlaylistName.trim() !== ''
                   ? s.sourcePlaylistName
                   : solePlaylistName || undefined,
+              ...(typeof s.originPlaylistName === 'string' && s.originPlaylistName.trim() !== ''
+                ? { originPlaylistName: s.originPlaylistName.trim() }
+                : {}),
             }));
             io.to(roomId).emit('finalized-order', { order: orderWithMeta });
           }
@@ -8772,6 +8785,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           ...songAliasDisplayFields(s.id, s.name, s.artist, room.dbOrganizationId ?? null),
           artistName: s.artist,
           youtubeMusic: s.youtubeMusic === true,
+          ...bingoSquareOriginPlaylistFields(s),
           ...(s.youtubeMusic === true &&
           typeof s.youtubeRawTitle === 'string' &&
           s.youtubeRawTitle.trim() !== ''
@@ -8977,6 +8991,9 @@ function normalizeRoundExportSongs(songs) {
       sourcePlaylistId:
         s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
       sourcePlaylistName: s.sourcePlaylistName,
+      ...(typeof s.originPlaylistName === 'string' && s.originPlaylistName.trim() !== ''
+        ? { originPlaylistName: s.originPlaylistName.trim() }
+        : {}),
     });
   }
   return out;
@@ -9083,6 +9100,7 @@ function buildPrintableCardFromChosen(chosen25, useFreeSpace, index, orgId) {
         ...songAliasDisplayFields(s.id, s.name, s.artist, orgId ?? null),
         artistName: s.artist || '',
         youtubeMusic: s.youtubeMusic === true,
+        ...bingoSquareOriginPlaylistFields(s),
         ...(s.youtubeMusic === true &&
         typeof s.youtubeRawTitle === 'string' &&
         s.youtubeRawTitle.trim() !== ''
@@ -9223,6 +9241,10 @@ function normalizeSongSnapshotForPrint(raw) {
       youtubeMusic: item.youtubeMusic === true,
       sourcePlaylistId: item.sourcePlaylistId != null ? String(item.sourcePlaylistId) : undefined,
       sourcePlaylistName: typeof item.sourcePlaylistName === 'string' ? item.sourcePlaylistName : undefined,
+      originPlaylistName:
+        typeof item.originPlaylistName === 'string' && item.originPlaylistName.trim() !== ''
+          ? item.originPlaylistName.trim()
+          : undefined,
       duration: typeof item.duration === 'number' ? item.duration : undefined,
       youtubeRawTitle: typeof item.youtubeRawTitle === 'string' ? item.youtubeRawTitle : undefined,
       catalogDisplayVerified: item.catalogDisplayVerified === true,
@@ -9504,6 +9526,7 @@ async function generateBingoCardForPlayer(roomId, playerId) {
           ...songAliasDisplayFields(s.id, s.name, s.artist, room.dbOrganizationId ?? null),
           artistName: s.artist,
           youtubeMusic: s.youtubeMusic === true,
+          ...bingoSquareOriginPlaylistFields(s),
           ...(s.youtubeMusic === true &&
           typeof s.youtubeRawTitle === 'string' &&
           s.youtubeRawTitle.trim() !== ''

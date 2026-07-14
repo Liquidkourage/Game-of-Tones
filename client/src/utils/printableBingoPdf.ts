@@ -11,6 +11,8 @@ export type PrintableSquare = {
   songName?: string;
   artistName?: string;
   isFreeSpace?: boolean;
+  /** Leftovers: original playlist name (third line). */
+  originPlaylistName?: string;
 };
 
 export type PrintableCard = {
@@ -32,12 +34,17 @@ function gridFromSquares(squares: PrintableSquare[]): (PrintableSquare | null)[]
   return grid;
 }
 
-function cellLabel(sq: PrintableSquare | null | undefined): { title: string; subtitle: string } {
-  if (!sq) return { title: '', subtitle: '' };
-  if (sq.isFreeSpace) return { title: 'FREE', subtitle: '' };
+function cellLabel(sq: PrintableSquare | null | undefined): {
+  title: string;
+  subtitle: string;
+  tertiary: string;
+} {
+  if (!sq) return { title: '', subtitle: '', tertiary: '' };
+  if (sq.isFreeSpace) return { title: 'FREE', subtitle: '', tertiary: '' };
   const title = (sq.customSongName || sq.songName || '').trim() || '—';
   const subtitle = (sq.customArtistName || sq.artistName || '').trim();
-  return { title, subtitle };
+  const tertiary = (sq.originPlaylistName || '').trim();
+  return { title, subtitle, tertiary };
 }
 
 /** Light print layout: minimize fills and saturated color to reduce ink. */
@@ -48,6 +55,7 @@ const BORDER = { r: 100, g: 100, b: 105 };
 
 const TITLE_LINE_FACTOR = 1.14;
 const ARTIST_LINE_FACTOR = 1.12;
+const PLAYLIST_LINE_FACTOR = 1.1;
 
 /** Watermark strength for venue logo on the bingo grid (baked in canvas for reliable PDF output). */
 const GRID_LOGO_OPACITY = 0.1;
@@ -79,13 +87,15 @@ export type PrintablePdfSection = {
 type FitResult = {
   titlePt: number;
   artistPt: number;
+  playlistPt: number;
   titleLines: string[];
   artistLines: string[];
+  playlistLines: string[];
   totalH: number;
 };
 
 /**
- * Largest font sizes that fit — title bold, artist normal, centered block.
+ * Largest font sizes that fit — title bold, artist normal, optional playlist tertiary.
  */
 function fitSongTextToCell(
   doc: jsPDF,
@@ -93,15 +103,19 @@ function fitSongTextToCell(
   subtitle: string,
   textW: number,
   maxH: number,
+  tertiary = '',
 ): FitResult {
   const gap = subtitle ? 5 : 0;
+  const playlistGap = tertiary ? 3 : 0;
   const maxTitlePt = 14;
   const minTitlePt = 5;
   const maxTitleLines = 7;
   const maxArtistLines = 5;
+  const maxPlaylistLines = 3;
 
   for (let titlePt = maxTitlePt; titlePt >= minTitlePt; titlePt--) {
     const artistPt = Math.max(5, Math.min(titlePt - 1, 12));
+    const playlistPt = Math.max(4, Math.min(artistPt - 1, 9));
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(titlePt);
@@ -118,9 +132,21 @@ function fitSongTextToCell(
       artistH = artistLines.length * artistPt * ARTIST_LINE_FACTOR;
     }
 
-    const totalH = titleH + (subtitle ? gap + artistH : 0);
+    let playlistLines: string[] = [];
+    let playlistH = 0;
+    if (tertiary) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(playlistPt);
+      playlistLines = doc.splitTextToSize(tertiary, textW).slice(0, maxPlaylistLines);
+      playlistH = playlistLines.length * playlistPt * PLAYLIST_LINE_FACTOR;
+    }
+
+    const totalH =
+      titleH +
+      (subtitle ? gap + artistH : 0) +
+      (tertiary ? playlistGap + playlistH : 0);
     if (totalH <= maxH && titleLines.length > 0) {
-      return { titlePt, artistPt, titleLines, artistLines, totalH };
+      return { titlePt, artistPt, playlistPt, titleLines, artistLines, playlistLines, totalH };
     }
   }
 
@@ -128,19 +154,27 @@ function fitSongTextToCell(
   doc.setFontSize(minTitlePt);
   const titleLines = doc.splitTextToSize(title, textW).slice(0, maxTitleLines);
   const artistPt = 5;
+  const playlistPt = 4;
   let artistLines: string[] = [];
+  let playlistLines: string[] = [];
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(artistPt);
   if (subtitle) artistLines = doc.splitTextToSize(subtitle, textW).slice(0, maxArtistLines);
+  doc.setFontSize(playlistPt);
+  if (tertiary) playlistLines = doc.splitTextToSize(tertiary, textW).slice(0, maxPlaylistLines);
   const titleH = titleLines.length * minTitlePt * TITLE_LINE_FACTOR;
   const artistH = artistLines.length * artistPt * ARTIST_LINE_FACTOR;
-  const totalH = titleH + (subtitle ? gap + artistH : 0);
+  const playlistH = playlistLines.length * playlistPt * PLAYLIST_LINE_FACTOR;
+  const totalH =
+    titleH + (subtitle ? gap + artistH : 0) + (tertiary ? playlistGap + playlistH : 0);
 
   return {
     titlePt: minTitlePt,
     artistPt,
+    playlistPt,
     titleLines,
     artistLines,
+    playlistLines,
     totalH,
   };
 }
@@ -152,13 +186,14 @@ function drawSongCell(
   cell: number,
   title: string,
   subtitle: string,
+  tertiary = '',
 ): void {
   const pad = 5;
   const textW = Math.max(12, cell - pad * 2);
   const maxH = cell - pad * 2;
   const cx = x + cell / 2;
 
-  const fit = fitSongTextToCell(doc, title, subtitle, textW, maxH);
+  const fit = fitSongTextToCell(doc, title, subtitle, textW, maxH, tertiary);
   const blockTop = y + (cell - fit.totalH) / 2;
 
   let cursorY = blockTop + fit.titlePt * 0.72;
@@ -179,6 +214,17 @@ function drawSongCell(
     for (const line of fit.artistLines) {
       doc.text(line, cx, cursorY, { align: 'center' });
       cursorY += fit.artistPt * ARTIST_LINE_FACTOR;
+    }
+  }
+
+  if (tertiary && fit.playlistLines.length > 0) {
+    cursorY += 2;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(fit.playlistPt);
+    doc.setTextColor(INK_MUTED.r, INK_MUTED.g, INK_MUTED.b);
+    for (const line of fit.playlistLines) {
+      doc.text(line, cx, cursorY, { align: 'center' });
+      cursorY += fit.playlistPt * PLAYLIST_LINE_FACTOR;
     }
   }
 }
@@ -398,7 +444,7 @@ function drawBingoCardPage(
       const x = gridX + c * cell;
       const y = gridTop + r * cell;
       const sq = grid[r][c];
-      const { title, subtitle } = cellLabel(sq);
+      const { title, subtitle, tertiary } = cellLabel(sq);
 
       if (sq?.isFreeSpace) {
         if (!drawLogoUnderCells) {
@@ -415,7 +461,7 @@ function drawBingoCardPage(
           doc.setFillColor(PAGE.r, PAGE.g, PAGE.b);
           doc.rect(x, y, cell, cell, 'FD');
         }
-        drawSongCell(doc, x, y, cell, title, subtitle);
+        drawSongCell(doc, x, y, cell, title, subtitle, tertiary);
       }
 
       doc.setDrawColor(BORDER.r, BORDER.g, BORDER.b);

@@ -1373,22 +1373,25 @@ const PublicDisplay: React.FC = () => {
   const [rowHeightPx, setRowHeightPx] = useState<number>(0);
   /** Measured 5×15 column width — drives true text fitting (not char heuristics). */
   const [fiveBy15ColWidthPx, setFiveBy15ColWidthPx] = useState<number>(0);
-  /** Carousel / play-order fallback: measured viewport height (5 rows + gaps). */
+  /** Carousel / play-order fallback: measured viewport height (5 equal rows, same as 5×15). */
   const [carouselViewportHeightPx, setCarouselViewportHeightPx] = useState<number>(0);
+  /** Measured 1×75 column width — same approach as fiveBy15ColWidthPx. */
+  const [carouselColWidthMeasuredPx, setCarouselColWidthMeasuredPx] = useState<number>(0);
   const fiveBy15CardRowPx = useMemo(
     () => (rowHeightPx > 0 ? rowHeightPx : 0),
     [rowHeightPx],
   );
-  /** 1×75 carousel: five equal rows with 6px gaps inside the measured viewport. */
+  /** 1×75 carousel: five equal rows of the measured viewport (match 5×15 row split). */
   const carouselCardRowPx = useMemo(() => {
     if (carouselViewportHeightPx <= 0) return 0;
-    return Math.max(1, (carouselViewportHeightPx - 4 * 6) / 5);
+    return carouselViewportHeightPx / 5;
   }, [carouselViewportHeightPx]);
-  /** One play-order column width (includes column side padding). */
+  /** One play-order column width; prefer measured column, fall back to viewport / cols. */
   const carouselColWidthPx = useMemo(() => {
+    if (carouselColWidthMeasuredPx > 0) return carouselColWidthMeasuredPx;
     if (viewportWidth <= 0 || visibleCols <= 0) return 0;
     return viewportWidth / visibleCols;
-  }, [viewportWidth, visibleCols]);
+  }, [carouselColWidthMeasuredPx, viewportWidth, visibleCols]);
 
   const isFullTitleRevealMode =
     titleRevealMode === 'track_start' || titleRevealMode === 'track_end';
@@ -1427,9 +1430,9 @@ const PublicDisplay: React.FC = () => {
     // Text sits right of the stripe (paddingLeft only), so width loses one band.
     const stripeW = rowPx > 0 ? Math.max(18, Math.round(rowPx * 0.24)) : 24;
     if (rowPx <= 0 || colWidthPx <= 0) return null;
-    const colSidePadPx = layout === '5x15' ? 0 : 8; // carousel columns: padding 0 4px ×2
+    // Same pad treatment as 5×15 so 1×75 call text fits at matching sizes.
     return {
-      boxWidthPx: colWidthPx - colSidePadPx - 20 - stripeW, // card padding 10px ×2
+      boxWidthPx: colWidthPx - 20 - stripeW, // card padding 10px ×2
       boxHeightPx: rowPx - 14, // card padding 7px ×2
       titleCapPx: Math.round(rowPx * (plainFullTitle ? 0.26 : 0.34)),
       artistCapPx: Math.round(rowPx * (plainFullTitle ? 0.17 : 0.22)),
@@ -3202,6 +3205,13 @@ const PublicDisplay: React.FC = () => {
     if (!el) return;
     const w = el.clientWidth || 0;
     if (w > 0) setViewportWidth(w);
+    const h = el.clientHeight || 0;
+    if (h > 0) setCarouselViewportHeightPx(h);
+    const colEl =
+      el.querySelector<HTMLElement>('.call-carousel-col') ||
+      el.querySelector<HTMLElement>('.call-carousel-col-inner');
+    const colW = colEl?.clientWidth || 0;
+    if (colW > 0) setCarouselColWidthMeasuredPx(colW);
   }, []);
 
   const snapCarouselAfterForwardLoop = useCallback(() => {
@@ -3302,6 +3312,11 @@ const PublicDisplay: React.FC = () => {
     const update = () => {
       setViewportWidth(el.clientWidth || 0);
       setCarouselViewportHeightPx(el.clientHeight || 0);
+      const colEl =
+        el.querySelector<HTMLElement>('.call-carousel-col') ||
+        el.querySelector<HTMLElement>('.call-carousel-col-inner');
+      const colW = colEl?.clientWidth || 0;
+      if (colW > 0) setCarouselColWidthMeasuredPx(colW);
     };
     update();
     window.addEventListener('resize', update);
@@ -4459,6 +4474,8 @@ const PublicDisplay: React.FC = () => {
     Array.from({ length: 5 }, (_, rowIdx) => {
       const id = group[rowIdx];
       if (!id) {
+        // Full-card stacks only real songs (like 5×15); empty 1fr slots would steal space.
+        if (isFullCardPattern) return null;
         return (
           <div
             key={`empty-${gi}-${rowIdx}`}
@@ -4548,9 +4565,16 @@ const PublicDisplay: React.FC = () => {
           className="call-carousel-viewport call-carousel-viewport--static-grid call-carousel-viewport--played-order"
           style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}
         >
-          {columnSlots.map((group, gi) => (
-            <div key={`played-fb-${gi}`} className="call-carousel-col-static">
-              <div className="call-carousel-col-inner call-carousel-col-inner--played-order">
+            {columnSlots.map((group, gi) => (
+            <div
+              key={`played-fb-${gi}`}
+              className={`call-carousel-col-static${isFullCardPattern ? ' call-carousel-col--full-card' : ''}`}
+            >
+              <div
+                className={`call-carousel-col-inner call-carousel-col-inner--played-order${
+                  isFullCardPattern ? ' call-carousel-col-inner--full-card' : ''
+                }`}
+              >
                 {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
               </div>
             </div>
@@ -4622,8 +4646,15 @@ const PublicDisplay: React.FC = () => {
             }}
           >
             {staticSlots.map((group, gi) => (
-              <div key={`slot-${gi}`} className="call-carousel-col-static">
-                <div className="call-carousel-col-inner">
+              <div
+                key={`slot-${gi}`}
+                className={`call-carousel-col-static${isFullCardPattern ? ' call-carousel-col--full-card' : ''}`}
+              >
+                <div
+                  className={`call-carousel-col-inner${
+                    isFullCardPattern ? ' call-carousel-col-inner--full-card' : ''
+                  }`}
+                >
                   {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
                 </div>
               </div>
@@ -4653,8 +4684,16 @@ const PublicDisplay: React.FC = () => {
             }}
           >
             {scrollGroups.map((group, gi) => (
-              <div key={`scroll-${gi}`} className="call-carousel-col" style={colStyle}>
-                <div className="call-carousel-col-inner">
+              <div
+                key={`scroll-${gi}`}
+                className={`call-carousel-col${isFullCardPattern ? ' call-carousel-col--full-card' : ''}`}
+                style={colStyle}
+              >
+                <div
+                  className={`call-carousel-col-inner${
+                    isFullCardPattern ? ' call-carousel-col-inner--full-card' : ''
+                  }`}
+                >
                   {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
                 </div>
               </div>
@@ -5723,8 +5762,16 @@ const PublicDisplay: React.FC = () => {
                   {renderBingoCard()}
                 </div>
               </div>
+              {/* TEMPO balls moved here from under the QR so room code can own that slot */}
+              <div
+                className="public-pattern-panel__tempo-balls"
+                style={{ flexShrink: 0, paddingTop: 6, paddingBottom: 2 }}
+                aria-hidden
+              >
+                <PublicDisplayTempoBallRow seeds={ballAnimSeedsRef.current} variant="sidebar" />
+              </div>
             </motion.div>
-            {/* Under pattern: Info (room + stats) */}
+            {/* Under pattern: Info (stats + QR + room code) */}
             <div className="info-grid">
               <motion.div 
                 className="quick-stats public-info-panel"
@@ -5734,10 +5781,6 @@ const PublicDisplay: React.FC = () => {
                 style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}
               >
                 <div className="public-info-panel__row">
-                  <div className="public-info-panel__block public-info-panel__block--room">
-                    <div className="public-info-panel__label">Room Number:</div>
-                    <div className="public-info-panel__value public-info-panel__value--room">{roomInfo?.id || roomId}</div>
-                  </div>
                   <div className="public-info-panel__stat">
                     <Users className="stat-icon" />
                     <div>
@@ -5762,7 +5805,7 @@ const PublicDisplay: React.FC = () => {
                     </div>
                   )}
                 </div>
-                {/* QR code below stats - fills remaining space */}
+                {/* QR below player/song counts */}
                 {roomId && (
                   <div style={{ 
                     flex: 1,
@@ -5792,9 +5835,15 @@ const PublicDisplay: React.FC = () => {
                     <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#ddd', lineHeight: 1 }}>Scan to join</div>
                 </div>
                 )}
-                {/* TEMPO ball lockup fills the spare space under the QR card */}
-                <div style={{ flexShrink: 0, paddingBottom: 4 }} aria-hidden>
-                  <PublicDisplayTempoBallRow seeds={ballAnimSeedsRef.current} variant="sidebar" />
+                {/* Room code under QR (former TEMPO logo slot) */}
+                <div
+                  className="public-info-panel__block public-info-panel__block--room"
+                  style={{ flexShrink: 0, paddingBottom: 4 }}
+                >
+                  <div className="public-info-panel__label">Room Number:</div>
+                  <div className="public-info-panel__value public-info-panel__value--room">
+                    {roomInfo?.id || roomId}
+                  </div>
                 </div>
               </motion.div>
             </div>

@@ -193,6 +193,10 @@ function songsFromServerPlaybackPayload(order: unknown): Song[] {
         youtubeMusic: o?.youtubeMusic === true,
         sourcePlaylistId: o?.sourcePlaylistId != null ? String(o.sourcePlaylistId) : undefined,
         sourcePlaylistName: typeof o?.sourcePlaylistName === 'string' ? o.sourcePlaylistName : undefined,
+        originPlaylistName:
+          typeof o?.originPlaylistName === 'string' && o.originPlaylistName.trim() !== ''
+            ? o.originPlaylistName.trim()
+            : undefined,
       } as Song;
     })
     .filter((s): s is Song => s != null);
@@ -231,6 +235,10 @@ function normalizeSyncedSongForHost(song: any): Song | null {
     youtubeMusic: song.youtubeMusic === true,
     sourcePlaylistId: song.sourcePlaylistId != null ? String(song.sourcePlaylistId) : undefined,
     sourcePlaylistName: typeof song.sourcePlaylistName === 'string' ? song.sourcePlaylistName : undefined,
+    originPlaylistName:
+      typeof song.originPlaylistName === 'string' && song.originPlaylistName.trim() !== ''
+        ? song.originPlaylistName.trim()
+        : undefined,
   };
 }
 
@@ -332,6 +340,8 @@ interface Song {
   youtubeMusic?: boolean;
   sourcePlaylistId?: string;
   sourcePlaylistName?: string;
+  /** Original playlist before remapping into the night-wide Leftovers virtual playlist. */
+  originPlaylistName?: string;
   /** Full YouTube `snippet.title` when loaded from Data API; finalize reconciliation uses this. */
   youtubeRawTitle?: string;
   /** Canonical title/artist from optional iTunes pass + disk cache at finalize. */
@@ -433,6 +443,7 @@ function cloneSongForSnapshot(s: Song): Song {
     youtubeMusic: s.youtubeMusic,
     sourcePlaylistId: s.sourcePlaylistId,
     sourcePlaylistName: s.sourcePlaylistName,
+    originPlaylistName: s.originPlaylistName,
     youtubeRawTitle: s.youtubeRawTitle,
     catalogDisplayVerified: s.catalogDisplayVerified,
   };
@@ -6758,8 +6769,16 @@ const HostView: React.FC = () => {
         const seenKey = label ? `ta:${label}` : `id:${s.id}`;
         if (seen.has(seenKey)) continue;
         seen.add(seenKey);
+        const existingOrigin =
+          typeof s.originPlaylistName === 'string' ? s.originPlaylistName.trim() : '';
+        const fromSource =
+          typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName.trim() : '';
+        const originPlaylistName =
+          existingOrigin ||
+          (fromSource && fromSource !== LEFTOVERS_PLAYLIST_NAME ? fromSource : undefined);
         out.push({
           ...s,
+          ...(originPlaylistName ? { originPlaylistName } : {}),
           sourcePlaylistId: LEFTOVERS_PLAYLIST_ID,
           sourcePlaylistName: LEFTOVERS_PLAYLIST_NAME,
         });
