@@ -2469,6 +2469,48 @@ function buildHostPlayerCardsData(room) {
   return playerCardsData;
 }
 
+function cardRecoveryCooldownKey(player, playerId) {
+  if (player?.clientId) return `c:${player.clientId}`;
+  if (player?.name) return `n:${String(player.name).toLowerCase()}`;
+  return `p:${playerId}`;
+}
+
+/** Host card polling must not re-pump late-join deals every few seconds after a soft failure. */
+function shouldSkipCardRecovery(room, player, playerId) {
+  const until = room?._cardRecoveryCooldownUntil?.get(cardRecoveryCooldownKey(player, playerId));
+  return typeof until === 'number' && Date.now() < until;
+}
+
+function markCardRecoveryCooldown(room, player, playerId, reason) {
+  if (!room) return;
+  if (!room._cardRecoveryCooldownUntil) room._cardRecoveryCooldownUntil = new Map();
+  let ms = 180_000; // 3 min — enough to stop request-player-cards retry storms
+  try {
+    const rid = room.id;
+    if (rid) {
+      const sp = spotifyFor(rid);
+      if (typeof sp?.isQuarantined === 'function' && sp.isQuarantined()) {
+        const remSec =
+          typeof sp.getQuarantineRemainingSec === 'function' ? sp.getQuarantineRemainingSec() : 0;
+        // Cap so a 13h Spotify Retry-After doesn't permanently strand late-joiners after pool is fine.
+        ms = Math.max(ms, Math.min(Math.max(0, remSec) * 1000, 10 * 60_000));
+      }
+    }
+  } catch {
+    /* spotifyFor may throw if room has no tokens — keep default cooldown */
+  }
+  const key = cardRecoveryCooldownKey(player, playerId);
+  room._cardRecoveryCooldownUntil.set(key, Date.now() + ms);
+  routineServerLog(
+    `⏳ Card recovery cooldown ${Math.round(ms / 1000)}s for ${player?.name || playerId}` +
+      (reason ? ` (${reason})` : ''),
+  );
+}
+
+function clearCardRecoveryCooldown(room, player, playerId) {
+  room?._cardRecoveryCooldownUntil?.delete(cardRecoveryCooldownKey(player, playerId));
+}
+
 async function ensureActivePlayersHaveCards(roomId, room) {
   if (!room?.players) return 0;
   const live =
@@ -2485,13 +2527,23 @@ async function ensureActivePlayersHaveCards(roomId, room) {
   let dealt = 0;
   for (const [playerId, player] of room.players.entries()) {
     if (!player || player.isHost || player.name === 'Display') continue;
-    if (resolveActivePlayerCard(room, player, playerId)) continue;
+    if (resolveActivePlayerCard(room, player, playerId)) {
+      clearCardRecoveryCooldown(room, player, playerId);
+      continue;
+    }
+    if (shouldSkipCardRecovery(room, player, playerId)) continue;
     try {
       routineServerLog(`🔄 Dealing missing card for ${player.name} (active player recovery)`);
       const card = await generateBingoCardForPlayer(roomId, playerId);
-      if (card) dealt++;
+      if (card) {
+        clearCardRecoveryCooldown(room, player, playerId);
+        dealt++;
+      } else {
+        markCardRecoveryCooldown(room, player, playerId, 'deal returned empty');
+      }
     } catch (e) {
       console.error(`❌ Failed recovery deal for ${player.name}:`, e?.message || e);
+      markCardRecoveryCooldown(room, player, playerId, e?.message || 'deal threw');
     }
   }
   return dealt;
@@ -8824,11 +8876,60 @@ function buildCanonicalSongMapFromRoom(room) {
 }
 
 function songsForPlaylistFromRoomCache(room, playlistId) {
-  const pid = String(playlistId);
+  const want = canonicalPlaylistIdForMatch(playlistId);
   const map = buildCanonicalSongMapFromRoom(room);
   const out = [];
+  const seen = new Set();
   for (const s of map.values()) {
-    if (s.sourcePlaylistId != null && String(s.sourcePlaylistId) === pid) out.push(s);
+    if (!s?.id || s.sourcePlaylistId == null) continue;
+    if (canonicalPlaylistIdForMatch(s.sourcePlaylistId) !== want) continue;
+    if (seen.has(s.id)) continue;
+    seen.add(s.id);
+    out.push(s);
+  }
+  // 5×15 live columns are authoritative when sourcePlaylistId tags are missing/mismatched.
+  if (
+    out.length === 0 &&
+    Array.isArray(room.fiveByFifteenColumnsIds) &&
+    room.fiveByFifteenColumnsIds.length === 5
+  ) {
+    const pls = Array.isArray(room.finalizedPlaylists) && room.finalizedPlaylists.length === 5
+      ? room.finalizedPlaylists
+      : Array.isArray(room.playlists) && room.playlists.length === 5
+        ? room.playlists
+        : null;
+    if (pls) {
+      const colIdx = pls.findIndex((p) => canonicalPlaylistIdForMatch(p?.id) === want);
+      const col = colIdx >= 0 ? room.fiveByFifteenColumnsIds[colIdx] : null;
+      if (Array.isArray(col)) {
+        const meta =
+          room.fiveByFifteenMeta && typeof room.fiveByFifteenMeta === 'object'
+            ? room.fiveByFifteenMeta
+            : null;
+        for (const entry of col) {
+          const id = typeof entry === 'string' ? entry : entry?.id;
+          if (!id || seen.has(id)) continue;
+          let song = map.get(id);
+          if (!song && entry && typeof entry === 'object' && entry.id) song = entry;
+          if (!song && meta && meta[id]) {
+            song = {
+              id,
+              name: meta[id].name || '',
+              artist: meta[id].artist || '',
+              explicit: meta[id].explicit === true,
+              youtubeMusic: meta[id].youtubeMusic === true,
+              sourcePlaylistId: String(playlistId),
+            };
+          }
+          if (!song) continue;
+          seen.add(id);
+          out.push({
+            ...song,
+            sourcePlaylistId: song.sourcePlaylistId || String(playlistId),
+          });
+        }
+      }
+    }
   }
   return out;
 }
@@ -8859,6 +8960,22 @@ function normalizeSongSnapshotForPrint(raw) {
   return out.length ? out : null;
 }
 
+function roomIsLiveRound(room) {
+  return room?.gameState === 'playing' || room?.gameState === 'paused_for_verification';
+}
+
+/** Live show + shared org quarantine: never burn Web API on late-join card deal. */
+function lateJoinMustUseRoomPoolOnly(roomId, room) {
+  if (roomIsLiveRound(room)) return true;
+  try {
+    const sp = spotifyFor(roomId);
+    if (typeof sp?.isQuarantined === 'function' && sp.isQuarantined()) return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
 async function fetchTracksForLateJoinPlaylist(roomId, room, playlist) {
   const cached = songsForPlaylistFromRoomCache(room, playlist.id);
   if (cached.length > 0) {
@@ -8873,6 +8990,22 @@ async function fetchTracksForLateJoinPlaylist(roomId, room, playlist) {
     }
     return [];
   }
+
+  // Embedded host/snapshot songs on the playlist object (no network).
+  const embeddedLive = dedupeSongsByIdPreserveOrder(Array.isArray(playlist.songs) ? playlist.songs : []);
+  if (embeddedLive.length > 0) {
+    routineServerLog(`📋 Late-join: ${embeddedLive.length} embedded playlist.songs for "${playlist.name}"`);
+    return embeddedLive;
+  }
+
+  if (lateJoinMustUseRoomPoolOnly(roomId, room)) {
+    routineServerLog(
+      `📋 Late-join: no room-cache tracks for "${playlist.name}" — skipping external fetch ` +
+        `(${roomIsLiveRound(room) ? 'live round' : 'Spotify quarantine'}; pool-only deal)`,
+    );
+    return [];
+  }
+
   if (playlist.youtubeMusic === true) {
     const uid = room.ownerUserId;
     if (uid != null && youtubeMusic.hasCredentials(uid)) {
