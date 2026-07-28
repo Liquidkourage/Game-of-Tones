@@ -6329,6 +6329,11 @@ button.conn-chip.conn-chip-compact {
   display: none;
 }
 
+/* B: same-card duplicate titles keep artist visible so twins aren’t identical. */
+.player-container--v2.player-container--compact-cells .bingo-square--title-collision .player-square-artist {
+  display: block;
+}
+
 @media (max-width: 480px) {
   .player-container--v2:not(.player-container--compact-cells) {
     --player-v2-title-size: clamp(14px, 5.8cqi, 20px);

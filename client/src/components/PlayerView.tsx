@@ -17,6 +17,7 @@ import PlayerAccountGate from './PlayerAccountGate';
 import { youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import { patchSquaresWithAlias, patchSquaresClearAlias } from '../utils/songAliasDisplay';
 import { softHyphenateLongWords, stripSoftHyphens } from '../utils/softHyphenateLongWords';
+import { playerCardTitleCollisionPositions } from '../utils/playerCardTitleCollisions';
 import {
   STANDARD_BINGO_POSITIONS,
   validateBingoCardGrid,
@@ -1315,6 +1316,12 @@ const PlayerView: React.FC = () => {
       .join('\n');
   }, [bingoCard?.squares, venueBranding?.eventTitle]);
 
+  /** Same-card duplicate titles — force artist visible even in compact title-only mode. */
+  const titleCollisionPositions = useMemo(
+    () => playerCardTitleCollisionPositions(bingoCard?.squares),
+    [bingoCard?.squares],
+  );
+
   useLayoutEffect(() => {
     setCardTextFitReady(false);
   }, [cardTextFitSignature]);
@@ -1370,8 +1377,8 @@ const PlayerView: React.FC = () => {
       if (wordCount >= 5 || charCount >= 24 || longestWord >= 11) return 4;
       return 3;
     };
-    const derivePreferredArtistMaxLines = (text: string) => {
-      if (titleOnlyCells || !text.trim()) return 0;
+    const derivePreferredArtistMaxLines = (text: string, forceArtist: boolean) => {
+      if ((titleOnlyCells && !forceArtist) || !text.trim()) return 0;
       const charCount = text.length;
       const wordCount = getWordCount(text);
       const longestWord = getLongestWordLength(text);
@@ -1406,6 +1413,7 @@ const PlayerView: React.FC = () => {
         artistEl: HTMLElement;
         titleMaxLines: number;
         artistMaxLines: number;
+        forceArtist: boolean;
       };
 
       const contexts: SquareCtx[] = [];
@@ -1416,13 +1424,15 @@ const PlayerView: React.FC = () => {
         if (!contentEl || !titleEl || !artistEl) continue;
         const titleText = stripSoftHyphens(titleEl.textContent || '').trim();
         const artistText = stripSoftHyphens(artistEl.textContent || '').trim();
+        const forceArtist = squareEl.classList.contains('bingo-square--title-collision');
         contexts.push({
           el: squareEl,
           contentEl,
           titleEl,
           artistEl,
           titleMaxLines: derivePreferredTitleMaxLines(titleText),
-          artistMaxLines: derivePreferredArtistMaxLines(artistText),
+          artistMaxLines: derivePreferredArtistMaxLines(artistText, forceArtist),
+          forceArtist,
         });
       }
 
@@ -1442,7 +1452,7 @@ const PlayerView: React.FC = () => {
         if (ctx.contentEl.scrollHeight > ctx.contentEl.clientHeight + 1) return false;
         if (ctx.titleEl.scrollWidth > ctx.titleEl.clientWidth + 1) return false;
         if (titleMaxLines > 0 && getLineCount(ctx.titleEl) > titleMaxLines) return false;
-        if (titleOnlyCells || artistMaxLines === 0 || !ctx.artistEl.textContent?.trim()) {
+        if (artistMaxLines === 0 || !ctx.artistEl.textContent?.trim()) {
           return true;
         }
         if (ctx.artistEl.scrollWidth > ctx.artistEl.clientWidth + 1) return false;
@@ -1489,7 +1499,10 @@ const PlayerView: React.FC = () => {
         setScales(ctx, uniformTitleScale, ARTIST_PROBE_SCALE);
       }
 
-      if (!titleOnlyCells) {
+      const artistFitContexts =
+        titleOnlyCells ? contexts.filter((ctx) => ctx.forceArtist) : contexts;
+
+      if (artistFitContexts.length > 0) {
         const findMaxArtistScale = (ctx: SquareCtx) => {
           if (ctx.artistMaxLines === 0 || !ctx.artistEl.textContent?.trim()) {
             return ARTIST_SCALE_FLOOR;
@@ -1513,7 +1526,7 @@ const PlayerView: React.FC = () => {
           return artistLow;
         };
 
-        const perSquareArtistScales = contexts.map((ctx) => findMaxArtistScale(ctx));
+        const perSquareArtistScales = artistFitContexts.map((ctx) => findMaxArtistScale(ctx));
         const sortedArtistScales = [...perSquareArtistScales].sort((a, b) => a - b);
         const percentileIndex = Math.min(
           sortedArtistScales.length - 1,
@@ -1524,12 +1537,12 @@ const PlayerView: React.FC = () => {
         uniformArtistScale = Math.min(uniformArtistScale, ARTIST_SCALE_MAX);
 
         const fitsAllAtArtistScale = (artistScale: number) =>
-          contexts.every((ctx) =>
+          artistFitContexts.every((ctx) =>
             fitsAtScales(ctx, uniformTitleScale, artistScale, ctx.titleMaxLines, ctx.artistMaxLines),
           );
 
         const respectsTitleHierarchy = (artistScale: number) => {
-          for (const ctx of contexts) {
+          for (const ctx of artistFitContexts) {
             setScales(ctx, uniformTitleScale, artistScale);
             const titlePx = Number.parseFloat(window.getComputedStyle(ctx.titleEl).fontSize || '0');
             const artistPx = Number.parseFloat(window.getComputedStyle(ctx.artistEl).fontSize || '0');
@@ -1546,7 +1559,7 @@ const PlayerView: React.FC = () => {
         }
         uniformArtistScale = Math.max(uniformArtistScale, ARTIST_SCALE_MIN);
 
-        for (const ctx of contexts) {
+        for (const ctx of artistFitContexts) {
           setScales(ctx, uniformTitleScale, uniformArtistScale);
         }
       }
@@ -1587,7 +1600,7 @@ const PlayerView: React.FC = () => {
       resizeObserver.disconnect();
       gridEl.closest<HTMLElement>('.player-container')?.removeAttribute('data-fit-measuring');
     };
-  }, [cardTextFitSignature, visualViewportHeightPx, compactCardCells, cardGridEl]);
+  }, [cardTextFitSignature, visualViewportHeightPx, compactCardCells, cardGridEl, titleCollisionPositions]);
 
   // Keep screen awake during game using Wake Lock API
   useEffect(() => {
@@ -2254,7 +2267,7 @@ const PlayerView: React.FC = () => {
           {bingoCard.squares.map((square) => (
             <motion.div
               key={square.position}
-              className={`bingo-square ${square.marked ? 'marked' : ''} ${isPatternSquare(square.position) ? 'pattern-highlight' : ''} ${square.isFreeSpace || square.songId === '__FREE_SPACE__' ? 'free-space' : ''}`}
+              className={`bingo-square ${square.marked ? 'marked' : ''} ${isPatternSquare(square.position) ? 'pattern-highlight' : ''} ${square.isFreeSpace || square.songId === '__FREE_SPACE__' ? 'free-space' : ''}${titleCollisionPositions.has(square.position) ? ' bingo-square--title-collision' : ''}`}
               data-position={square.position}
               onClick={() => handleSquareClick(square.position)}
               onPointerEnter={(e) => handleSquarePointerEnter(square, e)}
