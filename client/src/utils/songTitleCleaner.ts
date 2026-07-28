@@ -124,10 +124,25 @@ const FEATURING_RULES: FilterRule[] = [
 /** Soundtrack / "from the movie" suffixes — not "Theme from X" mid-title. */
 const FROM_SOUNDTRACK_RULES: FilterRule[] = [
   { source: /\s[([]From\s+[^)\]]+[)\]]\s*$/i, target: '' },
+  { source: /\s[([]Music\s+from\s+[^)\]]+[)\]]\s*$/i, target: '' },
   { source: /\s[-–—]\s*From\s+.+$/i, target: '' },
+  { source: /\s[-–—]\s*Music\s+from\s+.+$/i, target: '' },
   { source: /\s[([]Original\s+Motion\s+Picture\s+Soundtrack[)\]]\s*$/i, target: '' },
   { source: /\s[([]Soundtrack(?:\s+Version)?[)\]]\s*$/i, target: '' },
   { source: /\s[-–—]\s*Soundtrack(?:\s+Version)?$/i, target: '' },
+  // FIFA / World Cup / official event anthem packaging (keep real bilingual subtitles)
+  { source: /\s[([].*?Official\s+Soundtrack[^)\]]*[)\]]\s*$/i, target: '' },
+  { source: /\s[([].*?\bFIFA\b[^)\]]*[)\]]\s*$/i, target: '' },
+  { source: /\s[([].*?\bWorld\s+Cup\b[^)\]]*[)\]]\s*$/i, target: '' },
+  { source: /\s[([]The\s+Official\s+\d{4}\s+[^)\]]*Anthem[)\]]\s*$/i, target: '' },
+  { source: /\s[([]Official\s+[^)\]]*Anthem[)\]]\s*$/i, target: '' },
+];
+
+/** Trailing mix tags: - K-Mix, - Club Mix, (Radio Mix) — not core titles. */
+const MIX_TAG_RULES: FilterRule[] = [
+  { source: /\s[-–—]\s*[A-Za-z0-9][\w./-]*\s*[Mm]ix\s*$/i, target: '' },
+  { source: /\s[-–—]\s*(?:Club|Radio|Dance|House|Deep|Extended|Instrumental)\s+[Mm]ix\s*$/i, target: '' },
+  { source: /\s[([][A-Za-z0-9][\w./-]*\s*[Mm]ix[)\]]\s*$/i, target: '' },
 ];
 
 const VIDEO_TAG_RULES: FilterRule[] = [
@@ -174,7 +189,10 @@ export function cleanSongTitle(title: string, options: CleanTitleOptions = DEFAU
     if (opts.removeRemastered) t = applyRules(t, REMASTERED_RULES);
     if (opts.removeLive) t = applyRules(t, LIVE_RULES);
     if (opts.removeExplicit) t = applyRules(t, EXPLICIT_RULES);
-    if (opts.removeVersions) t = applyRules(t, VERSION_RULES);
+    if (opts.removeVersions) {
+      t = applyRules(t, VERSION_RULES);
+      t = applyRules(t, MIX_TAG_RULES);
+    }
     if (opts.removeFeaturing) t = applyRules(t, FEATURING_RULES);
     if (opts.removeParenthetical) t = applyRules(t, FROM_SOUNDTRACK_RULES);
     if (opts.removeYears) t = applyRules(t, YEAR_RULES);

@@ -86,10 +86,23 @@ const FEATURING_RULES = [
 
 const FROM_SOUNDTRACK_RULES = [
   { source: /\s[([]From\s+[^)\]]+[)\]]\s*$/i, target: '' },
+  { source: /\s[([]Music\s+from\s+[^)\]]+[)\]]\s*$/i, target: '' },
   { source: /\s[-–—]\s*From\s+.+$/i, target: '' },
+  { source: /\s[-–—]\s*Music\s+from\s+.+$/i, target: '' },
   { source: /\s[([]Original\s+Motion\s+Picture\s+Soundtrack[)\]]\s*$/i, target: '' },
   { source: /\s[([]Soundtrack(?:\s+Version)?[)\]]\s*$/i, target: '' },
   { source: /\s[-–—]\s*Soundtrack(?:\s+Version)?$/i, target: '' },
+  { source: /\s[([].*?Official\s+Soundtrack[^)\]]*[)\]]\s*$/i, target: '' },
+  { source: /\s[([].*?\bFIFA\b[^)\]]*[)\]]\s*$/i, target: '' },
+  { source: /\s[([].*?\bWorld\s+Cup\b[^)\]]*[)\]]\s*$/i, target: '' },
+  { source: /\s[([]The\s+Official\s+\d{4}\s+[^)\]]*Anthem[)\]]\s*$/i, target: '' },
+  { source: /\s[([]Official\s+[^)\]]*Anthem[)\]]\s*$/i, target: '' },
+];
+
+const MIX_TAG_RULES = [
+  { source: /\s[-–—]\s*[A-Za-z0-9][\w./-]*\s*[Mm]ix\s*$/i, target: '' },
+  { source: /\s[-–—]\s*(?:Club|Radio|Dance|House|Deep|Extended|Instrumental)\s+[Mm]ix\s*$/i, target: '' },
+  { source: /\s[([][A-Za-z0-9][\w./-]*\s*[Mm]ix[)\]]\s*$/i, target: '' },
 ];
 
 const VIDEO_TAG_RULES = [
@@ -132,6 +145,7 @@ function cleanSongTitle(title) {
     t = applyRules(t, LIVE_RULES);
     t = applyRules(t, EXPLICIT_RULES);
     t = applyRules(t, VERSION_RULES);
+    t = applyRules(t, MIX_TAG_RULES);
     t = applyRules(t, FEATURING_RULES);
     t = applyRules(t, FROM_SOUNDTRACK_RULES);
     t = applyRules(t, YEAR_RULES);
