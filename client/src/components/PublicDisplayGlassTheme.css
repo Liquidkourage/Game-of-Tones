@@ -491,6 +491,14 @@
   color: var(--pd-snow) !important;
 }
 
+.App .public-display--glass .call-playlist-name,
+.App .public-display--glass .call-col-playlist-label,
+.App .public-display--glass .call-col-letter {
+  font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .App .public-display--glass .call-song-artist {
   color: rgba(228, 234, 244, 0.9) !important;
 }

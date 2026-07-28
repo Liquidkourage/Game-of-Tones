@@ -404,14 +404,32 @@ body {
 }
 
 .App .call-col-title .call-playlist-name {
-  font-size: clamp(0.95rem, 1.75vmin, 1.45rem);
-  font-weight: 900;
-  line-height: 1.15;
-  opacity: 0.95;
+  font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
+  font-size: clamp(1.15rem, 2.35vmin, 1.85rem);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: 0.05em;
+  opacity: 0.98;
   white-space: normal;
   word-break: break-word;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.85);
   max-width: 100%;
+}
+
+/* 5×15: big TONES (etc.) letter + playlist under — keep playlist readable at distance */
+.App .call-col-title .call-playlist-name .call-col-letter {
+  font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.App .call-col-title .call-playlist-name .call-col-playlist-label {
+  font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
+  font-size: clamp(1.05rem, 2.05vmin, 1.55rem) !important;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.12 !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.85);
 }
 
 .App .call-columns-header--1x75-single {
@@ -440,9 +458,10 @@ body {
 }
 
 .App .call-columns-header--1x75-single .call-col-title--1x75-playlist-span .call-playlist-name {
-  font-size: clamp(1.15rem, 2.5vmin, 1.95rem);
-  font-weight: 900;
-  letter-spacing: 0.02em;
+  font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
+  font-size: clamp(1.35rem, 2.85vmin, 2.15rem);
+  font-weight: 700;
+  letter-spacing: 0.05em;
   text-align: center;
   white-space: normal;
   word-break: break-word;

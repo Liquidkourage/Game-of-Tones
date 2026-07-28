@@ -4155,10 +4155,10 @@ const PublicDisplay: React.FC = () => {
                     className="call-playlist-name"
                     style={{
                       color: '#00ff88',
-                      fontSize: 'clamp(1.25rem, 2.5vmin, 2rem)',
-                      fontWeight: 900,
+                      fontSize: 'clamp(1.35rem, 2.75vmin, 2.15rem)',
+                      fontWeight: 700,
                       lineHeight: 1,
-                      letterSpacing: '0.04em',
+                      letterSpacing: '0.06em',
                       textShadow: '0 0 14px rgba(0,255,136,0.45), 0 2px 4px rgba(0,0,0,0.8)',
                     }}
                   >
@@ -4177,7 +4177,7 @@ const PublicDisplay: React.FC = () => {
             transition={{ duration: 0.25 }}
           >
             <div className="call-playlist-name">
-              <span style={{ color: '#ffffff' }}>{playlistTitle}</span>
+              <span style={{ color: '#ffffff' }}>{playlistTitle.toLocaleUpperCase()}</span>
             </div>
           </motion.div>
         </div>
@@ -4231,39 +4231,32 @@ const PublicDisplay: React.FC = () => {
               {name ? (
                 layoutMode === '1x75' ? (
                   <div className="call-playlist-name">
-                    <span style={{ color: '#ffffff' }}>{name}</span>
+                    <span style={{ color: '#ffffff' }}>{name.toLocaleUpperCase()}</span>
                   </div>
                 ) : (
-                  /* Two-line header: big letter on top, playlist name beneath (kept compact). */
+                  /* Two-line header: big letter on top, playlist name beneath. */
                   <div
                     className="call-playlist-name"
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      gap: 1,
+                      gap: 2,
                     }}
                   >
                     <span
+                      className="call-col-letter"
                       style={{
                         color: '#00ff88',
-                        fontSize: 'clamp(1.25rem, 2.5vmin, 2rem)',
-                        fontWeight: 900,
+                        fontSize: 'clamp(1.35rem, 2.75vmin, 2.15rem)',
                         lineHeight: 1,
-                        letterSpacing: '0.04em',
                         textShadow: '0 0 14px rgba(0,255,136,0.45), 0 2px 4px rgba(0,0,0,0.8)',
                       }}
                     >
                       {bingoLetter}
                     </span>
-                    <span
-                      style={{
-                        color: '#ffffff',
-                        fontSize: 'clamp(0.8rem, 1.45vmin, 1.2rem)',
-                        lineHeight: 1.1,
-                      }}
-                    >
-                      {name}
+                    <span className="call-col-playlist-label" style={{ color: '#ffffff' }}>
+                      {name.toLocaleUpperCase()}
                     </span>
                   </div>
                 )
@@ -5674,21 +5667,10 @@ const PublicDisplay: React.FC = () => {
                 <h2 className="pattern-title-text">{getPatternName()}</h2>
                 {pattern === 'composite' && patternComposite && patternComposite.clauses.length > 0 && (
                   <div className="composite-pattern-header-block">
-                    <div
-                      style={{
-                        marginTop: 10,
-                        fontSize: 'clamp(1.05rem, 3vmin, 1.95rem)',
-                        fontWeight: 800,
-                        letterSpacing: '0.04em',
-                        color: '#f5d061',
-                        textAlign: 'center',
-                        maxWidth: '98%',
-                        padding: '0 12px',
-                      }}
-                    >
+                    <div className="composite-pattern-and-or-hint" style={{ color: '#f5d061', textAlign: 'center' }}>
                       {patternComposite.op === 'and'
-                        ? '✓ Complete every part below'
-                        : '✓ Complete any one part below'}
+                        ? '✓ COMPLETE EVERY PART'
+                        : '✓ COMPLETE ANY ONE PART'}
                     </div>
                     <div className="composite-pattern-chips">
                       {patternComposite.clauses.map((c, i) => (
@@ -5700,8 +5682,9 @@ const PublicDisplay: React.FC = () => {
                           ) : null}
                           <span
                             className={`composite-pattern-chip composite-pattern-chip--c${i % COMPOSITE_CLAUSE_COLOR_SLOTS}`}
+                            title={describeCompositeClauseAudience(c)}
                           >
-                            {describeCompositeClauseAudience(c)}
+                            {describeCompositeClauseBrief(c).toLocaleUpperCase()}
                           </span>
                         </React.Fragment>
                       ))}
@@ -5709,24 +5692,14 @@ const PublicDisplay: React.FC = () => {
                   </div>
                 )}
                 {pattern === 'composite' && compositeDemoSequences.length >= 2 && (
-                  <div
-                    className="composite-pattern-spotlight-row"
-                    style={{
-                      fontSize: 'clamp(0.92rem, 2.4vmin, 1.65rem)',
-                      fontWeight: 600,
-                      color: '#a8e6dc',
-                      marginTop: 10,
-                      textAlign: 'center',
-                      padding: '0 10px',
-                    }}
-                  >
+                  <div className="composite-pattern-spotlight-row" style={{ color: '#a8e6dc', textAlign: 'center' }}>
                     Spotlight:{' '}
                     <span style={{ color: '#ffffff', fontWeight: 800 }}>
-                      {
+                      {(
                         compositeDemoSequences[
                           compositePatternDemoIndex % compositeDemoSequences.length
-                        ]?.label
-                      }
+                        ]?.label || ''
+                      ).toLocaleUpperCase()}
                     </span>
                   </div>
                 )}

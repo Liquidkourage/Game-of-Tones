@@ -1472,14 +1472,30 @@ code {
 
 .bingo-card-display.public-pattern-panel {
   container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.bingo-card-display.public-pattern-panel .bingo-card-header {
+  flex: 0 1 auto;
+  /* Keep combined-pattern copy from eating the animated grid. */
+  max-height: min(34%, 11.5rem);
+  overflow: hidden;
+  margin-bottom: 4px;
+  padding-bottom: 2px;
+  gap: 2px;
 }
 
 .bingo-card-display.public-pattern-panel .bingo-card-content {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   height: auto;
   min-height: 0;
   margin-top: 0;
   margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .bingo-card-display.public-pattern-panel .public-pattern-panel__tempo-balls {
@@ -1507,39 +1523,66 @@ code {
   flex-basis: 100%;
 }
 
+.bingo-card-display .composite-pattern-header-block {
+  margin-top: 2px;
+}
+
 .bingo-card-display .composite-pattern-chips {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: clamp(10px, 2vmin, 22px);
-  margin-top: 12px;
+  gap: clamp(6px, 1.2vmin, 12px);
+  margin-top: 4px;
   max-width: 100%;
-  padding: 4px 10px 8px;
+  padding: 2px 6px 4px;
 }
 
 .bingo-card-display .composite-pattern-chip {
-  font-size: clamp(1.05rem, 3.6vmin, 2.15rem);
-  font-weight: 800;
-  line-height: 1.2;
-  padding: 12px 22px;
+  font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
+  font-size: clamp(0.78rem, 1.85vmin, 1.2rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+  padding: 5px 11px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
   border: 2px solid rgba(255, 255, 255, 0.35);
   color: rgba(255, 255, 255, 0.98);
   text-align: center;
-  max-width: min(100%, 46rem);
+  max-width: min(100%, 18rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .bingo-card-display .composite-pattern-op-pill {
-  font-size: clamp(0.92rem, 2.8vmin, 1.55rem);
-  font-weight: 900;
-  letter-spacing: 0.07em;
-  padding: 8px 16px;
-  border-radius: 10px;
+  font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
+  font-size: clamp(0.7rem, 1.55vmin, 1rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 4px 9px;
+  border-radius: 8px;
   background: rgba(245, 208, 97, 0.22);
   border: 2px solid rgba(245, 208, 97, 0.55);
   color: #f5d061;
+}
+
+.bingo-card-display .composite-pattern-spotlight-row {
+  margin-top: 4px !important;
+  font-size: clamp(0.72rem, 1.65vmin, 1.05rem) !important;
+  line-height: 1.2;
+  max-height: 2.5em;
+  overflow: hidden;
+}
+
+.bingo-card-display .composite-pattern-and-or-hint {
+  margin-top: 4px !important;
+  font-size: clamp(0.72rem, 1.7vmin, 1.05rem) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  padding: 0 8px !important;
 }
 
 /* Clause chips: accent matches projector grid hue for that clause index */
@@ -1582,14 +1625,17 @@ code {
 }
 
 .bingo-card-display.public-pattern-panel .bingo-card-header h2.pattern-title-text {
-  font-size: clamp(0.55rem, 5.5cqw, 2.85rem);
-  font-weight: 900;
+  font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
+  font-size: clamp(0.7rem, 4.2cqw, 1.85rem);
+  font-weight: 700;
+  letter-spacing: 0.05em;
   line-height: 1.12;
   text-align: center;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
   flex: 1 1 100%;
   min-width: 0;
   word-break: break-word;
+  text-transform: uppercase;
 }
 
 /* Public display: room / players / songs — scales with panel width (QR unchanged elsewhere). */
