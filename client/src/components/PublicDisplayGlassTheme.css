@@ -393,12 +393,34 @@
     inset 0 0 0 1px rgba(var(--pd-mint-rgb), 0.1);
 }
 
+/* Corner badge on call cards: keep mint glass look, but don't force square-flow sizes over inline layout. */
+.App .public-display--glass .call-number.call-number--corner {
+  border-radius: 12px 0 8px 0;
+  border: 1px solid rgba(var(--pd-mint-rgb), 0.55);
+  background: linear-gradient(
+    145deg,
+    rgba(0, 255, 136, 0.98) 0%,
+    rgba(0, 190, 100, 0.88) 100%
+  );
+  color: #001b10;
+  text-shadow: none;
+  box-shadow: 2px 2px 10px rgba(0, 255, 136, 0.28);
+}
+
 .App .public-display--glass .call-item--current .call-number {
   border-color: rgba(var(--pd-mint-rgb), 0.95) !important;
   color: var(--pd-mint) !important;
   box-shadow:
     0 0 18px rgba(var(--pd-mint-rgb), 0.5),
     inset 0 0 0 1px rgba(var(--pd-mint-rgb), 0.25) !important;
+}
+
+.App .public-display--glass .call-item--current .call-number.call-number--corner {
+  border-color: rgba(0, 255, 136, 0.95) !important;
+  color: #001b10 !important;
+  box-shadow:
+    0 0 16px rgba(0, 255, 136, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15) !important;
 }
 
 /* Socket / playlist diagnostic HUD (?diag=1 on display URL) */
@@ -463,6 +485,9 @@
 }
 
 .App .public-display--glass .call-song-name {
+  font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   color: var(--pd-snow) !important;
 }
 

@@ -17,8 +17,8 @@ export const PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX = 10;
 /** ~how many letter-box characters fit per row in a narrow 5×15 call column. */
 const MASKED_CHARS_PER_LINE_TITLE = 9;
 const MASKED_CHARS_PER_LINE_ARTIST = 11;
-/** Plain revealed text wraps wider in the same column. */
-const PLAIN_CHARS_PER_LINE_TITLE = 17;
+/** Plain revealed text wraps wider in the same column (narrow ALL CAPS titles). */
+const PLAIN_CHARS_PER_LINE_TITLE = 22;
 const PLAIN_CHARS_PER_LINE_ARTIST = 22;
 /** Target visible text rows inside one call card (title + artist combined). */
 const CALL_CARD_TOTAL_LINE_BUDGET = 4;
@@ -196,14 +196,23 @@ export function capCallCardTextScaleForRow(
 /* search the largest scale where everything truly fits.               */
 /* ------------------------------------------------------------------ */
 
-const FIT_FONT_FAMILY =
+/** Call-card titles (Jeopardy-board style): condensed caps. */
+export const PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY =
+  "'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif";
+/** Artists stay in the app UI sans. */
+export const PUBLIC_DISPLAY_CALL_ARTIST_FONT_FAMILY =
   "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif";
 /** Reference px for cached measurements; widths scale linearly with font size. */
 const FIT_REF_PX = 100;
 /** Unrevealed letter tile width incl. margins (0.56em + 2×0.04em). */
 const MASKED_TILE_EM = 0.64;
-const TITLE_FONT_WEIGHT = 900;
+const TITLE_FONT_WEIGHT = 700;
 const ARTIST_FONT_WEIGHT = 800;
+
+/** Display + fit titles as ALL CAPS (Jeopardy-board readability). */
+export function formatCallCardTitle(title: string): string {
+  return (title || '').toLocaleUpperCase();
+}
 /** Gap between title and artist blocks (callCardLineStyles artist marginTop). */
 const TITLE_ARTIST_GAP_PX = 4;
 /** callCardLineStyles paddingBottom on clamped cards (title 3 + artist 4). */
@@ -236,16 +245,16 @@ function fontsLoadedFlag(): string {
 }
 
 /** Width of one word at FIT_REF_PX (cached). Masked = worst of tile vs revealed glyph per char. */
-function wordWidthUnits(word: string, weight: number, masked: boolean): number {
-  const key = `${fontsLoadedFlag()}|${masked ? 'm' : 'p'}|${weight}|${word}`;
+function wordWidthUnits(word: string, weight: number, masked: boolean, fontFamily: string): number {
+  const key = `${fontsLoadedFlag()}|${masked ? 'm' : 'p'}|${weight}|${fontFamily}|${word}`;
   const hit = wordUnitsCache.get(key);
   if (hit !== undefined) return hit;
   const ctx = getFitCtx();
   let units: number;
   if (!ctx) {
-    units = word.length * (masked ? MASKED_TILE_EM * FIT_REF_PX : 0.6 * FIT_REF_PX);
+    units = word.length * (masked ? MASKED_TILE_EM * FIT_REF_PX : 0.55 * FIT_REF_PX);
   } else {
-    ctx.font = `${weight} ${FIT_REF_PX}px ${FIT_FONT_FAMILY}`;
+    ctx.font = `${weight} ${FIT_REF_PX}px ${fontFamily}`;
     if (masked) {
       units = 0;
       for (const ch of Array.from(word)) {
@@ -263,8 +272,8 @@ function wordWidthUnits(word: string, weight: number, masked: boolean): number {
   return units;
 }
 
-function spaceWidthUnits(weight: number): number {
-  return wordWidthUnits('\u00a0', weight, false) || 0.28 * FIT_REF_PX;
+function spaceWidthUnits(weight: number, fontFamily: string): number {
+  return wordWidthUnits('\u00a0', weight, false, fontFamily) || 0.28 * FIT_REF_PX;
 }
 
 type MeasuredWrap = {
@@ -280,17 +289,18 @@ function measuredWrapLines(
   weight: number,
   masked: boolean,
   maxWidthPx: number,
+  fontFamily: string,
 ): MeasuredWrap {
   const trimmed = (text || '').trim();
   if (!trimmed || maxWidthPx <= 0 || fontPx <= 0) return { lines: 0, overflowsWidth: false };
   const scale = fontPx / FIT_REF_PX;
-  const spacePx = spaceWidthUnits(weight) * scale;
+  const spacePx = spaceWidthUnits(weight, fontFamily) * scale;
   let lines = 1;
   let current = 0;
   let overflowsWidth = false;
   for (const word of trimmed.split(/\s+/)) {
     if (!word) continue;
-    const w = wordWidthUnits(word, weight, masked) * scale;
+    const w = wordWidthUnits(word, weight, masked, fontFamily) * scale;
     if (w > maxWidthPx) {
       if (masked && Array.from(word).length <= 18) {
         // Letter tiles render in a nowrap span — the word cannot break, only shrink.
@@ -352,7 +362,7 @@ export function fitCallCardText(
   const dfs = opts.displayFontScale > 0 ? opts.displayFontScale : 1;
   if (opts.boxWidthPx <= 8 || opts.boxHeightPx <= 8) return null;
   const minScale = opts.minScale ?? FIT_MIN_SCALE;
-  const titleText = (title || '').trim() || 'Unknown';
+  const titleText = formatCallCardTitle((title || '').trim() || 'Unknown');
   const artistText = (artist || '').trim();
   const hasArtist = artistText.length > 0;
 
@@ -366,9 +376,23 @@ export function fitCallCardText(
     let artistPx = PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX * dfs * s;
     if (opts.artistCapPx && opts.artistCapPx > 0) artistPx = Math.min(artistPx, opts.artistCapPx);
 
-    const t = measuredWrapLines(titleText, titlePx, TITLE_FONT_WEIGHT, opts.masked, effWidthPx);
+    const t = measuredWrapLines(
+      titleText,
+      titlePx,
+      TITLE_FONT_WEIGHT,
+      opts.masked,
+      effWidthPx,
+      PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY,
+    );
     const a = hasArtist
-      ? measuredWrapLines(artistText, artistPx, ARTIST_FONT_WEIGHT, opts.masked, effWidthPx)
+      ? measuredWrapLines(
+          artistText,
+          artistPx,
+          ARTIST_FONT_WEIGHT,
+          opts.masked,
+          effWidthPx,
+          PUBLIC_DISPLAY_CALL_ARTIST_FONT_FAMILY,
+        )
       : { lines: 0, overflowsWidth: false };
 
     const heightPx =

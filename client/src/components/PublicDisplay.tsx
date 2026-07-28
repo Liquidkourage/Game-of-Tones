@@ -32,12 +32,15 @@ import {
   computeCallCardTypography,
   capCallCardTextScaleForRow,
   fitCallCardText,
+  formatCallCardTitle,
   unifyCallListTypography,
   maxHeightEm,
   PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX,
+  PUBLIC_DISPLAY_CALL_ARTIST_FONT_FAMILY,
   PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT,
   PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX,
   PUBLIC_DISPLAY_CALL_TITLE_BASE_PX,
+  PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY,
   PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT,
   unrevealedLetterBoxStyle,
   type CallCardTypography,
@@ -1412,8 +1415,8 @@ const PublicDisplay: React.FC = () => {
 
   /**
    * Pixel box available for title+artist text inside one call card (measured layout
-   * minus card / stripe padding). Hoisted function so earlier memos can use it.
-   * Returns null until the layout has been measured.
+   * minus card padding). Corner call badge overlays — text uses nearly full width.
+   * Hoisted function so earlier memos can use it. Returns null until measured.
    */
   function callCardFitBox(
     layout: '5x15' | 'carousel',
@@ -1426,13 +1429,10 @@ const PublicDisplay: React.FC = () => {
   } | null {
     const rowPx = layout === '5x15' ? fiveBy15CardRowPx : carouselCardRowPx;
     const colWidthPx = layout === '5x15' ? fiveBy15ColWidthPx : carouselColWidthPx;
-    // Same formula as callNumberStripeWidthPx (declared later in render scope).
-    // Text sits right of the stripe (paddingLeft only), so width loses one band.
-    const stripeW = rowPx > 0 ? Math.max(18, Math.round(rowPx * 0.24)) : 24;
     if (rowPx <= 0 || colWidthPx <= 0) return null;
     // Same pad treatment as 5×15 so 1×75 call text fits at matching sizes.
     return {
-      boxWidthPx: colWidthPx - 20 - stripeW, // card padding 10px ×2
+      boxWidthPx: colWidthPx - 20, // card padding 10px ×2 (badge overlays corner)
       boxHeightPx: rowPx - 14, // card padding 7px ×2
       titleCapPx: Math.round(rowPx * (plainFullTitle ? 0.26 : 0.34)),
       artistCapPx: Math.round(rowPx * (plainFullTitle ? 0.17 : 0.22)),
@@ -1445,7 +1445,10 @@ const PublicDisplay: React.FC = () => {
     if (!isFullTitleRevealMode || playedOrderForDisplay.length === 0) return null;
     const typographies = playedOrderForDisplay.map((id) => {
       const meta = idMetaRef.current[id] || { name: '', artist: '' };
-      return computeCallCardTypography(meta.name, meta.artist, { fullCard: false, masked: false });
+      return computeCallCardTypography(formatCallCardTitle(meta.name), meta.artist, {
+        fullCard: false,
+        masked: false,
+      });
     });
     const unified = unifyCallListTypography(typographies);
     let textScale = unified.textScale;
@@ -1456,7 +1459,7 @@ const PublicDisplay: React.FC = () => {
       // Measured fit: shrink the shared board scale until the longest card fully fits.
       for (const id of playedOrderForDisplay) {
         const meta = idMetaRef.current[id] || { name: '', artist: '' };
-        const fit = fitCallCardText(meta.name, meta.artist, {
+        const fit = fitCallCardText(formatCallCardTitle(meta.name), meta.artist, {
           ...fitBox,
           displayFontScale: autoDisplayFontScale,
           masked: false,
@@ -3566,14 +3569,15 @@ const PublicDisplay: React.FC = () => {
     const ui = getCallSongRevealUi(songId);
     const masked = ui.kind === 'masked';
     const plainFullTitle = ui.kind === 'plain';
-    let typo = computeCallCardTypography(meta.name, meta.artist, { fullCard, masked });
+    const titleForFit = formatCallCardTitle(meta.name);
+    let typo = computeCallCardTypography(titleForFit, meta.artist, { fullCard, masked });
 
     if (!fullCard) {
       // Measured fit beats char heuristics: shrink until the real wrapped text fits
       // the real card box, and let the line budget grow to whatever actually wraps.
       const fitBox = callCardFitBox(layout, plainFullTitle);
       const fit = fitBox
-        ? fitCallCardText(meta.name, meta.artist, {
+        ? fitCallCardText(titleForFit, meta.artist, {
             ...fitBox,
             displayFontScale: autoDisplayFontScale,
             masked,
@@ -3634,9 +3638,14 @@ const PublicDisplay: React.FC = () => {
     const titleTopNudgePx =
       kind === 'title' ? Math.round(fontSize * (lh - 1) * 0.38) : 0;
     const common: React.CSSProperties = {
-      fontWeight: kind === 'title' ? 900 : 800,
+      fontFamily:
+        kind === 'title'
+          ? PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY
+          : PUBLIC_DISPLAY_CALL_ARTIST_FONT_FAMILY,
+      fontWeight: kind === 'title' ? 700 : 800,
       lineHeight: lh,
       fontSize: `${fontSize}px`,
+      letterSpacing: kind === 'title' ? '0.04em' : undefined,
       color: kind === 'title' ? '#ffffff' : '#e0e0e0',
       textShadow:
         kind === 'title' ? '0 2px 6px rgba(0,0,0,0.8)' : '0 2px 4px rgba(0,0,0,0.6)',
@@ -3665,8 +3674,7 @@ const PublicDisplay: React.FC = () => {
     fullCard: boolean,
     hasArtist: boolean,
   ): React.CSSProperties => {
-    // Text above the stripe band (z-index layers it); centered in the space
-    // right of the band (paddingLeft only — keeps the full remaining width usable).
+    // Full card width for titles (corner call badge overlays; does not reserve a stripe).
     // Clipping still happens at the card level (.call-item has overflow:hidden + fixed row height).
     const base: React.CSSProperties = {
       minWidth: 0,
@@ -3677,7 +3685,6 @@ const PublicDisplay: React.FC = () => {
       textAlign: 'center',
       position: 'relative',
       zIndex: 1,
-      paddingLeft: callNumberStripeWidthPx,
       boxSizing: 'border-box' as const,
     };
     if (fullCard || !typo.clampContentHeight) {
@@ -3695,41 +3702,45 @@ const PublicDisplay: React.FC = () => {
     };
   };
 
-  /** Edge-stripe style: width of the numbered band (text gets matching side padding). */
+  /** Corner call-number badge size (overlays; text uses nearly full card width). */
   const callCardRowPxForLayout = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
-  const callNumberStripeWidthPx =
-    callCardRowPxForLayout > 0 ? Math.max(18, Math.round(callCardRowPxForLayout * 0.24)) : 24;
+  const callNumberBadgePx =
+    callCardRowPxForLayout > 0
+      ? Math.max(22, Math.min(36, Math.round(callCardRowPxForLayout * 0.28)))
+      : 28;
 
   /**
-   * Edge-stripe call number: bright numbered band down the card's left edge.
-   * Number font is sized to the band WIDTH (not row height) so two-digit calls
-   * (up to 75) always fit inside the band.
+   * Corner call number: small top-left badge (Jeff / Jeopardy-board readability).
+   * Keeps the green cue but frees horizontal space for long titles.
    */
   const renderCallNumberOverlay = (callNum: number | '', fullCard: boolean): React.ReactNode => {
     if (callNum === '' || callNum <= 0) return null;
     void fullCard;
-    const stripeFontPx = Math.max(12, Math.round(callNumberStripeWidthPx * 0.55));
+    const badgeFontPx = Math.max(11, Math.round(callNumberBadgePx * 0.48));
     return (
       <div
+        className="call-number call-number--corner"
         aria-hidden
         style={{
           position: 'absolute',
           left: 0,
           top: 0,
-          bottom: 0,
-          width: callNumberStripeWidthPx,
-          background: 'linear-gradient(180deg, rgba(0, 255, 136, 0.95) 0%, rgba(0, 204, 106, 0.78) 100%)',
-          boxShadow: '2px 0 12px rgba(0, 255, 136, 0.3)',
+          width: callNumberBadgePx,
+          height: callNumberBadgePx,
+          borderRadius: '12px 0 8px 0',
+          background: 'linear-gradient(145deg, rgba(0, 255, 136, 0.98) 0%, rgba(0, 190, 100, 0.88) 100%)',
+          boxShadow: '2px 2px 10px rgba(0, 255, 136, 0.28)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           color: '#001b10',
           fontWeight: 900,
-          fontSize: `${stripeFontPx}px`,
+          fontSize: `${badgeFontPx}px`,
           letterSpacing: '-0.02em',
+          lineHeight: 1,
           pointerEvents: 'none',
           userSelect: 'none',
-          zIndex: 0,
+          zIndex: 2,
         }}
       >
         {callNum}
@@ -3743,22 +3754,23 @@ const PublicDisplay: React.FC = () => {
     maskFn: (text: string, set: Set<string>, highlightChar: string | null) => React.ReactNode,
   ): { title: React.ReactNode; artist: React.ReactNode | null } => {
     const ui = getCallSongRevealUi(songId);
+    const titleCaps = formatCallCardTitle(meta.name || 'Unknown');
     if (ui.kind === 'plain') {
       return {
-        title: <span>{meta.name || 'Unknown'}</span>,
+        title: <span>{titleCaps || 'UNKNOWN'}</span>,
         artist: meta.artist ? <span>{meta.artist}</span> : null,
       };
     }
     if (ui.kind === 'playing_placeholder') {
       return {
         title: (
-          <span style={{ opacity: 0.92, fontWeight: 800, letterSpacing: '0.06em' }}>Playing…</span>
+          <span style={{ opacity: 0.92, fontWeight: 700, letterSpacing: '0.08em' }}>PLAYING…</span>
         ),
         artist: null,
       };
     }
     return {
-      title: maskFn(meta.name || 'Unknown', ui.revealedSet, revealToast),
+      title: maskFn(titleCaps || 'UNKNOWN', ui.revealedSet, revealToast),
       artist: maskFn(meta.artist || '', ui.revealedSet, revealToast),
     };
   };
