@@ -85,18 +85,25 @@ const FEATURING_RULES = [
 ];
 
 const FROM_SOUNDTRACK_RULES = [
-  { source: /\s[([]From\s+[^)\]]+[)\]]\s*$/i, target: '' },
-  { source: /\s[([]Music\s+from\s+[^)\]]+[)\]]\s*$/i, target: '' },
+  { source: /\s\([^)]*From\s+[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*From\s+[^\]]*\]\s*$/i, target: '' },
+  { source: /\s\([^)]*Music\s+from\s+[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*Music\s+from\s+[^\]]*\]\s*$/i, target: '' },
   { source: /\s[-–—]\s*From\s+.+$/i, target: '' },
   { source: /\s[-–—]\s*Music\s+from\s+.+$/i, target: '' },
-  { source: /\s[([]Original\s+Motion\s+Picture\s+Soundtrack[)\]]\s*$/i, target: '' },
-  { source: /\s[([]Soundtrack(?:\s+Version)?[)\]]\s*$/i, target: '' },
+  { source: /\s\([^)]*Original\s+Motion\s+Picture\s+Soundtrack[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*Original\s+Motion\s+Picture\s+Soundtrack[^\]]*\]\s*$/i, target: '' },
+  { source: /\s\([^)]*Soundtrack(?:\s+Version)?[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*Soundtrack(?:\s+Version)?[^\]]*\]\s*$/i, target: '' },
   { source: /\s[-–—]\s*Soundtrack(?:\s+Version)?$/i, target: '' },
-  { source: /\s[([].*?Official\s+Soundtrack[^)\]]*[)\]]\s*$/i, target: '' },
-  { source: /\s[([].*?\bFIFA\b[^)\]]*[)\]]\s*$/i, target: '' },
-  { source: /\s[([].*?\bWorld\s+Cup\b[^)\]]*[)\]]\s*$/i, target: '' },
-  { source: /\s[([]The\s+Official\s+\d{4}\s+[^)\]]*Anthem[)\]]\s*$/i, target: '' },
-  { source: /\s[([]Official\s+[^)\]]*Anthem[)\]]\s*$/i, target: '' },
+  { source: /\s\([^)]*Official\s+Soundtrack[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*Official\s+Soundtrack[^\]]*\]\s*$/i, target: '' },
+  { source: /\s\([^)]*\bFIFA\b[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*\bFIFA\b[^\]]*\]\s*$/i, target: '' },
+  { source: /\s\([^)]*\bWorld\s+Cup\b[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*\bWorld\s+Cup\b[^\]]*\]\s*$/i, target: '' },
+  { source: /\s\([^)]*Official\s+[^)]*Anthem[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*Official\s+[^\]]*Anthem[^\]]*\]\s*$/i, target: '' },
 ];
 
 const MIX_TAG_RULES = [

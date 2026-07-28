@@ -123,19 +123,26 @@ const FEATURING_RULES: FilterRule[] = [
 
 /** Soundtrack / "from the movie" suffixes — not "Theme from X" mid-title. */
 const FROM_SOUNDTRACK_RULES: FilterRule[] = [
-  { source: /\s[([]From\s+[^)\]]+[)\]]\s*$/i, target: '' },
-  { source: /\s[([]Music\s+from\s+[^)\]]+[)\]]\s*$/i, target: '' },
+  { source: /\s\([^)]*From\s+[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*From\s+[^\]]*\]\s*$/i, target: '' },
+  { source: /\s\([^)]*Music\s+from\s+[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*Music\s+from\s+[^\]]*\]\s*$/i, target: '' },
   { source: /\s[-–—]\s*From\s+.+$/i, target: '' },
   { source: /\s[-–—]\s*Music\s+from\s+.+$/i, target: '' },
-  { source: /\s[([]Original\s+Motion\s+Picture\s+Soundtrack[)\]]\s*$/i, target: '' },
-  { source: /\s[([]Soundtrack(?:\s+Version)?[)\]]\s*$/i, target: '' },
+  { source: /\s\([^)]*Original\s+Motion\s+Picture\s+Soundtrack[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*Original\s+Motion\s+Picture\s+Soundtrack[^\]]*\]\s*$/i, target: '' },
+  { source: /\s\([^)]*Soundtrack(?:\s+Version)?[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*Soundtrack(?:\s+Version)?[^\]]*\]\s*$/i, target: '' },
   { source: /\s[-–—]\s*Soundtrack(?:\s+Version)?$/i, target: '' },
-  // FIFA / World Cup / official event anthem packaging (keep real bilingual subtitles)
-  { source: /\s[([].*?Official\s+Soundtrack[^)\]]*[)\]]\s*$/i, target: '' },
-  { source: /\s[([].*?\bFIFA\b[^)\]]*[)\]]\s*$/i, target: '' },
-  { source: /\s[([].*?\bWorld\s+Cup\b[^)\]]*[)\]]\s*$/i, target: '' },
-  { source: /\s[([]The\s+Official\s+\d{4}\s+[^)\]]*Anthem[)\]]\s*$/i, target: '' },
-  { source: /\s[([]Official\s+[^)\]]*Anthem[)\]]\s*$/i, target: '' },
+  // FIFA / World Cup / official event packaging — one bracket group only (don't eat real subtitles)
+  { source: /\s\([^)]*Official\s+Soundtrack[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*Official\s+Soundtrack[^\]]*\]\s*$/i, target: '' },
+  { source: /\s\([^)]*\bFIFA\b[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*\bFIFA\b[^\]]*\]\s*$/i, target: '' },
+  { source: /\s\([^)]*\bWorld\s+Cup\b[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*\bWorld\s+Cup\b[^\]]*\]\s*$/i, target: '' },
+  { source: /\s\([^)]*Official\s+[^)]*Anthem[^)]*\)\s*$/i, target: '' },
+  { source: /\s\[[^\]]*Official\s+[^\]]*Anthem[^\]]*\]\s*$/i, target: '' },
 ];
 
 /** Trailing mix tags: - K-Mix, - Club Mix, (Radio Mix) — not core titles. */
