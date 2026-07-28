@@ -378,7 +378,7 @@ async function persistPlayerDataCard(room, player, cardOrCards) {
   }
 }
 
-function storePlayerBingoCards(room, playerId, player, cardsOrCard) {
+function storePlayerBingoCards(room, playerId, player, cardsOrCard, preferredCardId = null) {
   const list = playerBingoCards
     .asBingoCardList(cardsOrCard)
     .map((c) => playerBingoCards.ensureBingoCardIdentity(c, playerId));
@@ -386,7 +386,10 @@ function storePlayerBingoCards(room, playerId, player, cardsOrCard) {
   room.bingoCards.set(playerId, list);
   if (player) {
     player.bingoCards = list;
-    player.bingoCard = list[0] || null;
+    // Keep the active/claimed card pointer (card 2/3 wins must not snap back to list[0]).
+    const preferId = preferredCardId || player.bingoCard?.cardId || null;
+    player.bingoCard =
+      playerBingoCards.findBingoCardInList(list, preferId) || list[0] || null;
   }
   if (player?.clientId) {
     if (!room.clientCards) room.clientCards = new Map();
@@ -5460,7 +5463,13 @@ io.on('connection', (socket) => {
       return;
     }
     player.bingoCard = bingoCard;
-    storePlayerBingoCards(room, socket.id, player, playerCards.length ? playerCards : [bingoCard]);
+    storePlayerBingoCards(
+      room,
+      socket.id,
+      player,
+      playerCards.length ? playerCards : [bingoCard],
+      bingoCard.cardId || null,
+    );
     
     if (player.hasBingo) {
       socket.emit('bingo-result', { success: false, reason: 'You have already called bingo!' });
@@ -5902,15 +5911,27 @@ io.on('connection', (socket) => {
         verified: true
       });
       
-      // Serialize winning card + pattern positions for public display modal
+      // Serialize winning card + pattern positions for public display modal.
+      // Prefer the queued claim's cardId (multi-card: win may be card 2/3, not list[0]).
       const sourceCardList = playerBingoCards.asBingoCardList(
         room.bingoCards?.get(resolvedPlayerId) || player.bingoCards || player.bingoCard,
       );
+      const claimedCardId =
+        headData.cardId ||
+        headData.playerCard?.cardId ||
+        player.bingoCard?.cardId ||
+        null;
       const sourceCard =
-        playerBingoCards.findBingoCardInList(sourceCardList, player.bingoCard?.cardId) ||
+        playerBingoCards.findBingoCardInList(sourceCardList, claimedCardId) ||
+        (headData.playerCard && Array.isArray(headData.playerCard.squares)
+          ? headData.playerCard
+          : null) ||
         player.bingoCard ||
         sourceCardList[0] ||
         null;
+      if (sourceCard) {
+        player.bingoCard = sourceCard;
+      }
       let winningCardPayload = null;
       let winningPositions = [];
       if (sourceCard && Array.isArray(sourceCard.squares)) {
@@ -7713,7 +7734,13 @@ io.on('connection', (socket) => {
       if (player && roomCard) {
         const card = roomCard;
         player.bingoCard = card;
-        storePlayerBingoCards(room, socket.id, player, cards.length ? cards : [card]);
+        storePlayerBingoCards(
+          room,
+          socket.id,
+          player,
+          cards.length ? cards : [card],
+          card.cardId || null,
+        );
         const square = card.squares.find(s => s.position === position);
         if (square && (square.isFreeSpace || square.songId === FREE_SPACE_SONG_ID)) {
           return;
