@@ -1457,11 +1457,12 @@ const PublicDisplay: React.FC = () => {
     const badgeW =
       rowPx > 0 ? Math.max(22, Math.min(36, Math.round(rowPx * 0.28))) : callNumberBadgePx;
     // Card pad 10×2; badge + gap so wraps never collide with the corner number.
+    // Title/artist caps use most of the row so short titles grow into empty space.
     return {
       boxWidthPx: colWidthPx - 20 - badgeW - CALL_BADGE_TEXT_GAP_PX,
       boxHeightPx: rowPx - 14, // card padding 7px ×2
-      titleCapPx: Math.round(rowPx * (plainFullTitle ? 0.26 : 0.34)),
-      artistCapPx: Math.round(rowPx * (plainFullTitle ? 0.17 : 0.22)),
+      titleCapPx: Math.round(rowPx * (plainFullTitle ? 0.4 : 0.46)),
+      artistCapPx: Math.round(rowPx * (plainFullTitle ? 0.22 : 0.26)),
     };
   }
 
@@ -3599,8 +3600,8 @@ const PublicDisplay: React.FC = () => {
     let typo = computeCallCardTypography(titleForFit, meta.artist, { fullCard, masked });
 
     if (!fullCard) {
-      // Measured fit beats char heuristics: shrink until the real wrapped text fits
-      // the real card box, and let the line budget grow to whatever actually wraps.
+      // Measured fit is ground truth: grow into empty card space or shrink to fit.
+      // Do not min() with char heuristics — those were capping short titles too small.
       const fitBox = callCardFitBox(layout, plainFullTitle);
       const fit = fitBox
         ? fitCallCardText(titleForFit, meta.artist, {
@@ -3613,7 +3614,7 @@ const PublicDisplay: React.FC = () => {
         typo = {
           ...typo,
           plainFullTitle,
-          textScale: Math.min(typo.textScale, fit.textScale),
+          textScale: fit.textScale,
           titleMaxLines: Math.max(typo.titleMaxLines, fit.titleLines),
           artistMaxLines: Math.max(typo.artistMaxLines, fit.artistLines),
           clampContentHeight: true,
@@ -3650,8 +3651,8 @@ const PublicDisplay: React.FC = () => {
     let fontSize = Math.round(basePx * displayFontScale * typo.textScale);
     const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
     if (rowPx > 0 && !fullCard) {
-      const titleFrac = typo.plainFullTitle ? 0.26 : 0.34;
-      const artistFrac = typo.plainFullTitle ? 0.17 : 0.22;
+      const titleFrac = typo.plainFullTitle ? 0.4 : 0.46;
+      const artistFrac = typo.plainFullTitle ? 0.22 : 0.26;
       // Caps scale with the host zoom so the failsafe slider stays a uniform
       // multiplier — at 100% these are the same row-fraction caps the fitter saw.
       const maxPx =
@@ -3793,6 +3794,103 @@ const PublicDisplay: React.FC = () => {
       title: maskFn(titleCaps || 'UNKNOWN', ui.revealedSet, revealToast),
       artist: maskFn(meta.artist || '', ui.revealedSet, revealToast),
     };
+  };
+
+  /**
+   * Single call-card chrome for 5×15 and 1×75 — same markup, motion, and row sizing
+   * so a cropped card cannot reveal which display mode produced it.
+   */
+  const renderUnifiedCallCard = (opts: {
+    songId: string;
+    reactKey: string;
+    callNum: number | '';
+    isFullCardPattern: boolean;
+    layout: '5x15' | 'carousel';
+    rowPx: number;
+    meta: { name: string; artist: string };
+    isCurrent: boolean;
+    recencyClass: string;
+    motionKeySuffix?: string;
+  }): React.ReactNode => {
+    const {
+      songId,
+      reactKey,
+      callNum,
+      isFullCardPattern,
+      layout,
+      rowPx,
+      meta,
+      isCurrent,
+      recencyClass,
+      motionKeySuffix = '',
+    } = opts;
+    const typo = typographyForCallCard(songId, meta, isFullCardPattern, layout);
+    const { title, artist } = renderCallSongLines(songId, meta, (t, s, h) =>
+      renderMaskedText(t, s, h, typo.letterBoxScale),
+    );
+    return (
+      <motion.div
+        key={reactKey}
+        className={`call-item ${recencyClass}`}
+        initial={false}
+        aria-current={isCurrent ? 'true' : undefined}
+        style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '7px 10px',
+          borderRadius: 12,
+          marginBottom: 0,
+          width: '100%',
+          maxWidth: '100%',
+          minWidth: 0,
+          boxSizing: 'border-box',
+          height: isFullCardPattern ? 'auto' : rowPx > 0 ? `${rowPx}px` : undefined,
+          minHeight: isFullCardPattern
+            ? rowPx > 0
+              ? rowPx
+              : undefined
+            : rowPx > 0
+              ? rowPx
+              : 44,
+          overflow: isFullCardPattern ? 'visible' : 'hidden',
+        }}
+      >
+        {renderCallNumberOverlay(callNum, isFullCardPattern)}
+        <div style={{ display: 'block', width: '100%', minWidth: 0 }}>
+          <div
+            className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
+            style={callSongInfoStyles(typo, isFullCardPattern, !!meta.artist?.trim())}
+          >
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.div
+                key={(meta?.name || '') + '-t' + motionKeySuffix}
+                initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                transition={{ duration: 0.25 }}
+                className="call-song-name"
+                style={callCardLineStyles(typo, 'title', isFullCardPattern)}
+              >
+                {title}
+              </motion.div>
+              <motion.div
+                key={(meta?.artist || '') + '-a' + motionKeySuffix}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 0.85, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.25 }}
+                className="call-song-artist"
+                style={callCardLineStyles(typo, 'artist', isFullCardPattern)}
+              >
+                {artist}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </div>
+      </motion.div>
+    );
   };
 
   // Function to get the overall pattern name
@@ -4425,78 +4523,19 @@ const PublicDisplay: React.FC = () => {
                     playedOrderForDisplay,
                     gameState.currentSong?.id,
                   );
-                  const typo = typographyForCallCard(id, meta, isFullCardPattern);
-                  const { title, artist } = renderCallSongLines(id, meta, (t, s, h) =>
-                    renderMaskedText(t, s, h, typo.letterBoxScale),
-                  );
-                  return (
-                    <motion.div
-                      key={id + '-' + ri}
-                      className={`call-item ${recencyClass}`}
-                      initial={false}
-                      aria-current={isCurrent ? 'true' : undefined}
-                      style={{
-                        position: 'relative',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: '7px 10px',
-                        borderRadius: 12,
-                        marginBottom: 0,
-                        height: isFullCardPattern
-                          ? 'auto'
-                          : fiveBy15CardRowPx > 0
-                            ? `${fiveBy15CardRowPx}px`
-                            : undefined,
-                        minHeight: isFullCardPattern
-                          ? fiveBy15CardRowPx > 0
-                            ? fiveBy15CardRowPx
-                            : undefined
-                          : fiveBy15CardRowPx > 0
-                            ? fiveBy15CardRowPx
-                            : 44,
-                        overflow: isFullCardPattern ? 'visible' : 'hidden',
-                        boxSizing: 'border-box',
-                      }}
-                    >
-                      {/* Play order index, styled per host preference */}
-                      {(() => {
-                        const idx = playedOrderForDisplay.indexOf(id);
-                        return renderCallNumberOverlay(idx >= 0 ? idx + 1 : '', isFullCardPattern);
-                      })()}
-                      <div style={{ display: 'block', width: '100%', minWidth: 0 }}>
-                        <div
-                          className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
-                          style={callSongInfoStyles(typo, isFullCardPattern, !!meta.artist?.trim())}
-                        >
-                          <AnimatePresence mode="popLayout" initial={false}>
-                          <motion.div
-                            key={(meta?.name || '') + '-' + ri}
-                            initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                            transition={{ duration: 0.25 }}
-                            className="call-song-name"
-                            style={callCardLineStyles(typo, 'title', isFullCardPattern)}
-                          >
-                            {title}
-                          </motion.div>
-                          <motion.div
-                            key={(meta?.artist || '') + '-' + ri}
-                            initial={{ opacity: 0, y: 4 }}
-                            animate={{ opacity: 0.85, y: 0 }}
-                            exit={{ opacity: 0, y: -4 }}
-                            transition={{ duration: 0.25 }}
-                            className="call-song-artist"
-                            style={callCardLineStyles(typo, 'artist', isFullCardPattern)}
-                          >
-                            {artist}
-                          </motion.div>
-                          </AnimatePresence>
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
+                  const idx = playedOrderForDisplay.indexOf(id);
+                  return renderUnifiedCallCard({
+                    songId: id,
+                    reactKey: id + '-' + ri,
+                    callNum: idx >= 0 ? idx + 1 : '',
+                    isFullCardPattern,
+                    layout: '5x15',
+                    rowPx: fiveBy15CardRowPx,
+                    meta,
+                    isCurrent,
+                    recencyClass,
+                    motionKeySuffix: '-' + ri,
+                  });
                 })}
                   </div>
                 );
@@ -4537,58 +4576,17 @@ const PublicDisplay: React.FC = () => {
         playedOrderForDisplay,
         gameState.currentSong?.id,
       );
-      const typo = typographyForCallCard(id, meta, isFullCardPattern, 'carousel');
-      const { title, artist } = renderCallSongLines(id, meta, (t, s, h) =>
-        renderMaskedText(t, s, h, typo.letterBoxScale),
-      );
-      return (
-        <div
-          key={id}
-          className={`call-item ${recencyClass}`}
-          aria-current={isCurrent ? 'true' : undefined}
-          style={{
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '7px 10px',
-            borderRadius: 12,
-            marginBottom: 0,
-            width: '100%',
-            maxWidth: '100%',
-            minWidth: 0,
-            boxSizing: 'border-box',
-            height: isFullCardPattern
-              ? 'auto'
-              : carouselCardRowPx > 0
-                ? `${carouselCardRowPx}px`
-                : undefined,
-            minHeight: isFullCardPattern
-              ? carouselCardRowPx > 0
-                ? carouselCardRowPx
-                : undefined
-              : carouselCardRowPx > 0
-                ? carouselCardRowPx
-                : 44,
-            overflow: isFullCardPattern ? 'visible' : 'hidden',
-          }}
-        >
-          {renderCallNumberOverlay(callNum > 0 ? callNum : '', isFullCardPattern)}
-          <div style={{ display: 'block', width: '100%', minWidth: 0 }}>
-            <div
-              className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
-              style={callSongInfoStyles(typo, isFullCardPattern, !!meta.artist?.trim())}
-            >
-              <div className="call-song-name" style={callCardLineStyles(typo, 'title', isFullCardPattern)}>
-                {title}
-              </div>
-              <div className="call-song-artist" style={callCardLineStyles(typo, 'artist', isFullCardPattern)}>
-                {artist}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
+      return renderUnifiedCallCard({
+        songId: id,
+        reactKey: id,
+        callNum: callNum > 0 ? callNum : '',
+        isFullCardPattern,
+        layout: 'carousel',
+        rowPx: carouselCardRowPx,
+        meta,
+        isCurrent,
+        recencyClass,
+      });
     });
 
   /** Guaranteed-visible play-order columns when pool layout cannot show played ids. */

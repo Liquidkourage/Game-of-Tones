@@ -107,34 +107,26 @@ export function computeCallCardTypography(
     const aLines = hasArtist ? estimateMaskedWrapLines(artist, MASKED_CHARS_PER_LINE_ARTIST) : 0;
     const totalLines = Math.max(tLines, tileLines) + aLines;
 
-    if (totalLines >= 6) textScale = Math.min(textScale, 0.84);
-    else if (totalLines >= 5) textScale = Math.min(textScale, 0.9);
-    else if (totalLines >= 4) textScale = Math.min(textScale, 0.94);
-    else if (totalLines >= 3) textScale = Math.min(textScale, 0.97);
-
+    // Only shrink when the line budget is clearly exceeded — never shrink short
+    // titles "because they're short" (that left empty card space on the projector).
     if (totalLines > CALL_CARD_TOTAL_LINE_BUDGET) {
       const fit = CALL_CARD_TOTAL_LINE_BUDGET / totalLines;
       textScale = Math.min(textScale, Math.max(0.52, fit));
-    }
+    } else if (totalLines >= 6) textScale = Math.min(textScale, 0.9);
+    else if (totalLines >= 5) textScale = Math.min(textScale, 0.95);
 
-    if (tLen > 0 && tLen <= 14) textScale = Math.min(textScale, 0.72);
-    else if (tLen > 0 && tLen <= 22) textScale = Math.min(textScale, 0.82);
-
-    titleMaxLines = Math.min(Math.max(tLines, tileLines, tLen > 0 && tLen <= 20 ? 2 : 1), 5);
-    const titleBudget = Math.min(titleMaxLines, 2);
+    titleMaxLines = Math.min(Math.max(tLines, tileLines, 2), 5);
+    const titleBudget = Math.min(titleMaxLines, 3);
     artistMaxLines = hasArtist
-      ? Math.min(Math.max(aLines, 1), Math.max(1, CALL_CARD_TOTAL_LINE_BUDGET - titleBudget))
+      ? Math.min(Math.max(aLines, 1), Math.max(1, CALL_CARD_TOTAL_LINE_BUDGET - titleBudget + 1))
       : 0;
   } else {
     const tLines = estimateMaskedWrapLines(title, PLAIN_CHARS_PER_LINE_TITLE);
     const aLines = hasArtist ? estimateMaskedWrapLines(artist, PLAIN_CHARS_PER_LINE_ARTIST) : 0;
-    titleMaxLines = Math.min(Math.max(tLines, 1), 3);
+    titleMaxLines = Math.min(Math.max(tLines, 1), 4);
     artistMaxLines = hasArtist ? Math.min(Math.max(aLines, 1), 2) : 0;
-    if (tLines + aLines >= 5) textScale = Math.min(textScale, 0.82);
-    else if (tLines + aLines >= 4) textScale = Math.min(textScale, 0.88);
-    else if (tLines + aLines >= 3) textScale = Math.min(textScale, 0.92);
-    if (tLen > 0 && tLen <= 14) textScale = Math.min(textScale, 0.72);
-    else if (tLen > 0 && tLen <= 22) textScale = Math.min(textScale, 0.82);
+    if (tLines + aLines >= 6) textScale = Math.min(textScale, 0.88);
+    else if (tLines + aLines >= 5) textScale = Math.min(textScale, 0.93);
   }
 
   const dense = textScale < 0.97 || (opts.masked === true && titleMaxLines + artistMaxLines >= 4);
@@ -168,7 +160,7 @@ export function unifyCallListTypography(typographies: CallCardTypography[]): Cal
   };
 }
 
-/** Shrink textScale so this card's title+artist fit inside one measured 5×15 row. */
+/** Grow/shrink textScale so title+artist fill one measured row (may exceed 1). */
 export function capCallCardTextScaleForRow(
   typo: CallCardTypography,
   rowHeightPx: number,
@@ -183,7 +175,7 @@ export function capCallCardTextScaleForRow(
   const rowCap =
     ((textHeightPx - PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX) * 0.96) /
     (atUnitScale * displayFontScale);
-  return Math.min(typo.textScale, Math.max(0.55, Math.min(1, rowCap)));
+  return Math.max(0.55, Math.min(2.2, rowCap));
 }
 
 /* ------------------------------------------------------------------ */
@@ -406,6 +398,8 @@ export type CallCardFitOpts = {
   artistCapPx?: number;
   /** Smallest acceptable scale before we give up and let it clip. */
   minScale?: number;
+  /** Largest scale to try so short titles can fill empty card space (default 2.2). */
+  maxScale?: number;
 };
 
 export type CallCardFitResult = {
@@ -415,8 +409,8 @@ export type CallCardFitResult = {
 };
 
 /**
- * Largest textScale (≤1) where the full title + artist measurably fit inside the
- * card box — real wraps, real glyph widths, no ellipsis, no clipping.
+ * Largest textScale where the full title + artist measurably fit inside the
+ * card box — grows above 1 when there's unused room, shrinks when cramped.
  */
 export function fitCallCardText(
   title: string,
@@ -426,6 +420,7 @@ export function fitCallCardText(
   const dfs = opts.displayFontScale > 0 ? opts.displayFontScale : 1;
   if (opts.boxWidthPx <= 8 || opts.boxHeightPx <= 8) return null;
   const minScale = opts.minScale ?? FIT_MIN_SCALE;
+  const maxScale = opts.maxScale ?? 2.2;
   const titleText = formatCallCardTitle((title || '').trim() || 'Unknown');
   const artistText = (artist || '').trim();
   const hasArtist = artistText.length > 0;
@@ -476,11 +471,13 @@ export function fitCallCardText(
   };
 
   let lo = minScale;
-  let hi = 1;
-  const atFull = evaluate(1);
-  if (atFull.fits) return { textScale: 1, titleLines: atFull.titleLines, artistLines: atFull.artistLines };
+  let hi = maxScale;
+  const atMax = evaluate(maxScale);
+  if (atMax.fits) {
+    return { textScale: maxScale, titleLines: atMax.titleLines, artistLines: atMax.artistLines };
+  }
   let best: CallCardFitResult | null = null;
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 10; i++) {
     const mid = (lo + hi) / 2;
     const r = evaluate(mid);
     if (r.fits) {

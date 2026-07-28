@@ -529,7 +529,8 @@ body {
 .App .call-carousel-col-inner {
   display: grid;
   grid-template-rows: repeat(5, minmax(0, 1fr));
-  gap: 6px;
+  /* Flush 5 rows — same card stacking as 5×15 (no inter-card gap). */
+  gap: 0;
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
@@ -642,7 +643,8 @@ body {
   overflow-wrap: anywhere;
 }
 
-.App .public-display .call-carousel-col-inner .call-item {
+.App .public-display .call-carousel-col-inner .call-item,
+.App .public-display .call-list-content--5x15 .call-item {
   align-items: flex-start;
 }
 
@@ -650,17 +652,11 @@ body {
   align-self: flex-start;
 }
 
-/* Song call cards: slight inset at bottom (avoid clipping text inside call-song-info) */
-.App .public-display .call-item,
+/* Shared card chrome: 1×75 carousel and 5×15 columns must be indistinguishable per card. */
 .App .public-display .call-carousel-col-inner > .call-item,
-.App .public-display .call-carousel-col-inner > .call-item-slot {
-  padding-bottom: clamp(4px, 0.45vmin, 8px) !important;
-}
-
-/* 5×15 columns: flush stack of exactly five rows — no inter-card margin */
+.App .public-display .call-carousel-col-inner > .call-item-slot,
 .App .public-display .call-list-content--5x15 .call-item {
   margin-bottom: 0 !important;
-  min-height: 0;
   padding-bottom: clamp(2px, 0.3vmin, 5px) !important;
   transition: opacity 0.35s ease, filter 0.35s ease;
 }
@@ -722,7 +718,8 @@ body {
     0 0 20px rgba(74, 222, 128, 0.8);
 }
 
-.App .public-display .call-carousel-col-inner .call-song-info {
+.App .public-display .call-carousel-col-inner .call-song-info,
+.App .public-display .call-list-content--5x15 .call-song-info {
   overflow: hidden;
   justify-content: flex-start;
   gap: clamp(2px, 0.35vmin, 5px);
