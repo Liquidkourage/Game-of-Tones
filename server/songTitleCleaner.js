@@ -1,43 +1,13 @@
 /**
- * Automatic Song Title Cleaning Utility
- * Strips Spotify / streaming metadata junk so bingo cards & projector stay readable.
- *
- * Keeps meaningful subtitles (e.g. "Theme from X", "Animal (Fuck Like A Beast)",
- * "(Good Ol' Boys)") — only removes known technical / featuring / edition tags.
+ * Song title cleaner (CommonJS) — keep in sync with client/src/utils/songTitleCleaner.ts
+ * Strips Spotify / streaming metadata junk for bingo readability.
  */
 
-export interface CleanTitleOptions {
-  removeRemastered?: boolean;
-  removeLive?: boolean;
-  removeExplicit?: boolean;
-  removeVersions?: boolean;
-  removeYears?: boolean;
-  removeParenthetical?: boolean;
-  removeDashes?: boolean;
-  removeFeaturing?: boolean;
-  removeVideoTags?: boolean;
-}
-
-const DEFAULT_OPTIONS: CleanTitleOptions = {
-  removeRemastered: true,
-  removeLive: true,
-  removeExplicit: true,
-  removeVersions: true,
-  removeYears: true,
-  removeParenthetical: true,
-  removeDashes: true,
-  removeFeaturing: true,
-  removeVideoTags: true,
-};
-
-type FilterRule = { source: RegExp; target: string };
-
-function applyRules(text: string, rules: FilterRule[]): string {
+function applyRules(text, rules) {
   return rules.reduce((t, { source, target }) => t.replace(source, target), text);
 }
 
-/** Peel stacked suffixes until stable (e.g. feat + remaster + from). */
-function peelUntilStable(text: string, step: (s: string) => string, maxPasses = 6): string {
+function peelUntilStable(text, step, maxPasses = 6) {
   let cur = text;
   for (let i = 0; i < maxPasses; i++) {
     const next = step(cur).replace(/\s+/g, ' ').trim();
@@ -47,33 +17,28 @@ function peelUntilStable(text: string, step: (s: string) => string, maxPasses = 
   return cur;
 }
 
-const REMASTERED_RULES: FilterRule[] = [
-  // Ticket To Ride - Live / Remastered
+const REMASTERED_RULES = [
   { source: /\sLive\s\/\sRemastered/i, target: ' Live' },
-  // (Remastered) / (Remastered 2009) / [Deluxe Remaster] / (2011 Remaster)
   { source: /\s[([].*?Re-?[Mm]aster(?:ed)?.*?[)\]]\s*$/i, target: '' },
-  // - 2011 - Remaster / - 2006 Remaster / - 2001 Digital Remaster
   { source: /\s[-–—]\s*\d{4}(\s*[-–—])?\s*.*?Re-?[Mm]aster(?:ed)?.*$/i, target: '' },
-  // - Remastered / - Remastered 2012 / - Remastered Version
   { source: /\s[-–—]\s*Re-?[Mm]aster(?:ed)?.*$/i, target: '' },
-  // trailing bare remastered
   { source: /\s+Re-?[Mm]aster(?:ed)?(?:\s+Version)?(?:\s+\d{4})?\s*$/i, target: '' },
 ];
 
-const LIVE_RULES: FilterRule[] = [
+const LIVE_RULES = [
   { source: /\s[-–—]\s*Live(\s+.+)?$/i, target: '' },
   { source: /\s[([].*?Live\s+at\s+.*?[)\]]\s*$/i, target: '' },
   { source: /\s[([]Live[)\]]\s*$/i, target: '' },
 ];
 
-const EXPLICIT_RULES: FilterRule[] = [
+const EXPLICIT_RULES = [
   { source: /\s[([]Explicit(?:\s+Version)?[)\]]/gi, target: '' },
   { source: /\s[([]Clean(?:\s+Version)?[)\]]/gi, target: '' },
   { source: /\s[-–—]\s*Explicit(?:\s+Version)?$/i, target: '' },
   { source: /\s[-–—]\s*Clean(?:\s+Version)?$/i, target: '' },
 ];
 
-const VERSION_RULES: FilterRule[] = [
+const VERSION_RULES = [
   { source: /\s[([]Album Version[)\]]\s*$/i, target: '' },
   { source: /\s[([]Single Version[)\]]\s*$/i, target: '' },
   { source: /\s[([]Radio Edit[)\]]\s*$/i, target: '' },
@@ -112,17 +77,14 @@ const VERSION_RULES: FilterRule[] = [
   { source: /\s[-–—]\s*Original(?:\s+Version)?(?:\s+\d{4})?$/i, target: '' },
 ];
 
-/** Featuring — strip anywhere it's tagged; keep core title. */
-const FEATURING_RULES: FilterRule[] = [
+const FEATURING_RULES = [
   { source: /\s[([](?:feat\.?|ft\.?|featuring)\s+[^)\]]+[)\]]/gi, target: '' },
   { source: /\s[([]with\s+[^)\]]+[)\]]/gi, target: '' },
   { source: /\s[-–—]\s*(?:feat\.?|ft\.?|featuring)\s+.+$/i, target: '' },
-  // Song feat. Artist (no parens) — only when clearly a suffix
   { source: /\s+(?:feat\.?|ft\.?|featuring)\s+[A-Z0-9].*$/i, target: '' },
 ];
 
-/** Soundtrack / "from the movie" suffixes — not "Theme from X" mid-title. */
-const FROM_SOUNDTRACK_RULES: FilterRule[] = [
+const FROM_SOUNDTRACK_RULES = [
   { source: /\s[([]From\s+[^)\]]+[)\]]\s*$/i, target: '' },
   { source: /\s[-–—]\s*From\s+.+$/i, target: '' },
   { source: /\s[([]Original\s+Motion\s+Picture\s+Soundtrack[)\]]\s*$/i, target: '' },
@@ -130,7 +92,7 @@ const FROM_SOUNDTRACK_RULES: FilterRule[] = [
   { source: /\s[-–—]\s*Soundtrack(?:\s+Version)?$/i, target: '' },
 ];
 
-const VIDEO_TAG_RULES: FilterRule[] = [
+const VIDEO_TAG_RULES = [
   { source: /\s*[([]\s*official\s+(?:music\s+)?(?:lyric\s+)?video[^)\]]*[)\]]/gi, target: '' },
   { source: /\s*[([]\s*official\s+audio[^)\]]*[)\]]/gi, target: '' },
   { source: /\s*[([]\s*(?:music|lyric|lyrics)\s+video[^)\]]*[)\]]/gi, target: '' },
@@ -142,12 +104,12 @@ const VIDEO_TAG_RULES: FilterRule[] = [
   { source: /\s*\bofficial\s+(?:music\s+)?(?:lyric\s+)?video\b\s*/gi, target: ' ' },
 ];
 
-const YEAR_RULES: FilterRule[] = [
+const YEAR_RULES = [
   { source: /\s[-–—]\s*\d{4}\s*$/i, target: '' },
   { source: /\s[([]\d{4}[)\]]\s*$/i, target: '' },
 ];
 
-const TRIM_LEFTOVER_RULES: FilterRule[] = [
+const TRIM_LEFTOVER_RULES = [
   { source: /\(\s*\)/g, target: '' },
   { source: /\[\s*\]/g, target: '' },
   { source: /^[\s\-–—:/|]+/, target: '' },
@@ -155,40 +117,31 @@ const TRIM_LEFTOVER_RULES: FilterRule[] = [
   { source: /\s{2,}/g, target: ' ' },
 ];
 
-/**
- * Cleans a song title by removing technical metadata and non-essential additions
- */
-export function cleanSongTitle(title: string, options: CleanTitleOptions = DEFAULT_OPTIONS): string {
+function cleanSongTitle(title) {
   if (!title || typeof title !== 'string') {
     return title;
   }
 
-  const opts = { ...DEFAULT_OPTIONS, ...options };
   let cleaned = title.trim().replace(/\s+/g, ' ');
-  // Normalize fancy dashes used by Spotify
   cleaned = cleaned.replace(/[\u2013\u2014]/g, '-');
 
   cleaned = peelUntilStable(cleaned, (s) => {
     let t = s;
-    if (opts.removeVideoTags) t = applyRules(t, VIDEO_TAG_RULES);
-    if (opts.removeRemastered) t = applyRules(t, REMASTERED_RULES);
-    if (opts.removeLive) t = applyRules(t, LIVE_RULES);
-    if (opts.removeExplicit) t = applyRules(t, EXPLICIT_RULES);
-    if (opts.removeVersions) t = applyRules(t, VERSION_RULES);
-    if (opts.removeFeaturing) t = applyRules(t, FEATURING_RULES);
-    if (opts.removeParenthetical) t = applyRules(t, FROM_SOUNDTRACK_RULES);
-    if (opts.removeYears) t = applyRules(t, YEAR_RULES);
+    t = applyRules(t, VIDEO_TAG_RULES);
+    t = applyRules(t, REMASTERED_RULES);
+    t = applyRules(t, LIVE_RULES);
+    t = applyRules(t, EXPLICIT_RULES);
+    t = applyRules(t, VERSION_RULES);
+    t = applyRules(t, FEATURING_RULES);
+    t = applyRules(t, FROM_SOUNDTRACK_RULES);
+    t = applyRules(t, YEAR_RULES);
     t = applyRules(t, TRIM_LEFTOVER_RULES);
     return t;
   });
 
-  if (opts.removeDashes) {
-    cleaned = cleaned.replace(/^\s*-\s*/, '').replace(/\s*-\s*$/, '');
-  }
-
+  cleaned = cleaned.replace(/^\s*-\s*/, '').replace(/\s*-\s*$/, '');
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
 
-  // If we've cleaned too much and left nothing meaningful, return original
   if (cleaned.length < 3) {
     return title.trim();
   }
@@ -196,63 +149,4 @@ export function cleanSongTitle(title: string, options: CleanTitleOptions = DEFAU
   return cleaned;
 }
 
-/**
- * Get a preview of what a cleaned title would look like
- */
-export function previewCleanTitle(
-  title: string,
-  options: CleanTitleOptions = DEFAULT_OPTIONS,
-): {
-  original: string;
-  cleaned: string;
-  changes: string[];
-} {
-  const original = title.trim();
-  const cleaned = cleanSongTitle(title, options);
-
-  const changes: string[] = [];
-  if (original !== cleaned) {
-    changes.push(`"${original}" → "${cleaned}"`);
-  }
-
-  return {
-    original,
-    cleaned,
-    changes,
-  };
-}
-
-/**
- * Batch clean multiple song titles
- */
-export function cleanSongTitles(
-  titles: string[],
-  options: CleanTitleOptions = DEFAULT_OPTIONS,
-): string[] {
-  return titles.map((title) => cleanSongTitle(title, options));
-}
-
-/**
- * Clean a song object's title property
- */
-export function cleanSongObject(song: any, options: CleanTitleOptions = DEFAULT_OPTIONS): any {
-  if (!song || typeof song !== 'object') {
-    return song;
-  }
-
-  return {
-    ...song,
-    name: cleanSongTitle(song.name, options),
-    title: song.title ? cleanSongTitle(song.title, options) : song.title,
-    displayName: song.displayName ? cleanSongTitle(song.displayName, options) : song.displayName,
-  };
-}
-
-export const COMMON_PATTERNS = {
-  REMASTERED: /remastered\s*\d*/i,
-  LIVE: /live\s*at\s*[^)]*\)?/i,
-  EXPLICIT: /explicit|clean/i,
-  VERSIONS: /single\s*version|radio\s*edit|album\s*version|extended\s*version|instrumental|acoustic|studio\s*version/i,
-  YEARS: /\d{4}/,
-  FEATURING: /feat\.?\s*[^)]*|featuring\s*[^)]*|with\s*[^)]*/i,
-} as const;
+module.exports = { cleanSongTitle };
