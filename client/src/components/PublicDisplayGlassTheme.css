@@ -502,6 +502,9 @@
 }
 
 .App .public-display--glass .call-song-artist {
+  font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   color: rgba(228, 234, 244, 0.9) !important;
 }
 
