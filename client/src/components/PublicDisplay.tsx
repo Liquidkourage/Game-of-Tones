@@ -60,6 +60,7 @@ import {
   describeCompositeClauseBrief,
   describeCompositeClauseAudience,
   describeCompositePatternAudienceSentence,
+  describeLinePatternLabel,
 } from '../patternDefinitions';
 
 /** Public-facing domain shown on the projector splash ("Go to …"). Display copy only — the QR code still encodes this deployment's real /player/:roomId URL. */
@@ -4024,9 +4025,7 @@ const PublicDisplay: React.FC = () => {
           : 'Pattern: Combined';
       case 'line':
       default:
-        return linesRequired > 1
-          ? `Pattern: Any ${linesRequired} complete lines (rows, columns, or diagonals)`
-          : 'Pattern: Single complete line (row, column, or diagonal)';
+        return `Pattern: ${describeLinePatternLabel(linesRequired)}`;
     }
   };
 
@@ -4054,7 +4053,7 @@ const PublicDisplay: React.FC = () => {
         return patternComposite ? describeCompositePatternAudienceSentence(patternComposite) : 'Combined';
       case 'line':
       default:
-        return linesRequired > 1 ? `Any ${linesRequired} lines` : 'Single line';
+        return describeLinePatternLabel(linesRequired);
     }
   };
 

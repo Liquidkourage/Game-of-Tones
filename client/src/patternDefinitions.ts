@@ -548,6 +548,12 @@ export function maskClauseFromSavedCustom(sp: SavedCustomPattern): PatternCompos
   };
 }
 
+/** Audience-facing line-pattern label: "Any Line", "Any 2 Lines", … */
+export function describeLinePatternLabel(linesRequired?: number | null): string {
+  const n = normalizeLinesRequired(linesRequired);
+  return n <= 1 ? 'Any Line' : `Any ${n} Lines`;
+}
+
 /** Short clause label for projector / winner UI (combined patterns). */
 export function describeCompositeClauseBrief(
   clause: PatternCompositeClause,
@@ -555,8 +561,7 @@ export function describeCompositeClauseBrief(
 ): string {
   if (clause.kind === 'preset') {
     if (clause.preset === 'line') {
-      const n = normalizeLinesRequired(clause.linesRequired);
-      return n <= 1 ? 'Any line' : `Any ${n} lines`;
+      return describeLinePatternLabel(clause.linesRequired);
     }
     if (clause.preset === 'full_card') return 'Full card';
     const def = BINGO_PATTERNS[clause.preset];
