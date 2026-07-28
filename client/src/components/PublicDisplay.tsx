@@ -1541,6 +1541,7 @@ const PublicDisplay: React.FC = () => {
     let textScale = unified.textScale;
     let titleMaxLines = unified.titleMaxLines;
     let artistMaxLines = unified.artistMaxLines;
+    let lineHeightScale = unified.lineHeightScale ?? 1;
     const fitBox = callCardFitBox(columnCallListLayout ? '5x15' : 'carousel', true);
     if (fitBox) {
       // Measured fit: shrink the shared board scale until the longest card fully fits.
@@ -1555,6 +1556,7 @@ const PublicDisplay: React.FC = () => {
           textScale = Math.min(textScale, fit.textScale);
           titleMaxLines = Math.max(titleMaxLines, fit.titleLines);
           artistMaxLines = Math.max(artistMaxLines, fit.artistLines);
+          lineHeightScale = Math.min(lineHeightScale, fit.lineHeightScale);
         }
       }
     } else {
@@ -1568,6 +1570,7 @@ const PublicDisplay: React.FC = () => {
       textScale,
       titleMaxLines,
       artistMaxLines,
+      lineHeightScale,
       plainFullTitle: true,
       clampContentHeight: true,
     };
@@ -3677,6 +3680,7 @@ const PublicDisplay: React.FC = () => {
           textScale: fit.textScale,
           titleMaxLines: Math.max(typo.titleMaxLines, fit.titleLines),
           artistMaxLines: Math.max(typo.artistMaxLines, fit.artistLines),
+          lineHeightScale: fit.lineHeightScale,
           clampContentHeight: true,
         };
         return typo;
@@ -3704,10 +3708,11 @@ const PublicDisplay: React.FC = () => {
   ): React.CSSProperties => {
     const basePx =
       kind === 'title' ? PUBLIC_DISPLAY_CALL_TITLE_BASE_PX : PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX;
+    const lhScale = typo.lineHeightScale ?? 1;
     const lh =
-      kind === 'title'
+      (kind === 'title'
         ? PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT
-        : PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT;
+        : PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT) * lhScale;
     let fontSize = Math.round(basePx * displayFontScale * typo.textScale);
     const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
     if (rowPx > 0 && !fullCard) {
@@ -3779,11 +3784,13 @@ const PublicDisplay: React.FC = () => {
     }
     const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
     const boxH = rowPx > 0 ? Math.max(24, rowPx - 2 * CALL_CARD_PAD_Y_PX) : 0;
+    const lhScale = typo.lineHeightScale ?? 1;
     const titlePx = Math.round(PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * displayFontScale * typo.textScale);
     const artistPx = Math.round(PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX * displayFontScale * typo.textScale);
-    const titleBlock = typo.titleMaxLines * PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT * titlePx;
+    const titleBlock =
+      typo.titleMaxLines * PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT * lhScale * titlePx;
     const artistBlock = hasArtist
-      ? typo.artistMaxLines * PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT * artistPx + 4
+      ? typo.artistMaxLines * PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT * lhScale * artistPx + 4
       : 0;
     const contentH = Math.round(
       titleBlock + artistBlock + PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX,

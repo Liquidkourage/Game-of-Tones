@@ -35,6 +35,11 @@ export type CallCardTypography = {
   clampContentHeight: boolean;
   /** Full title at clip start/end (plain text, not letter boxes). */
   plainFullTitle?: boolean;
+  /**
+   * Multiplier on title/artist line-height (1 = default). Fitter may squeeze
+   * down to ~0.9 when a slightly tighter stack fits the card better.
+   */
+  lineHeightScale?: number;
 };
 
 function combinedLength(title: string, artist: string): number {
@@ -157,6 +162,7 @@ export function unifyCallListTypography(typographies: CallCardTypography[]): Cal
     artistMaxLines: Math.max(...typographies.map((t) => t.artistMaxLines)),
     letterBoxScale: 1,
     clampContentHeight: typographies.some((t) => t.clampContentHeight),
+    lineHeightScale: Math.min(...typographies.map((t) => t.lineHeightScale ?? 1)),
   };
 }
 
@@ -168,9 +174,16 @@ export function capCallCardTextScaleForRow(
 ): number {
   if (rowHeightPx <= 0 || displayFontScale <= 0) return typo.textScale;
   const textHeightPx = Math.max(32, rowHeightPx - 14);
+  const lhScale = typo.lineHeightScale ?? 1;
   const atUnitScale =
-    typo.titleMaxLines * PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT * PUBLIC_DISPLAY_CALL_TITLE_BASE_PX +
-    typo.artistMaxLines * PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT * PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX;
+    typo.titleMaxLines *
+      PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT *
+      lhScale *
+      PUBLIC_DISPLAY_CALL_TITLE_BASE_PX +
+    typo.artistMaxLines *
+      PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT *
+      lhScale *
+      PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX;
   if (atUnitScale <= 0) return typo.textScale;
   const rowCap =
     ((textHeightPx - PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX) * 0.96) /
@@ -413,11 +426,17 @@ export type CallCardFitResult = {
   textScale: number;
   titleLines: number;
   artistLines: number;
+  /** 1 = default leading; down to FIT_LINE_HEIGHT_SCALE_MIN when a squeeze helps. */
+  lineHeightScale: number;
 };
+
+/** Smallest line-height multiplier the fitter may apply (~10% tighter). */
+const FIT_LINE_HEIGHT_SCALE_MIN = 0.9;
 
 /**
  * Largest textScale where the full title + artist measurably fit inside the
  * card box — grows above 1 when there's unused room, shrinks when cramped.
+ * May tighten line-height up to 10% when that yields a better (larger) fit.
  */
 export function fitCallCardText(
   title: string,
@@ -436,6 +455,7 @@ export function fitCallCardText(
   const effWidthPx = opts.boxWidthPx - 2;
   const evaluate = (
     s: number,
+    lineHeightScale: number,
   ): { fits: boolean; titleLines: number; artistLines: number } => {
     let titlePx = PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * dfs * s;
     if (opts.titleCapPx && opts.titleCapPx > 0) titlePx = Math.min(titlePx, opts.titleCapPx);
@@ -461,11 +481,11 @@ export function fitCallCardText(
         )
       : { lines: 0, overflowsWidth: false };
 
+    const titleLh = PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT * lineHeightScale;
+    const artistLh = PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT * lineHeightScale;
     const heightPx =
-      t.lines * PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT * titlePx +
-      (hasArtist
-        ? a.lines * PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT * artistPx + TITLE_ARTIST_GAP_PX
-        : 0) +
+      t.lines * titleLh * titlePx +
+      (hasArtist ? a.lines * artistLh * artistPx + TITLE_ARTIST_GAP_PX : 0) +
       CLAMPED_LINE_PADDING_PX;
     return {
       fits:
@@ -477,26 +497,54 @@ export function fitCallCardText(
     };
   };
 
-  let lo = minScale;
-  let hi = maxScale;
-  const atMax = evaluate(maxScale);
-  if (atMax.fits) {
-    return { textScale: maxScale, titleLines: atMax.titleLines, artistLines: atMax.artistLines };
-  }
-  let best: CallCardFitResult | null = null;
-  for (let i = 0; i < 10; i++) {
-    const mid = (lo + hi) / 2;
-    const r = evaluate(mid);
-    if (r.fits) {
-      best = { textScale: mid, titleLines: r.titleLines, artistLines: r.artistLines };
-      lo = mid;
-    } else {
-      hi = mid;
+  const bestScaleAt = (lineHeightScale: number): CallCardFitResult => {
+    let lo = minScale;
+    let hi = maxScale;
+    const atMax = evaluate(maxScale, lineHeightScale);
+    if (atMax.fits) {
+      return {
+        textScale: maxScale,
+        titleLines: atMax.titleLines,
+        artistLines: atMax.artistLines,
+        lineHeightScale,
+      };
     }
+    let best: CallCardFitResult | null = null;
+    for (let i = 0; i < 10; i++) {
+      const mid = (lo + hi) / 2;
+      const r = evaluate(mid, lineHeightScale);
+      if (r.fits) {
+        best = {
+          textScale: mid,
+          titleLines: r.titleLines,
+          artistLines: r.artistLines,
+          lineHeightScale,
+        };
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    if (best) return best;
+    const atMin = evaluate(minScale, lineHeightScale);
+    return {
+      textScale: minScale,
+      titleLines: atMin.titleLines,
+      artistLines: atMin.artistLines,
+      lineHeightScale,
+    };
+  };
+
+  const atDefault = bestScaleAt(1);
+  const atTight = bestScaleAt(FIT_LINE_HEIGHT_SCALE_MIN);
+  // Prefer default leading unless a 10% squeeze unlocks meaningfully larger type
+  // or is required for the content to fit at all.
+  const defaultFits = evaluate(atDefault.textScale, 1).fits;
+  const tightHelpsSize = atTight.textScale > atDefault.textScale * 1.04;
+  if (!defaultFits || tightHelpsSize) {
+    return atTight;
   }
-  if (best) return best;
-  const atMin = evaluate(minScale);
-  return { textScale: minScale, titleLines: atMin.titleLines, artistLines: atMin.artistLines };
+  return atDefault;
 }
 
 /** Bingo pattern / winner grid cells (vmin-based sizes get a scale multiplier). */
