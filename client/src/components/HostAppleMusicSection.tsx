@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Music2 } from 'lucide-react';
 import { API_BASE, ENABLE_APPLE_MUSIC } from '../config';
 import { hostFetch } from '../utils/hostFetch';
@@ -12,7 +12,7 @@ type StatusPayload = {
 
 type Props = {
   roomId: string;
-  /** Bump parent library refresh after connect/disconnect. */
+  /** Fired when connected flips (after status / connect / disconnect). Keep stable in the parent. */
   onConnectionChange?: (connected: boolean) => void;
 };
 
@@ -25,10 +25,21 @@ export function HostAppleMusicSection({ roomId: _roomId, onConnectionChange }: P
   const [statusFetchFailed, setStatusFetchFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const onConnectionChangeRef = useRef(onConnectionChange);
+  onConnectionChangeRef.current = onConnectionChange;
+  const lastNotifiedConnectedRef = useRef<boolean | null>(null);
+  const statusReadyRef = useRef(false);
+
+  const notifyConnected = useCallback((connected: boolean) => {
+    if (lastNotifiedConnectedRef.current === connected) return;
+    lastNotifiedConnectedRef.current = connected;
+    onConnectionChangeRef.current?.(connected);
+  }, []);
 
   const refreshStatus = useCallback(async () => {
     setStatusFetchFailed(false);
-    setStatusReady(false);
+    // Only flash “Checking…” on the first load — not on every parent re-render.
+    if (!statusReadyRef.current) setStatusReady(false);
     try {
       const r = await hostFetch(`${API_BASE || ''}/api/apple/music/status?_=${Date.now()}`, {
         cache: 'no-store',
@@ -40,14 +51,15 @@ export function HostAppleMusicSection({ roomId: _roomId, onConnectionChange }: P
         return;
       }
       setStatus(data);
-      onConnectionChange?.(!!data.connected);
+      notifyConnected(!!data.connected);
     } catch {
       setStatus(null);
       setStatusFetchFailed(true);
     } finally {
+      statusReadyRef.current = true;
       setStatusReady(true);
     }
-  }, [onConnectionChange]);
+  }, [notifyConnected]);
 
   useEffect(() => {
     void refreshStatus();
@@ -231,7 +243,7 @@ export function HostAppleMusicSection({ roomId: _roomId, onConnectionChange }: P
           MusicKit JS
         </a>{' '}
         and the Apple Music API. Apple Music® is a trademark of Apple Inc. An active Apple Music subscription is
-        required for playback. Allowlist this site&apos;s domain in Apple Developer → MusicKit.
+        required for playback.
       </p>
     </div>
   );

@@ -2639,6 +2639,22 @@ const HostView: React.FC = () => {
     setAppleMusicPlaylists(rows);
   }, []);
 
+  /** Stable — HostAppleMusicSection must not get a new function every render (status refetch loop). */
+  const handleAppleMusicConnectionChange = useCallback((connected: boolean) => {
+    setAppleMusicConnected((prev) => (prev === connected ? prev : connected));
+  }, []);
+
+  const prevAppleConnectedForLibraryRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (prevAppleConnectedForLibraryRef.current === null) {
+      prevAppleConnectedForLibraryRef.current = appleMusicConnected;
+      return;
+    }
+    if (prevAppleConnectedForLibraryRef.current === appleMusicConnected) return;
+    prevAppleConnectedForLibraryRef.current = appleMusicConnected;
+    setAppleMusicLibraryRefreshNonce((n) => n + 1);
+  }, [appleMusicConnected]);
+
   const togglePlaylistSort = useCallback((key: 'name' | 'tracks') => {
     setPlaylistSort((prev) => {
       if (prev.key !== key) return { key, dir: 'asc' };
@@ -10059,10 +10075,7 @@ const HostView: React.FC = () => {
       {showAppleMusicInConnectionModal ? (
         <HostAppleMusicSection
           roomId={roomId || ''}
-          onConnectionChange={(connected) => {
-            setAppleMusicConnected(connected);
-            setAppleMusicLibraryRefreshNonce((n) => n + 1);
-          }}
+          onConnectionChange={handleAppleMusicConnectionChange}
         />
       ) : null}
     </motion.div>
