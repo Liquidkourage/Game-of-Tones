@@ -199,9 +199,9 @@ export function capCallCardTextScaleForRow(
 /** Call-card titles (Jeopardy-board style): condensed caps. */
 export const PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY =
   "'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif";
-/** Artists stay in the app UI sans. */
+/** Artists use the same condensed face; titles stay ALL CAPS / heavier weight. */
 export const PUBLIC_DISPLAY_CALL_ARTIST_FONT_FAMILY =
-  "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif";
+  "'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif";
 /** Reference px for cached measurements; widths scale linearly with font size. */
 const FIT_REF_PX = 100;
 const TITLE_FONT_WEIGHT = 700;
