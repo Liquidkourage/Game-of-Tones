@@ -1511,10 +1511,13 @@ const PublicDisplay: React.FC = () => {
     const rowPx = layout === '5x15' ? fiveBy15CardRowPx : carouselCardRowPx;
     const colWidthPx = layout === '5x15' ? fiveBy15ColWidthPx : carouselColWidthPx;
     if (rowPx <= 0 || colWidthPx <= 0) return null;
-    // Card pad 10×2. Fit against the full content width — badge collision is a
-    // float spacer in-flow, so text may use the full remainder (beside + below).
+    const badgeW =
+      rowPx > 0 ? Math.max(22, Math.min(36, Math.round(rowPx * 0.28))) : callNumberBadgePx;
+    const badgeClearPx = badgeW + CALL_BADGE_TEXT_GAP_PX;
+    // Card pad 10×2; equal L/R clearance keeps text on the true card center axis
+    // while guaranteeing no glyph paints under the corner # chip.
     return {
-      boxWidthPx: colWidthPx - 20,
+      boxWidthPx: colWidthPx - 20 - 2 * badgeClearPx,
       boxHeightPx: rowPx - 14, // card padding 7px ×2
       titleCapPx: Math.round(rowPx * (plainFullTitle ? 0.4 : 0.46)),
       artistCapPx: Math.round(rowPx * (plainFullTitle ? 0.22 : 0.26)),
@@ -3756,9 +3759,9 @@ const PublicDisplay: React.FC = () => {
     fullCard: boolean,
     hasArtist: boolean,
   ): React.CSSProperties => {
-    // Full card width for title/artist. Corner # chip collision is handled by a
-    // float spacer (not left-only padding), so text wraps beside/below the chip
-    // and still uses the remainder of the card.
+    // Equal L/R inset = badge collision zone. Text centers on the true card
+    // axis (no float wrap that only pushes the first line right of the #).
+    const badgeClearPx = callNumberBadgePx + CALL_BADGE_TEXT_GAP_PX;
     const base: React.CSSProperties = {
       minWidth: 0,
       maxWidth: '100%',
@@ -3768,6 +3771,8 @@ const PublicDisplay: React.FC = () => {
       textAlign: 'center',
       position: 'relative',
       zIndex: 1,
+      paddingLeft: badgeClearPx,
+      paddingRight: badgeClearPx,
       boxSizing: 'border-box' as const,
     };
     if (fullCard || !typo.clampContentHeight) {
@@ -3787,7 +3792,7 @@ const PublicDisplay: React.FC = () => {
 
   /**
    * Corner call number: small top-left badge (Jeff / Jeopardy-board readability).
-   * Visual chip is absolute; an in-flow float spacer keeps text from overlapping it.
+   * Absolute chip; text keeps clear via equal L/R padding (true center, no overlap).
    */
   const renderCallNumberOverlay = (callNum: number | '', fullCard: boolean): React.ReactNode => {
     if (callNum === '' || callNum <= 0) return null;
@@ -3821,27 +3826,6 @@ const PublicDisplay: React.FC = () => {
       >
         {callNum}
       </div>
-    );
-  };
-
-  /** In-flow collision box matching the corner # chip so wraps never paint under it. */
-  const renderCallBadgeCollisionSpacer = (callNum: number | ''): React.ReactNode => {
-    if (callNum === '' || callNum <= 0) return null;
-    const clearPx = callNumberBadgePx + CALL_BADGE_TEXT_GAP_PX;
-    return (
-      <span
-        className="call-badge-collision-spacer"
-        aria-hidden
-        style={{
-          float: 'left',
-          width: clearPx,
-          height: clearPx,
-          margin: 0,
-          shapeOutside: 'content-box',
-          pointerEvents: 'none',
-          userSelect: 'none',
-        }}
-      />
     );
   };
 
@@ -3943,7 +3927,6 @@ const PublicDisplay: React.FC = () => {
             className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
             style={callSongInfoStyles(typo, isFullCardPattern, !!meta.artist?.trim())}
           >
-            {renderCallBadgeCollisionSpacer(callNum)}
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
                 key={(meta?.name || '') + '-t' + motionKeySuffix}
