@@ -226,10 +226,10 @@ export type CallTitleCapMetrics = {
 
 /** Fallback when canvas / fonts unavailable (Archivo Narrow-ish condensed caps). */
 const CAP_METRICS_FALLBACK: CallTitleCapMetrics = {
-  widthEm: 0.468, // 0.52 * 0.9
+  widthEm: 0.426, // ~avg capital * 0.82
   heightEm: 0.72,
-  marginXEm: 0.02,
-  advanceEm: 0.508,
+  marginXEm: 0.012,
+  advanceEm: 0.45,
 };
 
 let capMetricsCache: { key: string; value: CallTitleCapMetrics } | null = null;
@@ -261,11 +261,13 @@ export function getCallTitleCapMetrics(): CallTitleCapMetrics {
       ? hMetrics.actualBoundingBoxAscent
       : FIT_REF_PX * 0.72;
 
-  const widthEm = (avgWidthPx / FIT_REF_PX) * 0.9; // ~10% narrower than average capital
+  // Slightly under average capital so letter-reveal blanks don’t force an extra
+  // wrap vs the same title in plain caps (e.g. "(500 Miles)" on one line).
+  const widthEm = (avgWidthPx / FIT_REF_PX) * 0.82;
   const heightEm = ascent / FIT_REF_PX;
-  const marginXEm = 0.02;
+  const marginXEm = 0.012;
   const value: CallTitleCapMetrics = {
-    widthEm: Math.min(0.72, Math.max(0.36, widthEm)),
+    widthEm: Math.min(0.68, Math.max(0.34, widthEm)),
     heightEm: Math.min(0.85, Math.max(0.62, heightEm)),
     marginXEm,
     advanceEm: 0, // filled below
@@ -521,8 +523,8 @@ export function unrevealedLetterBoxStyle(scale = 1): CSSProperties {
     display: 'inline-block',
     width: `${w}em`,
     height: `${h}em`,
-    border: `${0.045 * scale}em solid rgba(255, 255, 255, 0.5)`,
-    borderRadius: `${0.06 * scale}em`,
+    border: `${0.04 * scale}em solid rgba(255, 255, 255, 0.5)`,
+    borderRadius: `${0.055 * scale}em`,
     // Sit on the text baseline like a capital glyph.
     verticalAlign: 'baseline',
     margin: `0 ${mx}em`,
