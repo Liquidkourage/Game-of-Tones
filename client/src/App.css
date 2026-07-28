@@ -616,6 +616,12 @@ body {
   align-self: flex-start;
 }
 
+/* Chip-tall L/R floats: top band stays clear + true-centered; below = full width. */
+.App .public-display .call-badge-collision-spacer {
+  pointer-events: none;
+  user-select: none;
+}
+
 .App .public-display .call-song-artist {
   font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
   font-weight: 600;
