@@ -229,10 +229,10 @@ export type CallTitleCapMetrics = {
 
 /** Fallback when canvas / fonts unavailable (Archivo Narrow-ish condensed caps). */
 const CAP_METRICS_FALLBACK: CallTitleCapMetrics = {
-  widthEm: 0.52,
+  widthEm: 0.468, // 0.52 * 0.9
   heightEm: 0.72,
   marginXEm: 0.02,
-  advanceEm: 0.56,
+  advanceEm: 0.508,
 };
 
 let capMetricsCache: { key: string; value: CallTitleCapMetrics } | null = null;
@@ -264,11 +264,11 @@ export function getCallTitleCapMetrics(): CallTitleCapMetrics {
       ? hMetrics.actualBoundingBoxAscent
       : FIT_REF_PX * 0.72;
 
-  const widthEm = avgWidthPx / FIT_REF_PX;
+  const widthEm = (avgWidthPx / FIT_REF_PX) * 0.9; // ~10% narrower than average capital
   const heightEm = ascent / FIT_REF_PX;
   const marginXEm = 0.02;
   const value: CallTitleCapMetrics = {
-    widthEm: Math.min(0.72, Math.max(0.4, widthEm)),
+    widthEm: Math.min(0.72, Math.max(0.36, widthEm)),
     heightEm: Math.min(0.85, Math.max(0.62, heightEm)),
     marginXEm,
     advanceEm: 0, // filled below
