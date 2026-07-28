@@ -616,8 +616,8 @@ body {
   align-self: flex-start;
 }
 
-/* Chip-tall L/R floats: top band stays clear + true-centered; below = full width. */
-.App .public-display .call-badge-collision-spacer {
+/* Two corner notches: only the chip band is reserved; rest of card is claimable text. */
+.App .public-display .call-card-corner-notch {
   pointer-events: none;
   user-select: none;
 }

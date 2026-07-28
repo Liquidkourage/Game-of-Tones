@@ -1474,6 +1474,9 @@ const PublicDisplay: React.FC = () => {
 
   /** Corner call # badge — text must clear this (not overlay under it). */
   const CALL_BADGE_TEXT_GAP_PX = 4;
+  /** Matches renderUnifiedCallCard padding — notches sit in the true card corners. */
+  const CALL_CARD_PAD_X_PX = 10;
+  const CALL_CARD_PAD_Y_PX = 7;
   const callCardRowPxForBadge = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
   const callNumberBadgePx =
     callCardRowPxForBadge > 0
@@ -1511,11 +1514,11 @@ const PublicDisplay: React.FC = () => {
     const rowPx = layout === '5x15' ? fiveBy15CardRowPx : carouselCardRowPx;
     const colWidthPx = layout === '5x15' ? fiveBy15ColWidthPx : carouselColWidthPx;
     if (rowPx <= 0 || colWidthPx <= 0) return null;
-    // Full content width — chip-band floats only pinch the top lines; below the
-    // chip, wraps may use the full card.
+    // Claimable text = full card minus outer pad. Corner notches only carve the
+    // top L/R chip band; they do not shrink this fit width for lines below.
     return {
-      boxWidthPx: colWidthPx - 20,
-      boxHeightPx: rowPx - 14, // card padding 7px ×2
+      boxWidthPx: colWidthPx - 2 * CALL_CARD_PAD_X_PX,
+      boxHeightPx: rowPx - 2 * CALL_CARD_PAD_Y_PX,
       titleCapPx: Math.round(rowPx * (plainFullTitle ? 0.4 : 0.46)),
       artistCapPx: Math.round(rowPx * (plainFullTitle ? 0.22 : 0.26)),
     };
@@ -3756,8 +3759,8 @@ const PublicDisplay: React.FC = () => {
     fullCard: boolean,
     hasArtist: boolean,
   ): React.CSSProperties => {
-    // No standing L/R pad. Matched float spacers (chip-tall only) keep the top
-    // band truly centered without the #; lines below the chip go edge-to-edge.
+    // Full claimable area — no standing gutters. Only the two corner notches
+    // (floated) are reserved; every other pixel is available to title/artist.
     const base: React.CSSProperties = {
       minWidth: 0,
       maxWidth: '100%',
@@ -3785,8 +3788,7 @@ const PublicDisplay: React.FC = () => {
   };
 
   /**
-   * Corner call number: absolute visual chip. Matched L/R float spacers (chip height
-   * only) clear the top band on-center; text below may use the full card width.
+   * Visible # chip in the upper-left corner (outside the text flow).
    */
   const renderCallNumberOverlay = (callNum: number | '', fullCard: boolean): React.ReactNode => {
     if (callNum === '' || callNum <= 0) return null;
@@ -3824,31 +3826,33 @@ const PublicDisplay: React.FC = () => {
   };
 
   /**
-   * Chip-tall float pair: left clears the #, right mirrors it so top lines center
-   * on the true card axis. Below this band, floats end and text goes edge-to-edge.
+   * Two corner notches cut out of the card: UL = # chip zone, UR = balance mirror.
+   * Height matches the chip only so lines below reclaim full width. Width is chip
+   * + a hair of gap (~few % of a typical call card). Pulled into card padding so
+   * notches sit on the true corners with the visible chip.
    */
-  const renderCallBadgeCollisionSpacers = (callNum: number | ''): React.ReactNode => {
+  const renderCallCardCornerNotches = (callNum: number | ''): React.ReactNode => {
     if (callNum === '' || callNum <= 0) return null;
-    const clearW = callNumberBadgePx + CALL_BADGE_TEXT_GAP_PX;
-    const clearH = callNumberBadgePx + CALL_BADGE_TEXT_GAP_PX;
+    const notchW = callNumberBadgePx + CALL_BADGE_TEXT_GAP_PX;
+    const notchH = callNumberBadgePx; // exact chip height — do not extend the pinch band
     const shared: React.CSSProperties = {
-      width: clearW,
-      height: clearH,
-      margin: 0,
+      width: notchW,
+      height: notchH,
+      marginTop: -CALL_CARD_PAD_Y_PX,
       pointerEvents: 'none',
       userSelect: 'none',
     };
     return (
       <>
         <span
-          className="call-badge-collision-spacer call-badge-collision-spacer--left"
+          className="call-card-corner-notch call-card-corner-notch--left"
           aria-hidden
-          style={{ ...shared, float: 'left' }}
+          style={{ ...shared, float: 'left', marginLeft: -CALL_CARD_PAD_X_PX }}
         />
         <span
-          className="call-badge-collision-spacer call-badge-collision-spacer--right"
+          className="call-card-corner-notch call-card-corner-notch--right"
           aria-hidden
-          style={{ ...shared, float: 'right' }}
+          style={{ ...shared, float: 'right', marginRight: -CALL_CARD_PAD_X_PX }}
         />
       </>
     );
@@ -3928,7 +3932,7 @@ const PublicDisplay: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           gap: 10,
-          padding: '7px 10px',
+          padding: `${CALL_CARD_PAD_Y_PX}px ${CALL_CARD_PAD_X_PX}px`,
           borderRadius: 12,
           marginBottom: 0,
           width: '100%',
@@ -3952,7 +3956,7 @@ const PublicDisplay: React.FC = () => {
             className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
             style={callSongInfoStyles(typo, isFullCardPattern, !!meta.artist?.trim())}
           >
-            {renderCallBadgeCollisionSpacers(callNum)}
+            {renderCallCardCornerNotches(callNum)}
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
                 key={(meta?.name || '') + '-t' + motionKeySuffix}
