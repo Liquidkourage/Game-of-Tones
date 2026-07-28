@@ -1513,10 +1513,11 @@ const PublicDisplay: React.FC = () => {
     if (rowPx <= 0 || colWidthPx <= 0) return null;
     const badgeW =
       rowPx > 0 ? Math.max(22, Math.min(36, Math.round(rowPx * 0.28))) : callNumberBadgePx;
-    // Card pad 10×2; badge + gap so wraps never collide with the corner number.
+    const badgeClearPx = badgeW + CALL_BADGE_TEXT_GAP_PX;
+    // Card pad 10×2; symmetric badge clearance so centered text isn’t optically shifted right.
     // Title/artist caps use most of the row so short titles grow into empty space.
     return {
-      boxWidthPx: colWidthPx - 20 - badgeW - CALL_BADGE_TEXT_GAP_PX,
+      boxWidthPx: colWidthPx - 20 - 2 * badgeClearPx,
       boxHeightPx: rowPx - 14, // card padding 7px ×2
       titleCapPx: Math.round(rowPx * (plainFullTitle ? 0.4 : 0.46)),
       artistCapPx: Math.round(rowPx * (plainFullTitle ? 0.22 : 0.26)),
@@ -3758,8 +3759,9 @@ const PublicDisplay: React.FC = () => {
     fullCard: boolean,
     hasArtist: boolean,
   ): React.CSSProperties => {
-    // Clear the corner call badge so wraps never paint under the number.
-    // Still much wider than the old full-height stripe.
+    // Mirror badge clearance on both sides so centered title/artist sit on the
+    // true card axis (left-only pad made text look shifted right of the # chip).
+    const badgeClearPx = callNumberBadgePx + CALL_BADGE_TEXT_GAP_PX;
     const base: React.CSSProperties = {
       minWidth: 0,
       maxWidth: '100%',
@@ -3769,7 +3771,8 @@ const PublicDisplay: React.FC = () => {
       textAlign: 'center',
       position: 'relative',
       zIndex: 1,
-      paddingLeft: callNumberBadgePx + CALL_BADGE_TEXT_GAP_PX,
+      paddingLeft: badgeClearPx,
+      paddingRight: badgeClearPx,
       boxSizing: 'border-box' as const,
     };
     if (fullCard || !typo.clampContentHeight) {
@@ -3789,7 +3792,7 @@ const PublicDisplay: React.FC = () => {
 
   /**
    * Corner call number: small top-left badge (Jeff / Jeopardy-board readability).
-   * Text clears this via paddingLeft + fit box (see callSongInfoStyles / callCardFitBox).
+   * Text clears this via symmetric horizontal pad + fit box (see callSongInfoStyles / callCardFitBox).
    */
   const renderCallNumberOverlay = (callNum: number | '', fullCard: boolean): React.ReactNode => {
     if (callNum === '' || callNum <= 0) return null;
