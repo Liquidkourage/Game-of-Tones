@@ -44,7 +44,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import io from 'socket.io-client';
-import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC } from '../config';
+import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC, ENABLE_APPLE_MUSIC } from '../config';
 import { hostFetch, getHostJwt, setHostJwt, clearHostJwt, apiOrigin, browserGoogleLoginUrl } from '../utils/hostFetch';
 import {
   BingoPattern,
@@ -98,6 +98,9 @@ import { isSpotifyJamDevice, pickPreferredPlaybackDevice } from '../utils/spotif
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
 import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './HostYoutubeMusicPlaylistLibrary';
 import { HostYoutubeIframePlayer, primeYoutubeHostPlaybackAudioUnlock } from './HostYoutubeIframePlayer';
+import { HostAppleMusicSection } from './HostAppleMusicSection';
+import { HostAppleMusicPlaylistLibrary, type AppleMixPlaylistRow } from './HostAppleMusicPlaylistLibrary';
+import { HostAppleMusicPlayer, type AppleHostPlayback } from './HostAppleMusicPlayer';
 import RoundPlanner from './RoundPlanner';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
@@ -194,6 +197,7 @@ function songsFromServerPlaybackPayload(order: unknown): Song[] {
         artist: typeof o?.artist === 'string' ? o.artist : '',
         explicit: o?.explicit === true,
         youtubeMusic: o?.youtubeMusic === true,
+        appleMusic: o?.appleMusic === true,
         sourcePlaylistId: o?.sourcePlaylistId != null ? String(o.sourcePlaylistId) : undefined,
         sourcePlaylistName: typeof o?.sourcePlaylistName === 'string' ? o.sourcePlaylistName : undefined,
         originPlaylistName:
@@ -290,6 +294,8 @@ interface Playlist {
   catalog?: boolean;
   /** User library via YouTube Music / YouTube Data API (playlist items are videos). */
   youtubeMusic?: boolean;
+  /** User library via Apple Music / MusicKit (catalog song ids). */
+  appleMusic?: boolean;
 }
 
 /** Playlists per page in the playlist-round modal (fits viewport without scrolling). */
@@ -341,6 +347,8 @@ interface Song {
   explicit?: boolean;
   /** Playback uses host YouTube iframe (video id in `id`). */
   youtubeMusic?: boolean;
+  /** Playback uses host MusicKit JS (catalog song id in `id`). */
+  appleMusic?: boolean;
   sourcePlaylistId?: string;
   sourcePlaylistName?: string;
   /** Original playlist before remapping into the night-wide Leftovers virtual playlist. */
@@ -808,7 +816,7 @@ function hostPlayerCardSnapshot(cardData: {
 /** Remote/online join (?remote=1) — shown on host player cards and bingo verification. */
 function mixRowsNeedHostSpotify(rows: Playlist[] | null): boolean {
   if (!rows || rows.length === 0) return false;
-  return rows.some((p) => p.youtubeMusic !== true && p.catalog !== true);
+  return rows.some((p) => p.youtubeMusic !== true && p.appleMusic !== true && p.catalog !== true);
 }
 
 function OnlinePlayerBadge({ compact }: { compact?: boolean }) {
@@ -935,18 +943,19 @@ function playlistMatchesTitleFlags(name: string, flags: string[]): boolean {
   return flags.some((flag) => nameLower.includes(flag.toLowerCase()));
 }
 
-/** Picks/All library filter (same rules as visible playlist effect). YouTube Music playlists always pass through. */
+/** Picks/All library filter (same rules as visible playlist effect). YouTube/Apple Music playlists always pass through. */
 function filterBasePlaylistsForMix(
   playlists: Playlist[],
   showAllPlaylists: boolean,
   titleFlags: string[],
 ): Playlist[] {
   const ytm = playlists.filter((p: Playlist) => !!p.youtubeMusic);
-  const rest = playlists.filter((p: Playlist) => !p.youtubeMusic);
+  const apple = playlists.filter((p: Playlist) => !!p.appleMusic);
+  const rest = playlists.filter((p: Playlist) => !p.youtubeMusic && !p.appleMusic);
   const spotifyPart = showAllPlaylists
     ? rest
     : rest.filter((p: Playlist) => playlistMatchesTitleFlags(p.name, titleFlags));
-  return [...spotifyPart, ...ytm];
+  return [...spotifyPart, ...ytm, ...apple];
 }
 
 /** GoT label = eligibility tag for the shared Tempo Library (public playlists for all hosts). */
@@ -1044,6 +1053,8 @@ const HostView: React.FC = () => {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   /** YouTube Music playlists (API); merged into Playlist library table and Round planner. */
   const [youtubeMusicPlaylists, setYoutubeMusicPlaylists] = useState<Playlist[]>([]);
+  /** Apple Music playlists (API); merged into Playlist library table and Round planner. */
+  const [appleMusicPlaylists, setAppleMusicPlaylists] = useState<Playlist[]>([]);
   const [selectedPlaylists, setSelectedPlaylists] = useState<Playlist[]>([]);
   /** Official packs (server allowlist + catalog Spotify refresh token). */
   const [catalogPackOptions, setCatalogPackOptions] = useState<Playlist[]>([]);
@@ -1087,7 +1098,7 @@ const HostView: React.FC = () => {
   const mixNeedsHostSpotify = useMemo(
     () =>
       mixPlaylistSelection.some(
-        (p) => p.youtubeMusic !== true && p.catalog !== true
+        (p) => p.youtubeMusic !== true && p.appleMusic !== true && p.catalog !== true
       ),
     [mixPlaylistSelection]
   );
@@ -1407,6 +1418,8 @@ const HostView: React.FC = () => {
   const [activityLog, setActivityLog] = useState<HostActivityEntry[]>([]);
   const [youtubeMusicConnected, setYoutubeMusicConnected] = useState(false);
   const [youtubeStatusReady, setYoutubeStatusReady] = useState(false);
+  const [appleMusicConnected, setAppleMusicConnected] = useState(false);
+  const [appleStatusReady, setAppleStatusReady] = useState(false);
   const [canUndoSkip, setCanUndoSkip] = useState(false);
   const roundsPanelRef = useRef<HTMLElement>(null);
   const hostShellMainRef = useRef<HTMLDivElement>(null);
@@ -1514,12 +1527,17 @@ const HostView: React.FC = () => {
   /** Bump so HostYoutubeMusicPlaylistLibrary refetches after Google OAuth return (?youtube_music=connected). */
   const [ytMusicLibraryRefreshNonce, setYtMusicLibraryRefreshNonce] = useState(0);
   const showYoutubeMusicInConnectionModal = ENABLE_YOUTUBE_MUSIC || ytMusicServerConfigured;
+  /** Server has Apple Music env; shows Connection UI even without client build flag. */
+  const [appleMusicServerConfigured, setAppleMusicServerConfigured] = useState(false);
+  const [appleMusicLibraryRefreshNonce, setAppleMusicLibraryRefreshNonce] = useState(0);
+  const showAppleMusicInConnectionModal = ENABLE_APPLE_MUSIC || appleMusicServerConfigured;
 
   const hostPlaybackSystemsReady = useMemo(() => {
     if (isSpotifyConnected && (!mixNeedsHostSpotify || (!!selectedDevice?.id && !playbackDeviceNotInList))) {
       return true;
     }
     if (showYoutubeMusicInConnectionModal && youtubeMusicConnected) return true;
+    if (showAppleMusicInConnectionModal && appleMusicConnected) return true;
     return false;
   }, [
     isSpotifyConnected,
@@ -1528,6 +1546,8 @@ const HostView: React.FC = () => {
     playbackDeviceNotInList,
     showYoutubeMusicInConnectionModal,
     youtubeMusicConnected,
+    showAppleMusicInConnectionModal,
+    appleMusicConnected,
   ]);
 
   /** Honest, host-facing playback readiness for the setup status strip. Distinguishes
@@ -1538,12 +1558,14 @@ const HostView: React.FC = () => {
     detail?: string;
   } => {
     const youtubeReady = showYoutubeMusicInConnectionModal && youtubeMusicConnected;
+    const appleReady = showAppleMusicInConnectionModal && appleMusicConnected;
     if (!isSpotifyConnected) {
+      if (appleReady) return { status: 'ready', label: 'Apple Music connected' };
       if (youtubeReady) return { status: 'ready', label: 'YouTube Music connected' };
       return {
         status: 'not_connected',
         label: 'Playback not connected',
-        detail: 'Connect Spotify (or YouTube Music) under Settings → Playback & connections.',
+        detail: 'Connect Spotify, YouTube Music, or Apple Music under Settings → Playback & connections.',
       };
     }
     if (spotifyApiOutage) {
@@ -1585,6 +1607,8 @@ const HostView: React.FC = () => {
     selectedDeviceInactive,
     showYoutubeMusicInConnectionModal,
     youtubeMusicConnected,
+    showAppleMusicInConnectionModal,
+    appleMusicConnected,
   ]);
 
   const dismissConnectionModal = useCallback(() => {
@@ -1642,6 +1666,15 @@ const HostView: React.FC = () => {
         });
         const data = (await r.json().catch(() => ({}))) as { configured?: boolean };
         if (!cancelled && data.configured === true) setYtMusicServerConfigured(true);
+      } catch {
+        /* ignore */
+      }
+      try {
+        const r = await hostFetch(`${API_BASE || ''}/api/apple/music/status?_=${Date.now()}`, {
+          cache: 'no-store',
+        });
+        const data = (await r.json().catch(() => ({}))) as { configured?: boolean };
+        if (!cancelled && data.configured === true) setAppleMusicServerConfigured(true);
       } catch {
         /* ignore */
       }
@@ -1729,6 +1762,8 @@ const HostView: React.FC = () => {
     startMs: number;
     snippetSeconds: number;
   } | null>(null);
+  /** Server-driven Apple Music / MusicKit snippet playback in this browser. */
+  const [appleHostPlayback, setAppleHostPlayback] = useState<AppleHostPlayback>(null);
 
   const youtubePlaybackBcRef = useRef<BroadcastChannel | null>(null);
   const youtubeHostPlaybackBroadcastRef = useRef(youtubeHostPlayback);
@@ -1782,9 +1817,9 @@ const HostView: React.FC = () => {
   }>({ key: 'none', dir: 'asc' });
   const [playlistLibraryPage, setPlaylistLibraryPage] = useState(0);
   /** Library source: host's own Spotify, shared Tempo Library (GoT-labeled catalog), or YouTube. */
-  const [playlistLibrarySource, setPlaylistLibrarySource] = useState<'spotify' | 'tempo' | 'youtube'>(
-    'spotify'
-  );
+  const [playlistLibrarySource, setPlaylistLibrarySource] = useState<
+    'spotify' | 'tempo' | 'youtube' | 'apple'
+  >('spotify');
   // const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]); // duplicate removed
   
   // Pause position tracking (duplicates removed below)
@@ -2486,8 +2521,11 @@ const HostView: React.FC = () => {
     if (playlistLibrarySource === 'youtube') {
       return sortedFilteredPlaylists.filter((p) => p.youtubeMusic);
     }
+    if (playlistLibrarySource === 'apple') {
+      return sortedFilteredPlaylists.filter((p) => p.appleMusic);
+    }
     // 'spotify' (My Spotify). The 'tempo' source renders the shared catalog list instead of this table.
-    return sortedFilteredPlaylists.filter((p) => !p.youtubeMusic && !p.catalog);
+    return sortedFilteredPlaylists.filter((p) => !p.youtubeMusic && !p.appleMusic && !p.catalog);
   }, [sortedFilteredPlaylists, playlistLibrarySource]);
 
   /** Shared Tempo Library: catalog packs, strictly filtered by the GoT label (eligibility tag). */
@@ -2528,9 +2566,10 @@ const HostView: React.FC = () => {
   }, [libraryTablePlaylists.length, playlistLibraryPageClamped]);
 
   const playlistLibrarySourceCounts = useMemo(() => {
-    const spotify = sortedFilteredPlaylists.filter((p) => !p.youtubeMusic && !p.catalog).length;
+    const spotify = sortedFilteredPlaylists.filter((p) => !p.youtubeMusic && !p.appleMusic && !p.catalog).length;
     const youtube = sortedFilteredPlaylists.filter((p) => p.youtubeMusic).length;
-    return { spotify, youtube, tempo: tempoLibraryPacks.length };
+    const apple = sortedFilteredPlaylists.filter((p) => p.appleMusic).length;
+    return { spotify, youtube, apple, tempo: tempoLibraryPacks.length };
   }, [sortedFilteredPlaylists, tempoLibraryPacks.length]);
 
   useEffect(() => {
@@ -2541,7 +2580,7 @@ const HostView: React.FC = () => {
     setPlaylistLibraryPage((p) => Math.min(p, Math.max(0, playlistLibraryPageCount - 1)));
   }, [playlistLibraryPageCount]);
 
-  /** Spotify + YouTube Music rows so round buckets resolve dragged ids from either source. */
+  /** Spotify + YouTube + Apple Music rows so round buckets resolve dragged ids from either source. */
   const playlistsForRoundPlanner = useMemo(() => {
     const m = new Map<string, Playlist>();
     for (const p of playlists) {
@@ -2552,19 +2591,23 @@ const HostView: React.FC = () => {
       const id = normalizeSpotifyPlaylistId(p.id);
       if (id) m.set(id, p);
     }
+    for (const p of appleMusicPlaylists) {
+      const id = normalizeSpotifyPlaylistId(p.id);
+      if (id) m.set(id, p);
+    }
     return Array.from(m.values());
-  }, [playlists, youtubeMusicPlaylists]);
+  }, [playlists, youtubeMusicPlaylists, appleMusicPlaylists]);
 
   /** Shown when the library table has no rows (search or filter). */
   const playlistLibraryEmptyMessage = useMemo(() => {
     const q = playlistQuery.trim();
     if (q) return 'No playlists match your search.';
-    const merged = [...playlists, ...youtubeMusicPlaylists];
+    const merged = [...playlists, ...youtubeMusicPlaylists, ...appleMusicPlaylists];
     if (merged.length === 0) {
       if (isSpotifyConnected && spotifyMyPlaylistsTotal === 0) {
-        return 'Spotify reports 0 playlists for the connected account. Create playlists in Spotify or connect YouTube Music under Connection, then refresh.';
+        return 'Spotify reports 0 playlists for the connected account. Create playlists in Spotify or connect YouTube/Apple Music under Connection, then refresh.';
       }
-      return 'No playlists loaded yet. Connect Spotify and/or YouTube Music under Connection, then refresh your library.';
+      return 'No playlists loaded yet. Connect Spotify, YouTube Music, and/or Apple Music under Connection, then refresh your library.';
     }
     if (!showAllPlaylists && playlists.length > 0) {
       const flagged = playlists.filter((p) =>
@@ -2581,6 +2624,7 @@ const HostView: React.FC = () => {
     playlistQuery,
     playlists,
     youtubeMusicPlaylists,
+    appleMusicPlaylists,
     showAllPlaylists,
     parsedPlaylistTitleFlags,
     spotifyMyPlaylistsTotal,
@@ -2589,6 +2633,10 @@ const HostView: React.FC = () => {
 
   const handleYoutubeMusicMixPlaylistsChange = useCallback((rows: YoutubeMixPlaylistRow[]) => {
     setYoutubeMusicPlaylists(rows);
+  }, []);
+
+  const handleAppleMusicMixPlaylistsChange = useCallback((rows: AppleMixPlaylistRow[]) => {
+    setAppleMusicPlaylists(rows);
   }, []);
 
   const togglePlaylistSort = useCallback((key: 'name' | 'tracks') => {
@@ -2648,7 +2696,7 @@ const HostView: React.FC = () => {
 
   // Update visible playlists when library loads or filter mode changes (keep assigned rows visible)
   useEffect(() => {
-    const merged = [...playlists, ...youtubeMusicPlaylists];
+    const merged = [...playlists, ...youtubeMusicPlaylists, ...appleMusicPlaylists];
     if (merged.length > 0) {
       const basePlaylists = filterBasePlaylistsForMix(merged, showAllPlaylists, parsedPlaylistTitleFlags);
       setVisiblePlaylists(
@@ -2657,7 +2705,7 @@ const HostView: React.FC = () => {
     } else {
       setVisiblePlaylists([]);
     }
-  }, [playlists, youtubeMusicPlaylists, showAllPlaylists, parsedPlaylistTitleFlags]);
+  }, [playlists, youtubeMusicPlaylists, appleMusicPlaylists, showAllPlaylists, parsedPlaylistTitleFlags]);
 
   /** YouTube Music connection status (for auto-open connection when no system is linked). */
   useEffect(() => {
@@ -2685,10 +2733,40 @@ const HostView: React.FC = () => {
     };
   }, [showYoutubeMusicInConnectionModal, ytMusicLibraryRefreshNonce]);
 
-  /** Open connection modal until Spotify and/or YouTube is ready (unless host dismissed). */
+  /** Apple Music connection status. */
+  useEffect(() => {
+    if (!showAppleMusicInConnectionModal) {
+      setAppleStatusReady(true);
+      setAppleMusicConnected(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await hostFetch(`${API_BASE || ''}/api/apple/music/status?_=${Date.now()}`, {
+          cache: 'no-store',
+        });
+        const data = (await r.json().catch(() => ({}))) as { connected?: boolean; configured?: boolean };
+        if (!cancelled) {
+          setAppleMusicConnected(!!data.connected);
+          if (data.configured === true) setAppleMusicServerConfigured(true);
+        }
+      } catch {
+        if (!cancelled) setAppleMusicConnected(false);
+      } finally {
+        if (!cancelled) setAppleStatusReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showAppleMusicInConnectionModal, appleMusicLibraryRefreshNonce]);
+
+  /** Open connection modal until Spotify and/or YouTube/Apple is ready (unless host dismissed). */
   useEffect(() => {
     if (!spotifyInitialCheckDone) return;
     if (showYoutubeMusicInConnectionModal && !youtubeStatusReady) return;
+    if (showAppleMusicInConnectionModal && !appleStatusReady) return;
     if (hostPlaybackSystemsReady) {
       connectionModalDismissedRef.current = false;
       return;
@@ -2702,6 +2780,8 @@ const HostView: React.FC = () => {
     spotifyInitialCheckDone,
     youtubeStatusReady,
     showYoutubeMusicInConnectionModal,
+    appleStatusReady,
+    showAppleMusicInConnectionModal,
     hostPlaybackSystemsReady,
   ]);
 
@@ -3021,6 +3101,7 @@ const HostView: React.FC = () => {
     setPlaybackTrackTotal(null);
     setIsPlaying(false);
     setYoutubeHostPlayback(null);
+      setAppleHostPlayback(null);
     setPlaybackState((prev) => ({
       ...prev,
       isPlaying: false,
@@ -3477,14 +3558,27 @@ const HostView: React.FC = () => {
         data.youtubeMusic === true &&
         typeof data.youtubeVideoId === 'string' &&
         data.youtubeVideoId.length > 0;
+      const apple =
+        data.appleMusic === true &&
+        typeof (data.appleSongId || data.songId) === 'string' &&
+        String(data.appleSongId || data.songId).length > 0;
       if (yt) {
         setYoutubeHostPlayback({
           videoId: data.youtubeVideoId,
           startMs: typeof data.startMs === 'number' ? data.startMs : 0,
           snippetSeconds: snippetLengthSec,
         });
+        setAppleHostPlayback(null);
+      } else if (apple) {
+        setAppleHostPlayback({
+          songId: String(data.appleSongId || data.songId),
+          startMs: typeof data.startMs === 'number' ? data.startMs : 0,
+          snippetSeconds: snippetLengthSec,
+        });
+        setYoutubeHostPlayback(null);
       } else {
         setYoutubeHostPlayback(null);
+        setAppleHostPlayback(null);
       }
 
       const ytf = youtubeTrackDisplayFields({
@@ -3536,7 +3630,7 @@ const HostView: React.FC = () => {
         'info',
       );
       
-      if (!yt) {
+      if (!yt && !apple) {
         setTimeout(() => {
           syncVolumeToSpotify();
         }, 500);
@@ -3673,6 +3767,7 @@ const HostView: React.FC = () => {
       setIsPlaying(false);
       setGameState('ended');
       setYoutubeHostPlayback(null);
+      setAppleHostPlayback(null);
       setPlaybackTrackNumber(null);
       setPlaybackTrackTotal(null);
     });
@@ -3689,6 +3784,7 @@ const HostView: React.FC = () => {
       setBingoVerificationBehindCount(0);
       setCurrentSong(null);
       setYoutubeHostPlayback(null);
+      setAppleHostPlayback(null);
       setPlaybackTrackNumber(null);
       setPlaybackTrackTotal(null);
       addLog('Game restarted by host', 'info');
@@ -3933,6 +4029,7 @@ const HostView: React.FC = () => {
         }));
         if (!syncedSong) {
           setYoutubeHostPlayback(null);
+          setAppleHostPlayback(null);
         }
       }
       if (Array.isArray(payload?.winners)) {
@@ -4967,7 +5064,7 @@ const HostView: React.FC = () => {
         console.log('?? Finalizing mix - Playlist order being sent to server:');
         playlists.forEach((p, i) => {
           console.log(
-            `   ${i + 1}. ${p.name}${p.catalog ? ' (catalog)' : ''}${p.youtubeMusic ? ' (YouTube)' : ''} (will be column ${i})`
+            `   ${i + 1}. ${p.name}${p.catalog ? ' (catalog)' : ''}${p.youtubeMusic ? ' (YouTube)' : ''}${p.appleMusic ? ' (Apple Music)' : ''} (will be column ${i})`
           );
         });
 
@@ -5408,11 +5505,25 @@ const HostView: React.FC = () => {
     const playlistsForStart =
       opts?.playlistsOverride && opts.playlistsOverride.length > 0 ? opts.playlistsOverride : mixPlaylistSelection;
     const needsHostSpotifyForStart = playlistsForStart.some(
-      (p) => p.youtubeMusic !== true && p.catalog !== true,
+      (p) => p.youtubeMusic !== true && p.appleMusic !== true && p.catalog !== true,
     );
 
     if (needsHostSpotifyForStart && !isSpotifyConnected) {
       alert('Spotify is not connected. Open Connection in the header and connect Spotify first.');
+      return false;
+    }
+
+    const appleOnlyStart =
+      playlistsForStart.length > 0 && playlistsForStart.every((p) => p.appleMusic === true);
+    const hasAnyAppleStart = playlistsForStart.some((p) => p.appleMusic === true);
+    if (hasAnyAppleStart && !appleOnlyStart) {
+      alert(
+        'Apple Music v1 supports Apple-only rounds. Remove Spotify/YouTube playlists from this mix, or use those sources alone.',
+      );
+      return false;
+    }
+    if (appleOnlyStart && !appleMusicConnected) {
+      alert('Apple Music is not connected. Open Connection and connect Apple Music first.');
       return false;
     }
 
@@ -6919,7 +7030,7 @@ const HostView: React.FC = () => {
     }): Promise<Song[]> => {
       const rows = opts?.playlists ?? mixPlaylistSelection;
       const rowsNeedHostSpotify = rows.some(
-        (p) => p.youtubeMusic !== true && p.catalog !== true
+        (p) => p.youtubeMusic !== true && p.appleMusic !== true && p.catalog !== true
       );
 
       if (rows.length === 0) {
@@ -7015,7 +7126,7 @@ const HostView: React.FC = () => {
         let allSongs: Song[] = [...kept];
 
         const needsHostSpotifyApi = toFetch.some(
-          (p) => !p.youtubeMusic && p.catalog !== true && !isLeftoversPlaylistId(p.id),
+          (p) => !p.youtubeMusic && !p.appleMusic && p.catalog !== true && !isLeftoversPlaylistId(p.id),
         );
         if (needsHostSpotifyApi && !readHostSpotifyWebEnabled()) {
           setSongList([]);
@@ -7054,7 +7165,7 @@ const HostView: React.FC = () => {
           // Recent Spotify 5xx for this playlist: skip auto-rehydration until the cooldown
           // passes (stable warning instead of a request/banner loop). Manual Refresh (force)
           // bypasses this; the server still enforces its own org+playlist cooldown.
-          if (!opts?.force && playlist.catalog !== true && playlist.youtubeMusic !== true) {
+          if (!opts?.force && playlist.catalog !== true && playlist.youtubeMusic !== true && playlist.appleMusic !== true) {
             const unavailableUntil = playlistTracksUnavailableUntilRef.current.get(playlist.id) || 0;
             if (unavailableUntil > Date.now()) {
               skippedForUpstreamCooldown += 1;
@@ -7071,8 +7182,11 @@ const HostView: React.FC = () => {
           const q = qs.toString();
           const catalog = playlist.catalog === true;
           const yt = playlist.youtubeMusic === true;
+          const apple = playlist.appleMusic === true;
           const url = yt
             ? `${API_BASE || ''}/api/youtube/music/playlist/${encodeURIComponent(playlist.id)}/items${q ? `?${q}` : ''}`
+            : apple
+            ? `${API_BASE || ''}/api/apple/music/playlist/${encodeURIComponent(playlist.id)}/tracks${q ? `?${q}` : ''}`
             : catalog
             ? `${API_BASE || ''}/api/spotify/catalog/playlist/${playlist.id}${q ? `?${q}` : ''}`
             : `${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}${q ? `?${q}` : ''}`;
@@ -7131,7 +7245,13 @@ const HostView: React.FC = () => {
           }
           if (data.success && data.tracks) {
             const plCanon = canonicalPlaylistIdForMatch(playlist.id);
-            const rows = (yt ? data.tracks.map((t) => ({ ...t, youtubeMusic: true as const })) : data.tracks).map(
+            const rows = (
+              yt
+                ? data.tracks.map((t) => ({ ...t, youtubeMusic: true as const }))
+                : apple
+                  ? data.tracks.map((t) => ({ ...t, appleMusic: true as const }))
+                  : data.tracks
+            ).map(
               (t) => ({
                 ...t,
                 sourcePlaylistId:
@@ -7147,10 +7267,10 @@ const HostView: React.FC = () => {
             allSongs.push(...rows);
             fullyLoadedPlaylistIdsRef.current.add(playlist.id);
             playlistTracksUnavailableUntilRef.current.delete(playlist.id);
-            if (!catalog && !yt) {
+            if (!catalog && !yt && !apple) {
               applyPlaylistExplicitKnowledge(playlist.id, data.tracks, setPlaylists, setSelectedPlaylists);
             }
-            if (!catalog && !yt && data.loadStats) {
+            if (!catalog && !yt && !apple && data.loadStats) {
               applyPlaylistLoadStats(playlist.id, data.loadStats);
             }
           }
@@ -8894,7 +9014,19 @@ const HostView: React.FC = () => {
     );
     if (!confirmed) return;
 
-    const needsHostSpotifyForRound = mixRows.some((p) => p.youtubeMusic !== true && p.catalog !== true);
+    const needsHostSpotifyForRound = mixRows.some((p) => p.youtubeMusic !== true && p.appleMusic !== true && p.catalog !== true);
+    const appleOnlyRound = mixRows.length > 0 && mixRows.every((p) => p.appleMusic === true);
+    const hasAnyAppleRound = mixRows.some((p) => p.appleMusic === true);
+    if (hasAnyAppleRound && !appleOnlyRound) {
+      window.alert(
+        'Apple Music v1 supports Apple-only rounds. Remove Spotify/YouTube playlists from this mix, or use those sources alone.',
+      );
+      return;
+    }
+    if (appleOnlyRound && !appleMusicConnected) {
+      window.alert('Apple Music is not connected. Open Connection and connect Apple Music first.');
+      return;
+    }
     if (needsHostSpotifyForRound && !isSpotifyConnected) {
       window.alert('Spotify is not connected. Open Connection in the header and connect Spotify first.');
       return;
@@ -9924,6 +10056,15 @@ const HostView: React.FC = () => {
         .
       </p>
       {showYoutubeMusicInConnectionModal ? <HostYoutubeMusicSection roomId={roomId || ''} /> : null}
+      {showAppleMusicInConnectionModal ? (
+        <HostAppleMusicSection
+          roomId={roomId || ''}
+          onConnectionChange={(connected) => {
+            setAppleMusicConnected(connected);
+            setAppleMusicLibraryRefreshNonce((n) => n + 1);
+          }}
+        />
+      ) : null}
     </motion.div>
   );
 
@@ -10307,6 +10448,7 @@ const HostView: React.FC = () => {
                             ['spotify', 'My Spotify', playlistLibrarySourceCounts.spotify, 'Playlists from your connected Spotify account'],
                             ['tempo', 'Tempo Library', playlistLibrarySourceCounts.tempo, 'Shared GoT-labeled playlists available to all hosts'],
                             ['youtube', 'YouTube', playlistLibrarySourceCounts.youtube, 'YouTube Music playlists'],
+                            ['apple', 'Apple Music', playlistLibrarySourceCounts.apple, 'Apple Music library playlists'],
                           ] as const
                         ).map(([id, label, count, hint]) => (
                           <button
@@ -10473,6 +10615,8 @@ const HostView: React.FC = () => {
                         ? 'Tempo Library — shared playlists for all hosts'
                         : playlistLibrarySource === 'youtube'
                           ? 'YouTube playlists'
+                          : playlistLibrarySource === 'apple'
+                            ? 'Apple Music playlists'
                           : 'My Spotify playlists'}
                     </h3>
                     {playlistLibrarySource === 'tempo' ? (
@@ -10777,6 +10921,8 @@ const HostView: React.FC = () => {
                           <div className="host-playlist-library-table__empty">
                             {playlistLibrarySource === 'youtube'
                               ? 'No YouTube playlists loaded — connect under Connection, then refresh in More options.'
+                              : playlistLibrarySource === 'apple'
+                                ? 'No Apple Music playlists loaded — connect under Connection, then refresh in More options.'
                               : playlistLibraryEmptyMessage}
                         </div>
                         ) : (
@@ -11038,6 +11184,11 @@ const HostView: React.FC = () => {
                       hostSessionReady={hostAuthBootstrapDone}
                       refreshNonce={ytMusicLibraryRefreshNonce}
                       onMixPlaylistsChange={handleYoutubeMusicMixPlaylistsChange}
+                    />
+                    <HostAppleMusicPlaylistLibrary
+                      hostSessionReady={hostAuthBootstrapDone}
+                      refreshNonce={appleMusicLibraryRefreshNonce}
+                      onMixPlaylistsChange={handleAppleMusicMixPlaylistsChange}
                     />
                     <div
                       style={{
@@ -11362,6 +11513,11 @@ const HostView: React.FC = () => {
           volume={playbackState.volume}
         />
       ) : null}
+      <HostAppleMusicPlayer
+        playback={appleHostPlayback}
+        volume={playbackState.volume}
+        isPlaying={isPlaying}
+      />
       <HostAcknowledgeModal
         open={hostAckNotification != null}
         title={hostAckNotification?.title ?? ''}

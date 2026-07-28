@@ -28,6 +28,7 @@ const credentialCrypto = require('./credentialCrypto');
 const spotifyPipelineLog = require('./spotifyPipelineLog');
 const catalogSpotify = require('./catalogSpotify');
 const youtubeMusic = require('./youtubeMusic');
+const appleMusic = require('./appleMusic');
 const { applyYoutubeCatalogTrackVerification } = require('./youtubeTrackCatalogVerify');
 const playerBingoCards = require('./playerBingoCards');
 
@@ -885,6 +886,7 @@ function markNextSongCalledAndNotify(roomId, room, song, songIndex) {
     artist: song.artist,
     explicit: song.explicit === true,
     ...(songUsesYoutubePlayback(song) ? { youtubeMusic: true } : {}),
+    ...(songUsesApplePlayback(song) ? { appleMusic: true } : {}),
   };
   try {
     const r = rooms.get(roomId);
@@ -1187,7 +1189,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     const song = room.playlistSongs[songIndex];
     routineServerLog(`🎵 Playing song ${songIndex + 1}/${room.playlistSongs.length}: ${song.name} by ${song.artist}`);
 
-    if (songUsesYoutubePlayback(song)) {
+    if (songUsesHostBrowserPlayback(song)) {
       const startMs = computeSnippetRandomStartMs(room, song);
       room.currentSongStartMs = startMs;
       room.currentSong = {
@@ -1195,7 +1197,8 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
         name: song.name,
         artist: song.artist,
         explicit: song.explicit === true,
-        youtubeMusic: true,
+        ...(songUsesYoutubePlayback(song) ? { youtubeMusic: true } : {}),
+        ...(songUsesApplePlayback(song) ? { appleMusic: true } : {}),
       };
       try {
         const r = rooms.get(roomId);
@@ -1203,7 +1206,9 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       } catch {}
       io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, song, songIndex));
       sendPlayerCardUpdates(roomId, true);
-      routineServerLog(`✅ YouTube snippet (host browser): ${song.name}`);
+      routineServerLog(
+        `✅ ${songUsesApplePlayback(song) ? 'Apple Music' : 'YouTube'} snippet (host browser): ${song.name}`,
+      );
       const saved = loadSavedDeviceForRoom(roomId);
       const dev = deviceId || (saved && saved.id) || '';
       startSimpleProgression(roomId, dev, room.snippetLength);
@@ -2272,6 +2277,16 @@ function songUsesYoutubePlayback(song) {
   return !!(song && song.youtubeMusic === true);
 }
 
+/** True when playback uses host browser MusicKit JS (not Spotify Web API transport). */
+function songUsesApplePlayback(song) {
+  return !!(song && song.appleMusic === true);
+}
+
+/** Host-browser transport (YouTube iframe or MusicKit) — skip Spotify Connect. */
+function songUsesHostBrowserPlayback(song) {
+  return songUsesYoutubePlayback(song) || songUsesApplePlayback(song);
+}
+
 /** Spotify track ids are 22-char base62; YouTube video ids are often 11 chars. */
 function looksLikeSpotifyTrackId(id) {
   const s = String(id || '');
@@ -2310,6 +2325,32 @@ function applyYoutubePlaybackHints(playlists, songs) {
   });
   if (tagged > 0) {
     routineServerLog(`🎬 Tagged ${tagged} song row(s) as YouTube playback (playlist metadata and/or id shape)`);
+  }
+  return out;
+}
+
+/**
+ * Host payloads sometimes omit `appleMusic` on tracks. Recover from playlist rows.
+ */
+function applyApplePlaybackHints(playlists, songs) {
+  if (!Array.isArray(songs) || songs.length === 0) return songs;
+  const applePlaylistIds = new Set(
+    (Array.isArray(playlists) ? playlists : [])
+      .filter((p) => p && p.appleMusic === true)
+      .map((p) => String(p.id))
+  );
+  let tagged = 0;
+  const out = songs.map((s) => {
+    if (!s || s.appleMusic === true) return s;
+    const pid = s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : '';
+    if (pid && applePlaylistIds.has(pid)) {
+      tagged++;
+      return { ...s, appleMusic: true };
+    }
+    return s;
+  });
+  if (tagged > 0) {
+    routineServerLog(`🍎 Tagged ${tagged} song row(s) as Apple Music playback (playlist metadata)`);
   }
   return out;
 }
@@ -3011,6 +3052,7 @@ function playedSongsPayloadForRoomState(room, playedSongIds) {
 
 function buildSongPlayingPayload(room, song, currentIndex) {
   const yt = songUsesYoutubePlayback(song);
+  const apple = songUsesApplePlayback(song);
   const startMs = room.currentSongStartMs || 0;
   const totalSongs = Array.isArray(room.playlistSongs) ? room.playlistSongs.length : 0;
   const playedSongIds = syncCalledSongIdsFromPlaybackIndex(room);
@@ -3027,12 +3069,17 @@ function buildSongPlayingPayload(room, song, currentIndex) {
     isFinalSong: totalSongs > 0 && currentIndex >= totalSongs - 1,
     previewUrl: song.previewUrl || null,
     youtubeMusic: yt,
+    appleMusic: apple,
     playedSongIds,
     totalPlayedCount: playedSongIds.length,
     playedSongs: playedSongsPayloadForRoomState(room, playedSongIds),
   };
   if (yt) {
     payload.youtubeVideoId = song.id;
+    payload.startMs = startMs;
+  }
+  if (apple) {
+    payload.appleSongId = song.id;
     payload.startMs = startMs;
   }
   payload.snippetElapsedMs = snippetElapsedMsForRoom(room);
@@ -3315,7 +3362,7 @@ function startSimpleContextMonitor(roomId, deviceId) {
         Array.isArray(room.playlistSongs) && typeof idx === 'number' && idx >= 0
           ? room.playlistSongs[idx]
           : null;
-      if (songUsesYoutubePlayback(activeSong)) return;
+      if (songUsesHostBrowserPlayback(activeSong)) return;
 
       const spMon = spotifyFor(roomId);
       if (room._spotifyAdvanceLocked || spMon.isQuarantined()) {
@@ -3598,7 +3645,7 @@ async function endGamePlaylistComplete(roomId, deviceId) {
 
   const dev = deviceId || room.selectedDeviceId;
   const needsSpotifyTransport =
-    Array.isArray(room.playlistSongs) && room.playlistSongs.some((s) => !songUsesYoutubePlayback(s));
+    Array.isArray(room.playlistSongs) && room.playlistSongs.some((s) => !songUsesHostBrowserPlayback(s));
   if (dev && needsSpotifyTransport) {
     try {
       await spotifyFor(roomId).pausePlayback(dev);
@@ -3722,11 +3769,13 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     return;
   }
 
-  if (songUsesYoutubePlayback(nextSong)) {
+  if (songUsesHostBrowserPlayback(nextSong)) {
     if (!roomStillPlaying(roomId)) return;
     room.currentSongStartMs = computeSnippetRandomStartMs(room, nextSong);
     markNextSongCalledAndNotify(roomId, room, nextSong, room.currentSongIndex);
-    routineServerLog(`✅ Simple advance (YouTube): ${nextSong.name}`);
+    routineServerLog(
+      `✅ Simple advance (${songUsesApplePlayback(nextSong) ? 'Apple Music' : 'YouTube'}): ${nextSong.name}`,
+    );
     startSimpleProgression(roomId, deviceId, room.snippetLength);
     return;
   }
@@ -5949,6 +5998,7 @@ io.on('connection', (socket) => {
             customSongName: s.customSongName,
             artistName: s.artistName,
             youtubeMusic: s.youtubeMusic === true,
+            appleMusic: s.appleMusic === true,
             marked: !!s.marked,
             isFreeSpace: !!s.isFreeSpace,
           })),
@@ -6995,6 +7045,7 @@ io.on('connection', (socket) => {
           artist: s.artist || '',
           explicit: s.explicit === true,
           youtubeMusic: s.youtubeMusic === true,
+            appleMusic: s.appleMusic === true,
           sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
           sourcePlaylistName:
             typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
@@ -8134,8 +8185,14 @@ async function supplementPerListPlaylistsFromSpotify(roomId, perListUnique, play
   const room = rooms.get(roomId);
   if (!room || !Array.isArray(perListUnique) || perListUnique.length !== 5) return perListUnique;
   const ytOnly =
-    Array.isArray(playlistsMeta) && playlistsMeta.length > 0 && playlistsMeta.every((p) => p?.youtubeMusic === true);
-  if (ytOnly) return perListUnique;
+    Array.isArray(playlistsMeta) &&
+    playlistsMeta.length > 0 &&
+    playlistsMeta.every((p) => p?.youtubeMusic === true);
+  const appleOnly =
+    Array.isArray(playlistsMeta) &&
+    playlistsMeta.length > 0 &&
+    playlistsMeta.every((p) => p?.appleMusic === true);
+  if (ytOnly || appleOnly) return perListUnique;
   const org = spotifyOrgForRoom(room);
   if (!(await multiTenantSpotify.ensureOrgTokensLoaded(org))) return perListUnique;
 
@@ -8346,6 +8403,7 @@ function buildFinalizedOrderPayloadFromRoom(room) {
       artist: s.artist || '',
       explicit: s.explicit === true,
       youtubeMusic: s.youtubeMusic === true,
+            appleMusic: s.appleMusic === true,
       sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
       sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
     }));
@@ -8358,6 +8416,7 @@ function buildFinalizedOrderPayloadFromRoom(room) {
       artist: s.artist || '',
       explicit: s.explicit === true,
       youtubeMusic: s.youtubeMusic === true,
+            appleMusic: s.appleMusic === true,
       sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
       sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
     }));
@@ -8381,6 +8440,7 @@ function buildFinalizedOrderPayloadFromRoom(room) {
           artist: m.artist || '',
           explicit: m.explicit === true,
           youtubeMusic: m.youtubeMusic === true,
+          appleMusic: m.appleMusic === true,
           sourcePlaylistId: m.sourcePlaylistId,
           sourcePlaylistName: m.sourcePlaylistName,
         };
@@ -8426,6 +8486,7 @@ function buildFinalizedOrderPayloadFromRoom(room) {
           artist: s?.artist || '',
           explicit: s?.explicit === true,
           youtubeMusic: s?.youtubeMusic === true,
+          appleMusic: s?.appleMusic === true,
           sourcePlaylistId:
             s?.sourcePlaylistId != null && String(s.sourcePlaylistId).trim() !== ''
               ? String(s.sourcePlaylistId)
@@ -8446,6 +8507,7 @@ function buildFinalizedOrderPayloadFromRoom(room) {
       artist: s.artist || '',
       explicit: s.explicit === true,
       youtubeMusic: s.youtubeMusic === true,
+            appleMusic: s.appleMusic === true,
       sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
       sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
     }));
@@ -8477,6 +8539,7 @@ function buildFinalizedOrderPayloadFromRoom(room) {
         artist: s.artist || '',
         explicit: s.explicit === true,
         youtubeMusic: s.youtubeMusic === true,
+            appleMusic: s.appleMusic === true,
         sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
         sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
       };
@@ -8572,6 +8635,11 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         (Array.isArray(songOrder) &&
           songOrder.length > 0 &&
           songOrder.every((s) => s && typeof s === 'object' && s.youtubeMusic === true));
+      const appleOnly =
+        (Array.isArray(playlists) && playlists.length > 0 && playlists.every((p) => p && p.appleMusic === true)) ||
+        (Array.isArray(songOrder) &&
+          songOrder.length > 0 &&
+          songOrder.every((s) => s && typeof s === 'object' && s.appleMusic === true));
 
       if (ytOnly) {
         const uid = room.ownerUserId;
@@ -8592,6 +8660,28 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
             playlistsWithSongs.push({ ...playlist, songs, originalIndex: i });
           } catch (error) {
             console.error(`❌ Error fetching YouTube playlist ${playlist.id}:`, error);
+            playlistsWithSongs.push({ ...playlist, songs: [], originalIndex: i });
+          }
+        }
+      } else if (appleOnly) {
+        const uid = room.ownerUserId;
+        if (uid == null || !appleMusic.hasCredentials(uid)) {
+          console.error('❌ Cannot generate bingo cards: Apple Music not connected for this host');
+          return false;
+        }
+        routineServerLog('📋 Fetching songs from playlists via Apple Music API...');
+        playlistsWithSongs = [];
+        for (let i = 0; i < playlists.length; i++) {
+          const playlist = playlists[i];
+          try {
+            routineServerLog(`📋 [${i + 1}/${playlists.length}] Fetching Apple Music items for playlist: ${playlist.name}`);
+            const songs = await appleMusic.listPlaylistItems(uid, String(playlist.id), {
+              playlistName: playlist.name || '',
+            });
+            routineServerLog(`✅ Found ${songs.length} songs in playlist: ${playlist.name}`);
+            playlistsWithSongs.push({ ...playlist, songs, originalIndex: i });
+          } catch (error) {
+            console.error(`❌ Error fetching Apple Music playlist ${playlist.id}:`, error);
             playlistsWithSongs.push({ ...playlist, songs: [], originalIndex: i });
           }
         }
@@ -8748,6 +8838,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
                 artist: s.artist,
                 explicit: s.explicit === true,
                 youtubeMusic: s.youtubeMusic === true,
+            appleMusic: s.appleMusic === true,
                 sourcePlaylistId:
                   s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : String(plRow?.id ?? ''),
                 sourcePlaylistName:
@@ -8793,6 +8884,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
                 artist: m?.artist || '',
                 explicit: m?.explicit === true,
                 youtubeMusic: m?.youtubeMusic === true,
+                appleMusic: m?.appleMusic === true,
                 sourcePlaylistId: m?.sourcePlaylistId,
                 sourcePlaylistName: m?.sourcePlaylistName,
               };
@@ -8860,6 +8952,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
               artist: s.artist || '',
               explicit: s.explicit === true,
               youtubeMusic: s.youtubeMusic === true,
+            appleMusic: s.appleMusic === true,
               sourcePlaylistId:
                 s.sourcePlaylistId != null && String(s.sourcePlaylistId).trim() !== ''
                   ? String(s.sourcePlaylistId)
@@ -8888,6 +8981,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
             artist: s.artist || '',
             explicit: s.explicit === true,
             youtubeMusic: s.youtubeMusic === true,
+            appleMusic: s.appleMusic === true,
             sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
             sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
           }));
@@ -9038,6 +9132,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
               ...songAliasDisplayFields(song.id, song.name, song.artist, room.dbOrganizationId ?? null),
               artistName: song.artist,
               youtubeMusic: song.youtubeMusic === true,
+              appleMusic: song.appleMusic === true,
               ...bingoSquareOriginPlaylistFields(song),
               ...(song.youtubeMusic === true &&
               typeof song.youtubeRawTitle === 'string' &&
@@ -9138,6 +9233,7 @@ function pickChosen25ForPrintableFiveByFifteen(room, useFreeSpace) {
             artist: meta[id].artist || '',
             explicit: meta[id].explicit === true,
             youtubeMusic: meta[id].youtubeMusic === true,
+              appleMusic: meta[id].appleMusic === true,
           };
         }
         return s;
@@ -9243,6 +9339,7 @@ function normalizeRoundExportSongs(songs) {
       artist: s.artist || '',
       explicit: s.explicit === true,
       youtubeMusic: s.youtubeMusic === true,
+            appleMusic: s.appleMusic === true,
       sourcePlaylistId:
         s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
       sourcePlaylistName: s.sourcePlaylistName,
@@ -9355,6 +9452,7 @@ function buildPrintableCardFromChosen(chosen25, useFreeSpace, index, orgId) {
         ...songAliasDisplayFields(s.id, s.name, s.artist, orgId ?? null),
         artistName: s.artist || '',
         youtubeMusic: s.youtubeMusic === true,
+            appleMusic: s.appleMusic === true,
         ...bingoSquareOriginPlaylistFields(s),
         ...(s.youtubeMusic === true &&
         typeof s.youtubeRawTitle === 'string' &&
@@ -9398,6 +9496,7 @@ function buildCanonicalSongMapFromRoom(room) {
       artist: m.artist || '',
       explicit: m.explicit === true,
       youtubeMusic: m.youtubeMusic === true,
+          appleMusic: m.appleMusic === true,
     };
   }
   function resolveBareId(id) {
@@ -9462,6 +9561,7 @@ function songsForPlaylistFromRoomCache(room, playlistId) {
               artist: meta[id].artist || '',
               explicit: meta[id].explicit === true,
               youtubeMusic: meta[id].youtubeMusic === true,
+              appleMusic: meta[id].appleMusic === true,
               sourcePlaylistId: String(playlistId),
             };
           }
@@ -9494,6 +9594,7 @@ function normalizeSongSnapshotForPrint(raw) {
       artist: typeof item.artist === 'string' ? item.artist : '',
       explicit: item.explicit === true,
       youtubeMusic: item.youtubeMusic === true,
+      appleMusic: item.appleMusic === true,
       sourcePlaylistId: item.sourcePlaylistId != null ? String(item.sourcePlaylistId) : undefined,
       sourcePlaylistName: typeof item.sourcePlaylistName === 'string' ? item.sourcePlaylistName : undefined,
       originPlaylistName:
@@ -9566,6 +9667,25 @@ async function fetchTracksForLateJoinPlaylist(roomId, room, playlist) {
     }
     routineServerLog(
       `⚠️ Late-join: YouTube playlist "${playlist.name}" — no cached tracks and no YouTube token in memory for host`
+    );
+    return [];
+  }
+  if (playlist.appleMusic === true) {
+    const uid = room.ownerUserId;
+    if (uid != null && appleMusic.hasCredentials(uid)) {
+      try {
+        const tracks = await appleMusic.listPlaylistItems(uid, String(playlist.id), {
+          playlistName: playlist.name || '',
+        });
+        routineServerLog(`📋 Late-join: fetched ${tracks.length} Apple Music tracks for "${playlist.name}"`);
+        return tracks;
+      } catch (e) {
+        console.error(`❌ Late-join Apple Music fetch failed for ${playlist.id}:`, e?.message || e);
+        return [];
+      }
+    }
+    routineServerLog(
+      `⚠️ Late-join: Apple Music playlist "${playlist.name}" — no cached tracks and no Apple Music token in memory for host`
     );
     return [];
   }
@@ -9845,6 +9965,7 @@ async function generateBingoCardForPlayer(roomId, playerId, options = {}) {
           ...songAliasDisplayFields(s.id, s.name, s.artist, room.dbOrganizationId ?? null),
           artistName: s.artist,
           youtubeMusic: s.youtubeMusic === true,
+            appleMusic: s.appleMusic === true,
           ...bingoSquareOriginPlaylistFields(s),
           ...(s.youtubeMusic === true &&
           typeof s.youtubeRawTitle === 'string' &&
@@ -10079,6 +10200,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
                   artist: s.artist,
                   explicit: s.explicit === true,
                   youtubeMusic: s.youtubeMusic === true,
+            appleMusic: s.appleMusic === true,
                 };
               }
             });
@@ -10159,14 +10281,37 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     }
 
     allSongs = applyYoutubePlaybackHints(playlists, allSongs);
+    allSongs = applyApplePlaybackHints(playlists, allSongs);
     allSongs = normalizeShowDeckForRoom(room, allSongs, { alignToPool: true });
     if (allSongs.length === 0) {
       console.error('❌ No songs available for playback after bingo pool normalization');
       return;
     }
 
-    const needsSpotifyTransport = allSongs.some((s) => !songUsesYoutubePlayback(s));
-    const playlistHasYoutube = allSongs.some((s) => songUsesYoutubePlayback(s));
+    const appleCount = allSongs.filter((s) => songUsesApplePlayback(s)).length;
+    const ytCount = allSongs.filter((s) => songUsesYoutubePlayback(s)).length;
+    if (appleCount > 0 && appleCount < allSongs.length) {
+      console.error('❌ Apple Music v1 requires an Apple-only mix (no Spotify/YouTube tracks in the same round)');
+      io.to(roomId).emit('playback-error', {
+        message:
+          'Apple Music rounds must use only Apple Music playlists for now. Remove Spotify/YouTube playlists from this mix, or use Spotify/YouTube alone.',
+      });
+      return;
+    }
+    if (appleCount > 0) {
+      const uid = room.ownerUserId;
+      if (uid == null || !appleMusic.hasCredentials(uid)) {
+        console.error('❌ Cannot start playback: Apple Music not connected for this host');
+        io.to(roomId).emit('playback-error', {
+          message: 'Apple Music is not connected for this host. Open Connection and connect Apple Music, then try Start Game again.',
+        });
+        return;
+      }
+    }
+
+    const needsSpotifyTransport = allSongs.some((s) => !songUsesHostBrowserPlayback(s));
+    const playlistHasYoutube = ytCount > 0;
+    const playlistHasApple = appleCount > 0;
     if (needsSpotifyTransport) {
       const tokensOk = await multiTenantSpotify.ensureOrgTokensLoaded(org);
       if (!tokensOk) {
@@ -10177,6 +10322,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         return;
       }
       await spotifyFor(roomId).ensureValidToken();
+    } else if (playlistHasApple) {
+      routineServerLog('🍎 Apple Music-only mix — Spotify Web API not required for playback transport');
     } else {
       routineServerLog('🎬 YouTube-only mix — Spotify Web API not required for playback transport');
     }
@@ -10267,6 +10414,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       if (playlistHasYoutube && needsSpotifyTransport) {
         routineServerLog('🎬 Mixed Spotify + YouTube list — skipping temporary Spotify playlist (per-track playback)');
       }
+      if (playlistHasApple) {
+        routineServerLog('🍎 Apple Music mix — skipping temporary Spotify playlist');
+      }
     }
 
     // Play the first song from the list
@@ -10295,9 +10445,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       room.selectedDeviceId = targetDeviceId;
     }
 
-    if (songUsesYoutubePlayback(firstSong)) {
-      const startMsYt = computeSnippetRandomStartMs(room, firstSong);
-      room.currentSongStartMs = startMsYt;
+    if (songUsesHostBrowserPlayback(firstSong)) {
+      const startMsBrowser = computeSnippetRandomStartMs(room, firstSong);
+      room.currentSongStartMs = startMsBrowser;
       room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
       room.calledSongIds.push(firstSong.id);
       room.currentSong = {
@@ -10305,7 +10455,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         name: firstSong.name,
         artist: firstSong.artist,
         explicit: firstSong.explicit === true,
-        youtubeMusic: true,
+        ...(songUsesYoutubePlayback(firstSong) ? { youtubeMusic: true } : {}),
+        ...(songUsesApplePlayback(firstSong) ? { appleMusic: true } : {}),
       };
       try {
         const r = rooms.get(roomId);
@@ -10314,7 +10465,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, firstSong, 0));
       syncRoomStateAfterSongStart(roomId, room);
       sendPlayerCardUpdates(roomId, true);
-      routineServerLog(`✅ Started automatic playback (YouTube host browser): ${firstSong.name} by ${firstSong.artist}`);
+      routineServerLog(
+        `✅ Started automatic playback (${songUsesApplePlayback(firstSong) ? 'Apple Music' : 'YouTube'} host browser): ${firstSong.name} by ${firstSong.artist}`,
+      );
       startSimpleProgression(roomId, targetDeviceId || '', room.snippetLength);
       return;
     }
@@ -10571,11 +10724,13 @@ async function playNextSong(roomId, deviceId) {
     }
     routineServerLog(`🎵 Playing song ${room.currentSongIndex + 1}/${room.playlistSongs.length}: ${nextSong.name} by ${nextSong.artist}`);
 
-    if (songUsesYoutubePlayback(nextSong)) {
+    if (songUsesHostBrowserPlayback(nextSong)) {
       if (!roomStillPlaying(roomId)) return;
       room.currentSongStartMs = computeSnippetRandomStartMs(room, nextSong);
       markNextSongCalledAndNotify(roomId, room, nextSong, room.currentSongIndex);
-      routineServerLog(`✅ Playing next song (YouTube host browser): ${nextSong.name}`);
+      routineServerLog(
+        `✅ Playing next song (${songUsesApplePlayback(nextSong) ? 'Apple Music' : 'YouTube'} host browser): ${nextSong.name}`,
+      );
       const devPass = deviceId || room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id || '';
       const playbackDuration = room.snippetLength * 1000;
       setRoomTimer(roomId, async () => {
@@ -14212,6 +14367,139 @@ app.post('/api/youtube/music/disconnect', (req, res) => {
   const uid = hostAuth.getHostUserIdFromRequest(req);
   if (!uid) return res.status(401).json({ error: 'login_required' });
   youtubeMusic.clearHost(uid);
+  res.json({ success: true });
+});
+
+// --- Apple Music (MusicKit developer token + music-user-token library; host browser playback) ---
+app.get('/api/apple/music/status', (req, res) => {
+  try {
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    res.json({
+      success: true,
+      configured: appleMusic.isConfigured(),
+      connected: uid != null && appleMusic.hasCredentials(uid),
+    });
+  } catch (_) {
+    res.status(500).json({ success: false, error: 'status_failed' });
+  }
+});
+
+app.use('/api/apple/music', (req, res, next) => {
+  const full = (req.originalUrl || req.url || '').split('?')[0];
+  if (req.method === 'GET' && full.endsWith('/status')) return next();
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (!uid) {
+    return res.status(401).json({
+      error: 'login_required',
+      loginUrl: '/api/auth/google',
+      message: 'Sign in with Google to connect Apple Music for this host.',
+    });
+  }
+  next();
+});
+
+app.get('/api/apple/music/developer-token', (req, res) => {
+  if (!appleMusic.isConfigured()) {
+    return res.status(503).json({
+      success: false,
+      error: 'apple_music_not_configured',
+      message:
+        'Set APPLE_MUSIC_TEAM_ID, APPLE_MUSIC_KEY_ID, and APPLE_MUSIC_PRIVATE_KEY (or PRIVATE_KEY_PATH).',
+    });
+  }
+  try {
+    const token = appleMusic.getDeveloperToken();
+    res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+    res.json({ success: true, token });
+  } catch (e) {
+    console.error('Apple Music developer-token:', e?.message || e);
+    res.status(500).json({ success: false, error: 'developer_token_failed' });
+  }
+});
+
+app.post('/api/apple/music/user-token', (req, res) => {
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (!uid) return res.status(401).json({ error: 'login_required' });
+  if (!appleMusic.isConfigured()) {
+    return res.status(503).json({
+      success: false,
+      error: 'apple_music_not_configured',
+    });
+  }
+  const token =
+    (req.body && (req.body.musicUserToken || req.body.userToken || req.body.token)) || '';
+  try {
+    appleMusic.setMusicUserToken(uid, String(token));
+    res.json({ success: true, connected: true });
+  } catch (e) {
+    const sc = e && e.statusCode;
+    if (sc === 400) {
+      return res.status(400).json({ success: false, error: 'bad_request', message: e.message });
+    }
+    console.error('Apple Music user-token:', e?.message || e);
+    res.status(500).json({ success: false, error: 'user_token_failed' });
+  }
+});
+
+app.get('/api/apple/music/playlists', async (req, res) => {
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (!uid) return res.status(401).json({ error: 'login_required' });
+  try {
+    const playlists = await appleMusic.listMyPlaylists(uid);
+    res.json({ success: true, playlists });
+  } catch (e) {
+    const sc = e && e.statusCode;
+    if (sc === 401) {
+      return res.status(401).json({
+        success: false,
+        error: 'apple_not_connected',
+        message: 'Connect Apple Music first.',
+      });
+    }
+    console.error('Apple Music playlists:', e?.message || e);
+    res.status(500).json({ success: false, error: 'playlists_failed' });
+  }
+});
+
+app.get('/api/apple/music/playlist/:playlistId/tracks', async (req, res) => {
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (!uid) return res.status(401).json({ error: 'login_required' });
+  const { playlistId } = req.params;
+  const q = req.query || {};
+  const rawName = q.playlistName != null ? q.playlistName : q.name;
+  const playlistName =
+    rawName != null && String(rawName).trim() !== '' ? String(rawName).trim() : '';
+  try {
+    const tracks = await appleMusic.listPlaylistItems(uid, playlistId, {
+      playlistName,
+    });
+    res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+    res.json({ success: true, tracks });
+  } catch (e) {
+    const sc = e && e.statusCode;
+    if (sc === 401) {
+      return res.status(401).json({
+        success: false,
+        error: 'apple_not_connected',
+        message: 'Connect Apple Music first.',
+      });
+    }
+    if (sc === 400) {
+      return res.status(400).json({
+        success: false,
+        error: 'bad_request',
+        message: e.message || 'Invalid playlist id.',
+      });
+    }
+    console.error('Apple Music playlist tracks:', e?.message || e);
+    res.status(500).json({ success: false, error: 'playlist_tracks_failed' });
+  }
+});
+
+app.post('/api/apple/music/disconnect', (req, res) => {
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (!uid) return res.status(401).json({ error: 'login_required' });
+  appleMusic.clearHost(uid);
   res.json({ success: true });
 });
 

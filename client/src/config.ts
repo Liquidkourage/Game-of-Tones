@@ -14,4 +14,9 @@ export const ENABLE_YOUTUBE_MUSIC =
   process.env.REACT_APP_ENABLE_YOUTUBE_MUSIC === '1' ||
   process.env.REACT_APP_ENABLE_YOUTUBE_MUSIC === 'true';
 
+/** Host Connection: Apple Music / MusicKit (library + browser playback). */
+export const ENABLE_APPLE_MUSIC =
+  process.env.REACT_APP_ENABLE_APPLE_MUSIC === '1' ||
+  process.env.REACT_APP_ENABLE_APPLE_MUSIC === 'true';
+
 
