@@ -1399,6 +1399,14 @@ const PublicDisplay: React.FC = () => {
   const isFullTitleRevealMode =
     titleRevealMode === 'track_start' || titleRevealMode === 'track_end';
 
+  /** Corner call # badge — text must clear this (not overlay under it). */
+  const CALL_BADGE_TEXT_GAP_PX = 4;
+  const callCardRowPxForBadge = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
+  const callNumberBadgePx =
+    callCardRowPxForBadge > 0
+      ? Math.max(22, Math.min(36, Math.round(callCardRowPxForBadge * 0.28)))
+      : 28;
+
   /** Re-fit card text once webfonts load (pre-load canvas measurements use the fallback font). */
   const [fontsReadyNonce, setFontsReadyNonce] = useState(0);
   useEffect(() => {
@@ -1415,7 +1423,7 @@ const PublicDisplay: React.FC = () => {
 
   /**
    * Pixel box available for title+artist text inside one call card (measured layout
-   * minus card padding). Corner call badge overlays — text uses nearly full width.
+   * minus card padding and corner call-number badge).
    * Hoisted function so earlier memos can use it. Returns null until measured.
    */
   function callCardFitBox(
@@ -1430,9 +1438,11 @@ const PublicDisplay: React.FC = () => {
     const rowPx = layout === '5x15' ? fiveBy15CardRowPx : carouselCardRowPx;
     const colWidthPx = layout === '5x15' ? fiveBy15ColWidthPx : carouselColWidthPx;
     if (rowPx <= 0 || colWidthPx <= 0) return null;
-    // Same pad treatment as 5×15 so 1×75 call text fits at matching sizes.
+    const badgeW =
+      rowPx > 0 ? Math.max(22, Math.min(36, Math.round(rowPx * 0.28))) : callNumberBadgePx;
+    // Card pad 10×2; badge + gap so wraps never collide with the corner number.
     return {
-      boxWidthPx: colWidthPx - 20, // card padding 10px ×2 (badge overlays corner)
+      boxWidthPx: colWidthPx - 20 - badgeW - CALL_BADGE_TEXT_GAP_PX,
       boxHeightPx: rowPx - 14, // card padding 7px ×2
       titleCapPx: Math.round(rowPx * (plainFullTitle ? 0.26 : 0.34)),
       artistCapPx: Math.round(rowPx * (plainFullTitle ? 0.17 : 0.22)),
@@ -3674,8 +3684,8 @@ const PublicDisplay: React.FC = () => {
     fullCard: boolean,
     hasArtist: boolean,
   ): React.CSSProperties => {
-    // Full card width for titles (corner call badge overlays; does not reserve a stripe).
-    // Clipping still happens at the card level (.call-item has overflow:hidden + fixed row height).
+    // Clear the corner call badge so wraps never paint under the number.
+    // Still much wider than the old full-height stripe.
     const base: React.CSSProperties = {
       minWidth: 0,
       maxWidth: '100%',
@@ -3685,6 +3695,7 @@ const PublicDisplay: React.FC = () => {
       textAlign: 'center',
       position: 'relative',
       zIndex: 1,
+      paddingLeft: callNumberBadgePx + CALL_BADGE_TEXT_GAP_PX,
       boxSizing: 'border-box' as const,
     };
     if (fullCard || !typo.clampContentHeight) {
@@ -3702,16 +3713,9 @@ const PublicDisplay: React.FC = () => {
     };
   };
 
-  /** Corner call-number badge size (overlays; text uses nearly full card width). */
-  const callCardRowPxForLayout = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
-  const callNumberBadgePx =
-    callCardRowPxForLayout > 0
-      ? Math.max(22, Math.min(36, Math.round(callCardRowPxForLayout * 0.28)))
-      : 28;
-
   /**
    * Corner call number: small top-left badge (Jeff / Jeopardy-board readability).
-   * Keeps the green cue but frees horizontal space for long titles.
+   * Text clears this via paddingLeft + fit box (see callSongInfoStyles / callCardFitBox).
    */
   const renderCallNumberOverlay = (callNum: number | '', fullCard: boolean): React.ReactNode => {
     if (callNum === '' || callNum <= 0) return null;
