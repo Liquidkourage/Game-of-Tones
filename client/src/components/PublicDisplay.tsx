@@ -1514,11 +1514,13 @@ const PublicDisplay: React.FC = () => {
     const rowPx = layout === '5x15' ? fiveBy15CardRowPx : carouselCardRowPx;
     const colWidthPx = layout === '5x15' ? fiveBy15ColWidthPx : carouselColWidthPx;
     if (rowPx <= 0 || colWidthPx <= 0) return null;
-    // Claimable text = full card minus outer pad. Corner notches only carve the
-    // top L/R chip band; they do not shrink this fit width for lines below.
+    const notchW = callNumberBadgePx + CALL_BADGE_TEXT_GAP_PX;
+    // Wrap against the *narrow* top band (between corner notches). That is the
+    // worst-case line count — fitting to full width undersizes line count, grows
+    // type too large, then the card clips top+bottom.
     return {
-      boxWidthPx: colWidthPx - 2 * CALL_CARD_PAD_X_PX,
-      boxHeightPx: rowPx - 2 * CALL_CARD_PAD_Y_PX,
+      boxWidthPx: Math.max(24, colWidthPx - 2 * CALL_CARD_PAD_X_PX - 2 * notchW),
+      boxHeightPx: Math.max(24, rowPx - 2 * CALL_CARD_PAD_Y_PX),
       titleCapPx: Math.round(rowPx * (plainFullTitle ? 0.4 : 0.46)),
       artistCapPx: Math.round(rowPx * (plainFullTitle ? 0.22 : 0.26)),
     };
@@ -3719,9 +3721,9 @@ const PublicDisplay: React.FC = () => {
           : Math.round(rowPx * artistFrac * hostZoom);
       if (maxPx > 0) fontSize = Math.min(fontSize, maxPx);
     }
-    /** Pull title cap-height up so it lines with the top edge of the call # badge (line-height half-leading). */
+    /** Small nudge only — large negative margin was helping text escape the clip box. */
     const titleTopNudgePx =
-      kind === 'title' ? Math.round(fontSize * (lh - 1) * 0.38) : 0;
+      kind === 'title' ? Math.round(fontSize * (lh - 1) * 0.15) : 0;
     const common: React.CSSProperties = {
       fontFamily:
         kind === 'title'
@@ -3766,7 +3768,7 @@ const PublicDisplay: React.FC = () => {
       maxWidth: '100%',
       width: '100%',
       display: 'block',
-      overflow: 'visible',
+      overflow: 'hidden',
       textAlign: 'center',
       position: 'relative',
       zIndex: 1,
@@ -3775,15 +3777,22 @@ const PublicDisplay: React.FC = () => {
     if (fullCard || !typo.clampContentHeight) {
       return base;
     }
+    const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
+    const boxH = rowPx > 0 ? Math.max(24, rowPx - 2 * CALL_CARD_PAD_Y_PX) : 0;
     const titlePx = Math.round(PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * displayFontScale * typo.textScale);
     const artistPx = Math.round(PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX * displayFontScale * typo.textScale);
     const titleBlock = typo.titleMaxLines * PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT * titlePx;
     const artistBlock = hasArtist
       ? typo.artistMaxLines * PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT * artistPx + 4
       : 0;
+    const contentH = Math.round(
+      titleBlock + artistBlock + PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX,
+    );
+    // Never allow the text stack taller than the card’s claimable height.
+    const maxH = boxH > 0 ? Math.min(contentH, boxH) : contentH;
     return {
       ...base,
-      maxHeight: `${Math.round(titleBlock + artistBlock + PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX)}px`,
+      maxHeight: `${maxH}px`,
     };
   };
 

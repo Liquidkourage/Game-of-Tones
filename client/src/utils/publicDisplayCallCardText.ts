@@ -280,8 +280,8 @@ export function getCallTitleCapMetrics(): CallTitleCapMetrics {
 const TITLE_ARTIST_GAP_PX = 4;
 /** callCardLineStyles paddingBottom on clamped cards (title 3 + artist 4). */
 const CLAMPED_LINE_PADDING_PX = 7;
-/** Vertical safety so descenders / rounding never kiss the clip edge. */
-const FIT_HEIGHT_SAFETY_PX = 3;
+/** Vertical safety so descenders / notch-induced extra wraps never kiss the clip edge. */
+const FIT_HEIGHT_SAFETY_PX = 8;
 /** Absolute floor — only hit by absurd single-word titles/artists (e.g. 30+ char words). */
 const FIT_MIN_SCALE = 0.22;
 
