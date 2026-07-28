@@ -1002,19 +1002,59 @@ function stripGotPlaylistDisplayName(raw: string): string {
 }
 
 /**
- * Recency class for call cards (Jeff): newest brightest, older dimmer/desaturated.
- * age 0 = most recently played; current song always forced bright via --current.
+ * Recency fade for call cards (Jeff): newest full bright, oldest of a 75-song
+ * round bottoms at 25% opacity. Age = how many calls ago (0 = most recent in
+ * played order). Current song always forced bright via --current.
  */
-function callItemRecencyClass(
+const CALL_RECENCY_POOL = 75;
+const CALL_RECENCY_MAX_AGE = CALL_RECENCY_POOL - 1; // song #1 when #75 just played
+const CALL_RECENCY_OPACITY_FLOOR = 0.25;
+const CALL_RECENCY_OPACITY_CEILING = 1;
+
+function callItemRecency(
   songId: string,
   playedOrder: string[],
   currentSongId: string | null | undefined,
-): string {
-  if (currentSongId && songId === currentSongId) return 'call-item--current call-item--age-0';
+): { className: string; style: React.CSSProperties } {
+  const isCurrent = !!(currentSongId && songId === currentSongId);
+  if (isCurrent) {
+    return {
+      className: 'call-item--current',
+      style: {
+        ['--call-recency-opacity' as string]: 1,
+        ['--call-recency-saturate' as string]: 1,
+        ['--call-recency-brightness' as string]: 1,
+      },
+    };
+  }
+
   const playIdx = playedOrder.indexOf(songId);
-  if (playIdx < 0 || playedOrder.length === 0) return 'call-item--age-8';
-  const age = Math.min(8, Math.max(0, playedOrder.length - 1 - playIdx));
-  return `call-item--age-${age}`;
+  const age =
+    playIdx < 0 || playedOrder.length === 0
+      ? CALL_RECENCY_MAX_AGE
+      : Math.min(CALL_RECENCY_MAX_AGE, Math.max(0, playedOrder.length - 1 - playIdx));
+
+  // Linear fade over the full 75-call span; snap to 1% so projector paint stays stable.
+  const t = age / CALL_RECENCY_MAX_AGE;
+  const rawOpacity =
+    CALL_RECENCY_OPACITY_CEILING -
+    t * (CALL_RECENCY_OPACITY_CEILING - CALL_RECENCY_OPACITY_FLOOR);
+  const opacity = Math.max(
+    CALL_RECENCY_OPACITY_FLOOR,
+    Math.min(CALL_RECENCY_OPACITY_CEILING, Math.round(rawOpacity * 100) / 100),
+  );
+  // Mild desat/brightness — opacity does the hierarchy; keep text readable at the floor.
+  const saturate = Math.round((1 - t * 0.35) * 100) / 100; // 1 → 0.65
+  const brightness = Math.round((1 - t * 0.08) * 100) / 100; // 1 → 0.92
+
+  return {
+    className: `call-item--age-${age}`,
+    style: {
+      ['--call-recency-opacity' as string]: opacity,
+      ['--call-recency-saturate' as string]: saturate,
+      ['--call-recency-brightness' as string]: brightness,
+    },
+  };
 }
 
 const PublicDisplay: React.FC = () => {
@@ -3812,6 +3852,7 @@ const PublicDisplay: React.FC = () => {
     meta: { name: string; artist: string };
     isCurrent: boolean;
     recencyClass: string;
+    recencyStyle?: React.CSSProperties;
     motionKeySuffix?: string;
   }): React.ReactNode => {
     const {
@@ -3824,6 +3865,7 @@ const PublicDisplay: React.FC = () => {
       meta,
       isCurrent,
       recencyClass,
+      recencyStyle,
       motionKeySuffix = '',
     } = opts;
     const typo = typographyForCallCard(songId, meta, isFullCardPattern, layout);
@@ -3837,6 +3879,7 @@ const PublicDisplay: React.FC = () => {
         initial={false}
         aria-current={isCurrent ? 'true' : undefined}
         style={{
+          ...recencyStyle,
           position: 'relative',
           display: 'flex',
           alignItems: 'center',
@@ -4520,7 +4563,7 @@ const PublicDisplay: React.FC = () => {
                 {displayItems.map((id, ri) => {
                   const meta = idMetaRef.current[id] || { name: '', artist: '' };
                   const isCurrent = gameState.currentSong?.id === id;
-                  const recencyClass = callItemRecencyClass(
+                  const recency = callItemRecency(
                     id,
                     playedOrderForDisplay,
                     gameState.currentSong?.id,
@@ -4535,7 +4578,8 @@ const PublicDisplay: React.FC = () => {
                     rowPx: fiveBy15CardRowPx,
                     meta,
                     isCurrent,
-                    recencyClass,
+                    recencyClass: recency.className,
+                    recencyStyle: recency.style,
                     motionKeySuffix: '-' + ri,
                   });
                 })}
@@ -4573,7 +4617,7 @@ const PublicDisplay: React.FC = () => {
       const callNum = playIdx >= 0 ? playIdx + 1 : idsToUse.indexOf(id) + 1;
       const meta = idMetaRef.current[id] || { name: '', artist: '' };
       const isCurrent = gameState.currentSong?.id === id;
-      const recencyClass = callItemRecencyClass(
+      const recency = callItemRecency(
         id,
         playedOrderForDisplay,
         gameState.currentSong?.id,
@@ -4587,7 +4631,8 @@ const PublicDisplay: React.FC = () => {
         rowPx: carouselCardRowPx,
         meta,
         isCurrent,
-        recencyClass,
+        recencyClass: recency.className,
+        recencyStyle: recency.style,
       });
     });
 
