@@ -662,7 +662,7 @@ body {
   transition: opacity 0.35s ease, filter 0.35s ease;
 }
 
-/* Jeff: glance-find recent calls — per-card opacity from play age (1 → 0.25 over 75). */
+/* Jeff: decade-block dimming — opacity/saturate set per card via --call-recency-* vars. */
 .App .public-display .call-item {
   opacity: var(--call-recency-opacity, 1);
   filter: saturate(var(--call-recency-saturate, 1))
