@@ -1000,6 +1000,22 @@ function stripGotPlaylistDisplayName(raw: string): string {
   return String(raw || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
 }
 
+/**
+ * Recency class for call cards (Jeff): newest brightest, older dimmer/desaturated.
+ * age 0 = most recently played; current song always forced bright via --current.
+ */
+function callItemRecencyClass(
+  songId: string,
+  playedOrder: string[],
+  currentSongId: string | null | undefined,
+): string {
+  if (currentSongId && songId === currentSongId) return 'call-item--current call-item--age-0';
+  const playIdx = playedOrder.indexOf(songId);
+  if (playIdx < 0 || playedOrder.length === 0) return 'call-item--age-8';
+  const age = Math.min(8, Math.max(0, playedOrder.length - 1 - playIdx));
+  return `call-item--age-${age}`;
+}
+
 const PublicDisplay: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(1.0);
@@ -4373,11 +4389,21 @@ const PublicDisplay: React.FC = () => {
                 const shouldScroll = !isFullCardPattern && col.length > 5 && fiveBy15CardRowPx > 0;
                 const useAbsoluteTrack = shouldScroll;
                 const displayItems = shouldScroll ? [...col, ...col] : col;
+                const currentSongId = gameState.currentSong?.id;
+                const colHasCurrent = !!(currentSongId && col.includes(currentSongId));
                 let yPx = 0;
                 if (shouldScroll) {
                   const baseRows = Math.max(0, col.length - 5);
                   const loopPx = Math.max(1, col.length * fiveBy15CardRowPx);
-                  yPx = (baseRows * fiveBy15CardRowPx + phasePx) % loopPx;
+                  // Jeff: keep the playing call on-screen — pin its column so current
+                  // sits in the bottom row when possible (other columns keep scrolling).
+                  if (colHasCurrent && currentSongId) {
+                    const currentIdx = col.indexOf(currentSongId);
+                    const pinStart = Math.max(0, Math.min(baseRows, currentIdx - 4));
+                    yPx = pinStart * fiveBy15CardRowPx;
+                  } else {
+                    yPx = (baseRows * fiveBy15CardRowPx + phasePx) % loopPx;
+                  }
                 }
                 return (
                   <div
@@ -4387,14 +4413,18 @@ const PublicDisplay: React.FC = () => {
                       left: 0,
                       right: 0,
                       top: 0,
-                      willChange: useAbsoluteTrack ? 'transform' : undefined,
+                      willChange: useAbsoluteTrack && !colHasCurrent ? 'transform' : undefined,
                       transform: useAbsoluteTrack ? `translateY(${-yPx}px)` : undefined,
                     }}
                   >
                 {displayItems.map((id, ri) => {
-                  const poolIdx = Array.isArray(oneBy75Ids) ? oneBy75Ids.indexOf(id) : -1;
                   const meta = idMetaRef.current[id] || { name: '', artist: '' };
                   const isCurrent = gameState.currentSong?.id === id;
+                  const recencyClass = callItemRecencyClass(
+                    id,
+                    playedOrderForDisplay,
+                    gameState.currentSong?.id,
+                  );
                   const typo = typographyForCallCard(id, meta, isFullCardPattern);
                   const { title, artist } = renderCallSongLines(id, meta, (t, s, h) =>
                     renderMaskedText(t, s, h, typo.letterBoxScale),
@@ -4402,7 +4432,7 @@ const PublicDisplay: React.FC = () => {
                   return (
                     <motion.div
                       key={id + '-' + ri}
-                      className={`call-item${isCurrent ? ' call-item--current' : ''}`}
+                      className={`call-item ${recencyClass}`}
                       initial={false}
                       aria-current={isCurrent ? 'true' : undefined}
                       style={{
@@ -4502,6 +4532,11 @@ const PublicDisplay: React.FC = () => {
       const callNum = playIdx >= 0 ? playIdx + 1 : idsToUse.indexOf(id) + 1;
       const meta = idMetaRef.current[id] || { name: '', artist: '' };
       const isCurrent = gameState.currentSong?.id === id;
+      const recencyClass = callItemRecencyClass(
+        id,
+        playedOrderForDisplay,
+        gameState.currentSong?.id,
+      );
       const typo = typographyForCallCard(id, meta, isFullCardPattern, 'carousel');
       const { title, artist } = renderCallSongLines(id, meta, (t, s, h) =>
         renderMaskedText(t, s, h, typo.letterBoxScale),
@@ -4509,7 +4544,7 @@ const PublicDisplay: React.FC = () => {
       return (
         <div
           key={id}
-          className={`call-item${isCurrent ? ' call-item--current' : ''}`}
+          className={`call-item ${recencyClass}`}
           aria-current={isCurrent ? 'true' : undefined}
           style={{
             position: 'relative',
