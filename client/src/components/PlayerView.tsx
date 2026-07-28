@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
@@ -158,7 +158,7 @@ const PlayerView: React.FC = () => {
   const [reconnectAttempts, setReconnectAttempts] = useState<number>(0);
   const [bingoCards, setBingoCards] = useState<BingoCard[]>([]);
   const [activeCardIndex, setActiveCardIndex] = useState(0);
-  /** -1 / 1 for AnimatePresence slide direction (multi-card only). */
+  /** -1 / 1 for card-carousel slide direction (multi-card only). */
   const [carouselDir, setCarouselDir] = useState(0);
   const [maxPlayerCards, setMaxPlayerCards] = useState(1);
   const bingoCard =
@@ -185,7 +185,7 @@ const PlayerView: React.FC = () => {
   const longPressTimer = useRef<number | null>(null);
   const hoverTooltipTimer = useRef<number | null>(null);
   const suppressNextClickRef = useRef(false);
-  /** Grid node as state so text-fit re-runs after AnimatePresence remounts (multi-card). */
+  /** Grid node as state so text-fit re-runs after multi-card slide remounts. */
   const [cardGridEl, setCardGridEl] = useState<HTMLDivElement | null>(null);
   const bindCardGridRef = useCallback((node: HTMLDivElement | null) => {
     setCardGridEl(node);
@@ -2434,31 +2434,20 @@ const PlayerView: React.FC = () => {
                     ‹
                   </button>
                   <div className="player-card-carousel__viewport">
-                    <AnimatePresence mode="wait" custom={carouselDir} initial={false}>
-                      <motion.div
-                        key={bingoCard?.cardId || bingoCard?.id || `card-${activeCardIndex}`}
-                        className="player-card-carousel__slide"
-                        custom={carouselDir}
-                        variants={{
-                          enter: (dir: number) => ({
-                            x: dir >= 0 ? 48 : -48,
-                            opacity: 0,
-                          }),
-                          center: { x: 0, opacity: 1 },
-                          exit: (dir: number) => ({
-                            x: dir >= 0 ? -48 : 48,
-                            opacity: 0,
-                          }),
-                        }}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        transition={{ type: 'spring', stiffness: 420, damping: 36, mass: 0.8 }}
-                      >
-                        {renderBingoCard()}
-                      </motion.div>
-                    </AnimatePresence>
-                  </div>
+                  {/* Enter-only motion (no AnimatePresence exit) — avoids the blank "vanish" gap on card swap. */}
+                  <motion.div
+                    key={bingoCard?.cardId || bingoCard?.id || `card-${activeCardIndex}`}
+                    className="player-card-carousel__slide"
+                    initial={{
+                      x: carouselDir === 0 ? 0 : carouselDir > 0 ? 36 : -36,
+                      opacity: carouselDir === 0 ? 1 : 0.55,
+                    }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ type: 'spring', stiffness: 480, damping: 38, mass: 0.75 }}
+                  >
+                    {renderBingoCard()}
+                  </motion.div>
+                </div>
                   <button
                     type="button"
                     className="player-card-carousel__arrow player-card-carousel__arrow--next"
@@ -2522,7 +2511,14 @@ const PlayerView: React.FC = () => {
                 <button
                   type="button"
                   className={`bingo-fab bingo-fab--canvas player-v2-call-button ${bingoHolding ? 'holding' : ''} ${hasValidBingo ? 'ready' : 'disabled'}`}
-                  aria-label={hasValidBingo ? 'Hold to call BINGO' : 'Hold to call BINGO'}
+                  aria-label={
+                    bingoHolding
+                      ? `Hold to call bingo, ${Math.round(holdProgress * 100)} percent`
+                      : 'Hold to call BINGO'
+                  }
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={bingoHolding ? Math.round(holdProgress * 100) : undefined}
                   onPointerDown={startBingoHold}
                   onPointerUp={cancelBingoHold}
                   onPointerCancel={cancelBingoHold}
@@ -2552,28 +2548,57 @@ const PlayerView: React.FC = () => {
                       pointerEvents: 'none',
                     }}
                   />
+                  {/* Full-button hold fill — Jeff: make hold duration obvious */}
                   <span
-                    className="bingo-fab-hold-track player-v2-call-track"
+                    className="player-v2-call-hold-fill"
                     aria-hidden
                     style={{
                       position: 'absolute',
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      height: 6,
-                      borderRadius: '0 0 999px 999px',
+                      inset: 0,
+                      borderRadius: 'inherit',
                       overflow: 'hidden',
                       pointerEvents: 'none',
-                      background: 'rgba(0,0,0,0.28)',
+                      zIndex: 0,
                     }}
                   >
                     <span
                       style={{
                         display: 'block',
                         height: '100%',
-                        width: `${Math.max(0, holdProgress) * 100}%`,
-                        background: 'linear-gradient(90deg, #00ff88 0%, #8b5cf6 100%)',
-                        borderRadius: '0 2px 0 0',
+                        width: `${Math.max(0, Math.min(1, holdProgress)) * 100}%`,
+                        background:
+                          'linear-gradient(90deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.22) 100%)',
+                        boxShadow: holdProgress > 0 ? 'inset 0 0 0 1px rgba(255,255,255,0.18)' : undefined,
+                        transition: bingoHolding ? 'none' : 'width 120ms ease-out',
+                      }}
+                    />
+                  </span>
+                  <span
+                    className="bingo-fab-hold-track player-v2-call-track"
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      left: 6,
+                      right: 6,
+                      bottom: 5,
+                      height: 10,
+                      borderRadius: 999,
+                      overflow: 'hidden',
+                      pointerEvents: 'none',
+                      zIndex: 1,
+                      background: 'rgba(0,0,0,0.42)',
+                      boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.14)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: 'block',
+                        height: '100%',
+                        width: `${Math.max(0, Math.min(1, holdProgress)) * 100}%`,
+                        background: 'linear-gradient(90deg, #b8ffe0 0%, #00ff88 45%, #c4b5fd 100%)',
+                        borderRadius: 999,
+                        boxShadow: holdProgress > 0.05 ? '0 0 10px rgba(0, 255, 136, 0.55)' : undefined,
+                        transition: bingoHolding ? 'none' : 'width 120ms ease-out',
                       }}
                     />
                   </span>
@@ -2581,7 +2606,7 @@ const PlayerView: React.FC = () => {
                     className="bingo-fab-label player-v2-call-label-wrap"
                     style={{
                       position: 'relative',
-                      zIndex: 1,
+                      zIndex: 2,
                       userSelect: 'none',
                       WebkitUserSelect: 'none',
                       MozUserSelect: 'none',
@@ -2590,10 +2615,12 @@ const PlayerView: React.FC = () => {
                     }}
                   >
                     <span className="player-v2-call-label player-v2-call-label--long">
-                      Hold to call BINGO
+                      {bingoHolding
+                        ? `Keep holding… ${Math.round(holdProgress * 100)}%`
+                        : 'Hold to call BINGO'}
                     </span>
                     <span className="player-v2-call-label player-v2-call-label--short">
-                      Hold · BINGO
+                      {bingoHolding ? `${Math.round(holdProgress * 100)}%` : 'Hold · BINGO'}
                     </span>
                   </span>
                 </button>
