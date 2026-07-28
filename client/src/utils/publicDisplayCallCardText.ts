@@ -15,8 +15,8 @@ export const PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT = 1.28;
 export const PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX = 10;
 
 /** ~how many letter-box characters fit per row in a narrow 5×15 call column. */
-const MASKED_CHARS_PER_LINE_TITLE = 9;
-const MASKED_CHARS_PER_LINE_ARTIST = 11;
+const MASKED_CHARS_PER_LINE_TITLE = 12;
+const MASKED_CHARS_PER_LINE_ARTIST = 12;
 /** Plain revealed text wraps wider in the same column (narrow ALL CAPS titles). */
 const PLAIN_CHARS_PER_LINE_TITLE = 22;
 const PLAIN_CHARS_PER_LINE_ARTIST = 22;
@@ -204,14 +204,78 @@ export const PUBLIC_DISPLAY_CALL_ARTIST_FONT_FAMILY =
   "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif";
 /** Reference px for cached measurements; widths scale linearly with font size. */
 const FIT_REF_PX = 100;
-/** Unrevealed letter tile width incl. margins (0.56em + 2×0.04em). */
-const MASKED_TILE_EM = 0.64;
 const TITLE_FONT_WEIGHT = 700;
 const ARTIST_FONT_WEIGHT = 800;
 
 /** Display + fit titles as ALL CAPS (Jeopardy-board readability). */
 export function formatCallCardTitle(title: string): string {
   return (title || '').toLocaleUpperCase();
+}
+
+/**
+ * Cap-letter metrics for Archivo Narrow titles — used so unrevealed tiles
+ * match real capital glyphs as closely as possible (width ≈ letter, height ≈ cap).
+ */
+export type CallTitleCapMetrics = {
+  /** Average A–Z advance width in em (of font-size). */
+  widthEm: number;
+  /** Cap height from 'H' ascent in em. */
+  heightEm: number;
+  /** Horizontal margin each side (em). */
+  marginXEm: number;
+  /** Full advance per masked letter incl. side margins (em). */
+  advanceEm: number;
+};
+
+/** Fallback when canvas / fonts unavailable (Archivo Narrow-ish condensed caps). */
+const CAP_METRICS_FALLBACK: CallTitleCapMetrics = {
+  widthEm: 0.52,
+  heightEm: 0.72,
+  marginXEm: 0.02,
+  advanceEm: 0.56,
+};
+
+let capMetricsCache: { key: string; value: CallTitleCapMetrics } | null = null;
+
+/**
+ * Measure title-font capital metrics so blank tiles ≈ letter size.
+ * Re-measures after webfonts load (fontsReady flag in cache key).
+ */
+export function getCallTitleCapMetrics(): CallTitleCapMetrics {
+  const key = fontsLoadedFlag();
+  if (capMetricsCache?.key === key) return capMetricsCache.value;
+
+  const ctx = getFitCtx();
+  if (!ctx) {
+    capMetricsCache = { key, value: CAP_METRICS_FALLBACK };
+    return CAP_METRICS_FALLBACK;
+  }
+
+  ctx.font = `${TITLE_FONT_WEIGHT} ${FIT_REF_PX}px ${PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY}`;
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let sum = 0;
+  for (const ch of alphabet) {
+    sum += ctx.measureText(ch).width;
+  }
+  const avgWidthPx = sum / alphabet.length;
+  const hMetrics = ctx.measureText('H');
+  const ascent =
+    typeof hMetrics.actualBoundingBoxAscent === 'number' && hMetrics.actualBoundingBoxAscent > 0
+      ? hMetrics.actualBoundingBoxAscent
+      : FIT_REF_PX * 0.72;
+
+  const widthEm = avgWidthPx / FIT_REF_PX;
+  const heightEm = ascent / FIT_REF_PX;
+  const marginXEm = 0.02;
+  const value: CallTitleCapMetrics = {
+    widthEm: Math.min(0.72, Math.max(0.4, widthEm)),
+    heightEm: Math.min(0.85, Math.max(0.62, heightEm)),
+    marginXEm,
+    advanceEm: 0, // filled below
+  };
+  value.advanceEm = value.widthEm + 2 * value.marginXEm;
+  capMetricsCache = { key, value };
+  return value;
 }
 /** Gap between title and artist blocks (callCardLineStyles artist marginTop). */
 const TITLE_ARTIST_GAP_PX = 4;
@@ -250,18 +314,18 @@ function wordWidthUnits(word: string, weight: number, masked: boolean, fontFamil
   const hit = wordUnitsCache.get(key);
   if (hit !== undefined) return hit;
   const ctx = getFitCtx();
+  const tileAdvancePx = getCallTitleCapMetrics().advanceEm * FIT_REF_PX;
   let units: number;
   if (!ctx) {
-    units = word.length * (masked ? MASKED_TILE_EM * FIT_REF_PX : 0.55 * FIT_REF_PX);
+    units = word.length * (masked ? tileAdvancePx : 0.55 * FIT_REF_PX);
   } else {
     ctx.font = `${weight} ${FIT_REF_PX}px ${fontFamily}`;
     if (masked) {
       units = 0;
       for (const ch of Array.from(word)) {
         const glyph = ctx.measureText(ch).width;
-        units += /[A-Za-z0-9]/.test(ch)
-          ? Math.max(MASKED_TILE_EM * FIT_REF_PX, glyph)
-          : glyph;
+        // Tile sized ≈ average capital; never narrower than the real glyph (W, M, …).
+        units += /[A-Za-z0-9]/.test(ch) ? Math.max(tileAdvancePx, glyph) : glyph;
       }
     } else {
       units = ctx.measureText(word).width;
@@ -445,17 +509,22 @@ export function maxHeightEm(lineHeight: number, lines: number): string {
   return `calc(${lineHeight}em * ${lines})`;
 }
 
-/** Unrevealed letter tile style; scales with parent font-size via em. */
+/** Unrevealed letter tile — sized from measured Archivo Narrow caps (≈ real letter). */
 export function unrevealedLetterBoxStyle(scale = 1): CSSProperties {
+  const m = getCallTitleCapMetrics();
+  const w = m.widthEm * scale;
+  const h = m.heightEm * scale;
+  const mx = m.marginXEm * scale;
   return {
     display: 'inline-block',
-    width: `${0.56 * scale}em`,
-    height: `${0.8 * scale}em`,
-    border: '0.06em solid rgba(255, 255, 255, 0.42)',
-    borderRadius: '0.09em',
-    verticalAlign: '-0.08em',
-    margin: '0 0.04em',
+    width: `${w}em`,
+    height: `${h}em`,
+    border: `${0.045 * scale}em solid rgba(255, 255, 255, 0.5)`,
+    borderRadius: `${0.06 * scale}em`,
+    // Sit on the text baseline like a capital glyph.
+    verticalAlign: 'baseline',
+    margin: `0 ${mx}em`,
     boxSizing: 'border-box',
-    background: 'rgba(255, 255, 255, 0.05)',
+    background: 'rgba(255, 255, 255, 0.08)',
   };
 }
