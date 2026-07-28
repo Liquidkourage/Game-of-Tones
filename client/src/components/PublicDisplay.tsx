@@ -33,6 +33,7 @@ import {
   capCallCardTextScaleForRow,
   fitCallCardText,
   formatCallCardTitle,
+  formatCallCardArtist,
   unifyCallListTypography,
   maxHeightEm,
   PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX,
@@ -3776,10 +3777,11 @@ const PublicDisplay: React.FC = () => {
   ): { title: React.ReactNode; artist: React.ReactNode | null } => {
     const ui = getCallSongRevealUi(songId);
     const titleCaps = formatCallCardTitle(meta.name || 'Unknown');
+    const artistCaps = formatCallCardArtist(meta.artist || '');
     if (ui.kind === 'plain') {
       return {
         title: <span>{titleCaps || 'UNKNOWN'}</span>,
-        artist: meta.artist ? <span>{meta.artist}</span> : null,
+        artist: artistCaps ? <span>{artistCaps}</span> : null,
       };
     }
     if (ui.kind === 'playing_placeholder') {
@@ -3792,7 +3794,7 @@ const PublicDisplay: React.FC = () => {
     }
     return {
       title: maskFn(titleCaps || 'UNKNOWN', ui.revealedSet, revealToast),
-      artist: maskFn(meta.artist || '', ui.revealedSet, revealToast),
+      artist: artistCaps ? maskFn(artistCaps, ui.revealedSet, revealToast) : null,
     };
   };
 

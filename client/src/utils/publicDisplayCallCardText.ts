@@ -191,7 +191,7 @@ export function capCallCardTextScaleForRow(
 /** Call-card titles (Jeopardy-board style): condensed caps. */
 export const PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY =
   "'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif";
-/** Artists use the same condensed face; titles stay ALL CAPS / heavier weight. */
+/** Artists use the same condensed face + ALL CAPS; titles stay heavier weight. */
 export const PUBLIC_DISPLAY_CALL_ARTIST_FONT_FAMILY =
   "'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif";
 /** Reference px for cached measurements; widths scale linearly with font size. */
@@ -202,6 +202,11 @@ const ARTIST_FONT_WEIGHT = 800;
 /** Display + fit titles as ALL CAPS (Jeopardy-board readability). */
 export function formatCallCardTitle(title: string): string {
   return (title || '').toLocaleUpperCase();
+}
+
+/** Artists match titles: ALL CAPS on the public call board. */
+export function formatCallCardArtist(artist: string): string {
+  return (artist || '').toLocaleUpperCase();
 }
 
 /**
@@ -422,7 +427,7 @@ export function fitCallCardText(
   const minScale = opts.minScale ?? FIT_MIN_SCALE;
   const maxScale = opts.maxScale ?? 2.2;
   const titleText = formatCallCardTitle((title || '').trim() || 'Unknown');
-  const artistText = (artist || '').trim();
+  const artistText = formatCallCardArtist((artist || '').trim());
   const hasArtist = artistText.length > 0;
 
   // Small slack absorbs canvas-vs-DOM kerning/subpixel differences.

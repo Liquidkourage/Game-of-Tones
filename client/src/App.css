@@ -620,6 +620,7 @@ body {
   font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
   font-weight: 600;
   letter-spacing: 0.02em;
+  text-transform: uppercase;
   white-space: normal !important;
   word-break: break-word;
   overflow-wrap: anywhere;
