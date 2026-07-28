@@ -1479,11 +1479,11 @@ code {
 
 .bingo-card-display.public-pattern-panel .bingo-card-header {
   flex: 0 1 auto;
-  /* Keep combined-pattern copy from eating the animated grid. */
-  max-height: min(34%, 11.5rem);
+  /* Room for reveal-toast-sized pattern titles; still leave the grid animating. */
+  max-height: min(40%, 16rem);
   overflow: hidden;
   margin-bottom: 4px;
-  padding-bottom: 2px;
+  padding-bottom: 4px;
   gap: 2px;
 }
 
@@ -1626,12 +1626,13 @@ code {
 
 .bingo-card-display.public-pattern-panel .bingo-card-header h2.pattern-title-text {
   font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
-  font-size: clamp(0.7rem, 4.2cqw, 1.85rem);
-  font-weight: 700;
+  /* Match reveal-toast readability on the projector */
+  font-size: clamp(1.5rem, 3.8vmin, 2.8rem);
+  font-weight: 800;
   letter-spacing: 0.05em;
-  line-height: 1.12;
+  line-height: 1.15;
   text-align: center;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
   flex: 1 1 100%;
   min-width: 0;
   word-break: break-word;
