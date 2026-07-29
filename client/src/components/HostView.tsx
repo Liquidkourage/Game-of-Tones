@@ -100,7 +100,7 @@ import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './H
 import { HostYoutubeIframePlayer, primeYoutubeHostPlaybackAudioUnlock } from './HostYoutubeIframePlayer';
 import { HostAppleMusicSection } from './HostAppleMusicSection';
 import { HostAppleMusicPlaylistLibrary, type AppleMixPlaylistRow } from './HostAppleMusicPlaylistLibrary';
-import { HostAppleMusicPlayer, type AppleHostPlayback } from './HostAppleMusicPlayer';
+import { HostAppleMusicPlayer, type AppleHostPlayback, primeAppleMusicHostPlayback } from './HostAppleMusicPlayer';
 import RoundPlanner from './RoundPlanner';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
@@ -5691,6 +5691,15 @@ const HostView: React.FC = () => {
         addLog('Starting game from saved round — server shuffles playback order, then plays 1→N', 'info');
       } else if (mixFinalized) {
         addLog('Starting game — server shuffles playback order from your bingo pool, then plays 1→N', 'info');
+      }
+
+      // Prime MusicKit under the Start Game click so call #1 isn't blocked / raced on empty queue.
+      if (appleOnlyStart) {
+        try {
+          await primeAppleMusicHostPlayback();
+        } catch {
+          /* ignore */
+        }
       }
 
       socket.emit('start-game', {

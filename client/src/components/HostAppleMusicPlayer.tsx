@@ -32,22 +32,53 @@ async function ensureConfigured(): Promise<MusicKitInstance | null> {
 }
 
 /**
+ * Call from a user gesture (Start Game / Connect) so the first MusicKit play isn't blocked.
+ */
+export async function primeAppleMusicHostPlayback(): Promise<void> {
+  try {
+    const mk = await ensureConfigured();
+    if (!mk) return;
+    const prevVol = typeof mk.volume === 'number' ? mk.volume : 1;
+    try {
+      mk.volume = 0.001;
+    } catch {
+      /* ignore */
+    }
+    // Touch the player under the gesture; ignore failures when no queue is loaded yet.
+    try {
+      await mk.play();
+    } catch {
+      /* ignore */
+    }
+    try {
+      await mk.pause();
+    } catch {
+      /* ignore */
+    }
+    try {
+      mk.volume = prevVol > 0 ? prevVol : 1;
+    } catch {
+      /* ignore */
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
  * Host-browser MusicKit snippet player. Server owns call order; this only transports audio.
- *
- * Important: one play pipeline + generation counters. A competing pause/play effect and
- * stale snippet timers were silencing every other song on advance.
  */
 export function HostAppleMusicPlayer({ playback, volume, isPlaying }: Props) {
   const snippetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clipGenerationRef = useRef(0);
   const volumeRef = useRef(volume);
   const isPlayingRef = useRef(isPlaying);
-  const lastLoadedKeyRef = useRef<string | null>(null);
+  /** True only after setQueue succeeded for the current clip — avoids play()-on-empty on song 1. */
+  const queueReadyRef = useRef(false);
 
   volumeRef.current = volume;
   isPlayingRef.current = isPlaying;
 
-  // Keep MusicKit volume in sync without touching transport.
   useEffect(() => {
     const mk = getMusicKitInstance();
     if (!mk) return;
@@ -58,7 +89,7 @@ export function HostAppleMusicPlayer({ playback, volume, isPlaying }: Props) {
     }
   }, [volume]);
 
-  // Load / start each call once. Do not depend on isPlaying (that cancelled in-flight setQueue).
+  // Load / start each call once. Do not depend on isPlaying.
   useEffect(() => {
     if (snippetTimerRef.current) {
       clearTimeout(snippetTimerRef.current);
@@ -67,7 +98,7 @@ export function HostAppleMusicPlayer({ playback, volume, isPlaying }: Props) {
 
     if (!playback?.songId) {
       clipGenerationRef.current += 1;
-      lastLoadedKeyRef.current = null;
+      queueReadyRef.current = false;
       const mk = getMusicKitInstance();
       try {
         void mk?.pause();
@@ -77,9 +108,8 @@ export function HostAppleMusicPlayer({ playback, volume, isPlaying }: Props) {
       return;
     }
 
-    const songKey = `${playback.songId}:${playback.startMs}:${playback.snippetSeconds}`;
     const gen = ++clipGenerationRef.current;
-    lastLoadedKeyRef.current = songKey;
+    queueReadyRef.current = false;
 
     let cancelled = false;
     (async () => {
@@ -93,7 +123,6 @@ export function HostAppleMusicPlayer({ playback, volume, isPlaying }: Props) {
       }
 
       try {
-        // MusicKit often no-ops or errors on setQueue while already playing — stop first.
         try {
           await mk.stop();
         } catch {
@@ -108,9 +137,30 @@ export function HostAppleMusicPlayer({ playback, volume, isPlaying }: Props) {
         await mk.setQueue({ song: playback.songId });
         if (cancelled || gen !== clipGenerationRef.current) return;
 
+        queueReadyRef.current = true;
+
         const startSec = Math.max(0, (playback.startMs || 0) / 1000);
+        // Seek before play when possible — more reliable on the first clip.
+        if (startSec > 0) {
+          try {
+            await mk.seekToTime(startSec);
+          } catch {
+            /* ignore — some builds only seek after play */
+          }
+        }
+
         if (isPlayingRef.current) {
-          await mk.play();
+          let played = false;
+          for (let attempt = 0; attempt < 3 && !played; attempt++) {
+            if (cancelled || gen !== clipGenerationRef.current) return;
+            try {
+              await mk.play();
+              played = true;
+            } catch (e) {
+              if (attempt === 2) throw e;
+              await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+            }
+          }
           if (startSec > 0) {
             try {
               await mk.seekToTime(startSec);
@@ -123,7 +173,6 @@ export function HostAppleMusicPlayer({ playback, volume, isPlaying }: Props) {
         const snippetMs = Math.max(1000, (playback.snippetSeconds || 30) * 1000);
         if (snippetTimerRef.current) clearTimeout(snippetTimerRef.current);
         snippetTimerRef.current = setTimeout(() => {
-          // Only pause if this clip is still the active one (avoids silencing the next song).
           if (gen !== clipGenerationRef.current) return;
           try {
             void mk.pause();
@@ -147,17 +196,17 @@ export function HostAppleMusicPlayer({ playback, volume, isPlaying }: Props) {
     };
   }, [playback?.songId, playback?.startMs, playback?.snippetSeconds]);
 
-  // Host pause / resume only — never reload the queue or depend on songId
-  // (that raced with setQueue and silenced every other advance).
+  // Pause when host pauses. Resume only if a queue is ready (never play-on-empty).
   useEffect(() => {
     const mk = getMusicKitInstance();
-    if (!mk || !lastLoadedKeyRef.current) return;
+    if (!mk) return;
     try {
       if (!isPlaying) {
         void mk.pause();
-      } else {
-        void mk.play();
+        return;
       }
+      if (!queueReadyRef.current) return;
+      void mk.play();
     } catch {
       /* ignore */
     }
