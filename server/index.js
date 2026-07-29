@@ -240,20 +240,37 @@ delete helmetCspDirectives['frame-ancestors'];
 helmetCspDirectives.frameAncestors = ["'self'", 'https://synapse.liquidkourage.com'];
 
 // YouTube IFrame API + embedded player (host playback for YouTube Music tracks)
+// Apple MusicKit JS (host browser playback + authorize)
 helmetCspDirectives['script-src'] = [
   ...(helmetCspDirectives['script-src'] || ["'self'"]),
   'https://www.youtube.com',
   'https://s.ytimg.com',
+  'https://js-cdn.music.apple.com',
 ];
 helmetCspDirectives['frame-src'] = [
   "'self'",
   'https://www.youtube.com',
   'https://www.youtube-nocookie.com',
+  'https://authorize.music.apple.com',
+  'https://music.apple.com',
+];
+helmetCspDirectives['connect-src'] = [
+  ...(helmetCspDirectives['connect-src'] || ["'self'"]),
+  'https://api.music.apple.com',
+  'https://*.apple.com',
+  'https://*.mzstatic.com',
+];
+helmetCspDirectives['media-src'] = [
+  ...(helmetCspDirectives['media-src'] || ["'self'"]),
+  'blob:',
+  'https://*.apple.com',
+  'https://*.mzstatic.com',
 ];
 helmetCspDirectives['img-src'] = [
   ...(helmetCspDirectives['img-src'] || ["'self'"]),
   'https://i.ytimg.com',
   'https://yt3.ggpht.com',
+  'https://*.mzstatic.com',
   // Venue / corporate branding: hosts paste arbitrary logo URLs in Admin
   'https:',
   'data:',
