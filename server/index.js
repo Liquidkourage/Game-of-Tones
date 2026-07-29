@@ -279,6 +279,8 @@ helmetCspDirectives['img-src'] = [
 app.use(
   helmet({
     frameguard: false,
+    // MusicKit JS authorize() hangs after Allow if Referrer-Policy is no-referrer (Helmet default).
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     contentSecurityPolicy: {
       directives: helmetCspDirectives,
     },

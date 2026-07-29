@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Music2 } from 'lucide-react';
 import { API_BASE, ENABLE_APPLE_MUSIC } from '../config';
 import { hostFetch } from '../utils/hostFetch';
-import { configureMusicKit } from '../utils/musicKitHost';
+import { configureMusicKit, authorizeMusicKit } from '../utils/musicKitHost';
 
 type StatusPayload = {
   success?: boolean;
@@ -90,7 +90,7 @@ export function HostAppleMusicSection({ roomId: _roomId, onConnectionChange }: P
       }
 
       const music = await configureMusicKit(tdata.token);
-      const userToken = await music.authorize();
+      const userToken = await authorizeMusicKit(music);
       if (!userToken) {
         setError('Apple Music authorization was cancelled.');
         return;

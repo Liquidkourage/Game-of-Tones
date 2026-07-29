@@ -126,3 +126,74 @@ export function getMusicKitInstance(): MusicKitInstance | null {
     return null;
   }
 }
+
+function readMusicUserToken(music: MusicKitInstance): string {
+  const direct = typeof music.musicUserToken === 'string' ? music.musicUserToken.trim() : '';
+  if (direct) return direct;
+  return '';
+}
+
+/**
+ * Authorize MusicKit. Works around Apple’s hang-after-Allow by also polling musicUserToken.
+ */
+export async function authorizeMusicKit(
+  music: MusicKitInstance,
+  timeoutMs = 90_000,
+): Promise<string> {
+  let settled = false;
+
+  const fromPoll = new Promise<string>((resolve, reject) => {
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      if (settled) {
+        window.clearInterval(timer);
+        return;
+      }
+      const token = readMusicUserToken(music);
+      if (token && music.isAuthorized) {
+        window.clearInterval(timer);
+        settled = true;
+        resolve(token);
+        return;
+      }
+      if (Date.now() - started > timeoutMs) {
+        window.clearInterval(timer);
+        settled = true;
+        reject(
+          new Error(
+            'Apple Music authorization timed out after Allow. Hard-refresh and try again (Referrer-Policy must allow origin).',
+          ),
+        );
+      }
+    }, 200);
+  });
+
+  const fromAuthorize = (async () => {
+    try {
+      const result = await music.authorize();
+      const fromReturn = typeof result === 'string' ? result.trim() : '';
+      const token = fromReturn || readMusicUserToken(music);
+      if (!token) {
+        throw new Error('Apple Music authorization was cancelled or returned no token.');
+      }
+      return token;
+    } catch (e) {
+      // If polling already got a token, ignore authorize() rejection/hang side effects.
+      const token = readMusicUserToken(music);
+      if (token && music.isAuthorized) return token;
+      throw e;
+    }
+  })();
+
+  try {
+    const token = await Promise.race([fromAuthorize, fromPoll]);
+    settled = true;
+    return token;
+  } catch (e) {
+    settled = true;
+    const token = readMusicUserToken(music);
+    if (token && music.isAuthorized) return token;
+    throw e;
+  }
+}
+
