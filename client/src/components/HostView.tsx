@@ -2644,6 +2644,11 @@ const HostView: React.FC = () => {
     setAppleMusicConnected((prev) => (prev === connected ? prev : connected));
   }, []);
 
+  const handleAppleMusicConnectedSuccess = useCallback(() => {
+    connectionModalDismissedRef.current = false;
+    setShowConnectionModal(false);
+  }, []);
+
   const prevAppleConnectedForLibraryRef = useRef<boolean | null>(null);
   useEffect(() => {
     if (prevAppleConnectedForLibraryRef.current === null) {
@@ -10076,6 +10081,7 @@ const HostView: React.FC = () => {
         <HostAppleMusicSection
           roomId={roomId || ''}
           onConnectionChange={handleAppleMusicConnectionChange}
+          onConnectedSuccess={handleAppleMusicConnectedSuccess}
         />
       ) : null}
     </motion.div>

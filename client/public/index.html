@@ -5,6 +5,8 @@
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
     <meta name="theme-color" content="#000000" />
+    <!-- MusicKit authorize() needs a referrer origin (Helmet no-referrer breaks Allow). -->
+    <meta name="referrer" content="origin" />
     <meta
       name="description"
       content="TEMPO — music bingo for live events. Host rounds, player cards, and venue display."

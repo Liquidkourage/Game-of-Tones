@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Music2 } from 'lucide-react';
 import { API_BASE, ENABLE_APPLE_MUSIC } from '../config';
 import { hostFetch } from '../utils/hostFetch';
-import { configureMusicKit, authorizeMusicKit } from '../utils/musicKitHost';
+import { configureMusicKit, authorizeMusicKit, getMusicKitInstance, readStoredMusicUserToken } from '../utils/musicKitHost';
+import { APPLE_MUSIC_AUTH_POPUP_DONE } from '../utils/appleMusicAuthPopup';
 
 type StatusPayload = {
   success?: boolean;
@@ -14,12 +15,18 @@ type Props = {
   roomId: string;
   /** Fired when connected flips (after status / connect / disconnect). Keep stable in the parent. */
   onConnectionChange?: (connected: boolean) => void;
+  /** Called after a successful Connect (so host can dismiss the Connection modal). */
+  onConnectedSuccess?: () => void;
 };
 
 /**
  * Host Connection: MusicKit authorize → POST music-user-token to server.
  */
-export function HostAppleMusicSection({ roomId: _roomId, onConnectionChange }: Props) {
+export function HostAppleMusicSection({
+  roomId: _roomId,
+  onConnectionChange,
+  onConnectedSuccess,
+}: Props) {
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const [statusReady, setStatusReady] = useState(false);
   const [statusFetchFailed, setStatusFetchFailed] = useState(false);
@@ -27,6 +34,8 @@ export function HostAppleMusicSection({ roomId: _roomId, onConnectionChange }: P
   const [error, setError] = useState<string | null>(null);
   const onConnectionChangeRef = useRef(onConnectionChange);
   onConnectionChangeRef.current = onConnectionChange;
+  const onConnectedSuccessRef = useRef(onConnectedSuccess);
+  onConnectedSuccessRef.current = onConnectedSuccess;
   const lastNotifiedConnectedRef = useRef<boolean | null>(null);
   const statusReadyRef = useRef(false);
 
@@ -35,6 +44,29 @@ export function HostAppleMusicSection({ roomId: _roomId, onConnectionChange }: P
     lastNotifiedConnectedRef.current = connected;
     onConnectionChangeRef.current?.(connected);
   }, []);
+
+  const persistUserToken = useCallback(async (userToken: string) => {
+    const ur = await hostFetch(`${API_BASE || ''}/api/apple/music/user-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ musicUserToken: userToken }),
+    });
+    const udata = (await ur.json().catch(() => ({}))) as {
+      success?: boolean;
+      message?: string;
+      error?: string;
+    };
+    if (!ur.ok || !udata.success) {
+      throw new Error(udata.message || udata.error || 'Could not save Apple Music session.');
+    }
+  }, []);
+
+  const finishConnected = useCallback(async () => {
+    await refreshStatusRef.current?.();
+    onConnectedSuccessRef.current?.();
+  }, []);
+
+  const refreshStatusRef = useRef<(() => Promise<void>) | null>(null);
 
   const refreshStatus = useCallback(async () => {
     setStatusFetchFailed(false);
@@ -61,9 +93,43 @@ export function HostAppleMusicSection({ roomId: _roomId, onConnectionChange }: P
     }
   }, [notifyConnected]);
 
+  refreshStatusRef.current = refreshStatus;
+
   useEffect(() => {
     void refreshStatus();
   }, [refreshStatus]);
+
+  /** Opener: when the auth popup lands back on Tempo and closes itself, recover the token here. */
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (!event.data || event.data.type !== APPLE_MUSIC_AUTH_POPUP_DONE) return;
+      void (async () => {
+        try {
+          const mk = getMusicKitInstance();
+          const token =
+            (mk && typeof mk.musicUserToken === 'string' && mk.musicUserToken.trim()) ||
+            readStoredMusicUserToken();
+          if (!token) {
+            // Same-origin localStorage may already hold MusicKit’s user token after Allow.
+            await refreshStatus();
+            return;
+          }
+          setBusy(true);
+          setError(null);
+          await persistUserToken(token);
+          await finishConnected();
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'Could not finish Apple Music connect.';
+          setError(msg);
+        } finally {
+          setBusy(false);
+        }
+      })();
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [finishConnected, persistUserToken, refreshStatus]);
 
   const connectApple = useCallback(async () => {
     setBusy(true);
@@ -90,34 +156,43 @@ export function HostAppleMusicSection({ roomId: _roomId, onConnectionChange }: P
       }
 
       const music = await configureMusicKit(tdata.token);
-      const userToken = await authorizeMusicKit(music);
+      let userToken = '';
+      try {
+        userToken = await authorizeMusicKit(music);
+      } catch (authErr) {
+        // Unauthorized after Allow is often referrer-policy; token may still land in storage shortly.
+        const fallback =
+          (typeof music.musicUserToken === 'string' && music.musicUserToken.trim()) ||
+          readStoredMusicUserToken();
+        if (!fallback) {
+          const name =
+            authErr && typeof authErr === 'object' && 'name' in authErr
+              ? String((authErr as { name?: string }).name)
+              : '';
+          const msg = authErr instanceof Error ? authErr.message : 'Authorization failed';
+          if (/unauthorized/i.test(msg) || name === 'AUTHORIZATION_ERROR') {
+            throw new Error(
+              'Unauthorized from Apple Music after Allow. Hard-refresh this tab (so Referrer-Policy: origin applies), then Connect again. Prefer Chrome with third-party cookies allowed.',
+            );
+          }
+          throw authErr;
+        }
+        userToken = fallback;
+      }
       if (!userToken) {
         setError('Apple Music authorization was cancelled.');
         return;
       }
 
-      const ur = await hostFetch(`${API_BASE || ''}/api/apple/music/user-token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ musicUserToken: userToken }),
-      });
-      const udata = (await ur.json().catch(() => ({}))) as {
-        success?: boolean;
-        message?: string;
-        error?: string;
-      };
-      if (!ur.ok || !udata.success) {
-        setError(udata.message || udata.error || 'Could not save Apple Music session.');
-        return;
-      }
-      await refreshStatus();
+      await persistUserToken(userToken);
+      await finishConnected();
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Could not connect Apple Music.';
       setError(msg);
     } finally {
       setBusy(false);
     }
-  }, [refreshStatus]);
+  }, [finishConnected, persistUserToken]);
 
   const disconnectApple = useCallback(async () => {
     setBusy(true);

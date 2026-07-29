@@ -133,6 +133,21 @@ function readMusicUserToken(music: MusicKitInstance): string {
   return '';
 }
 
+/** MusicKit stores the user token in localStorage under keys like `music.<id>.u`. */
+export function readStoredMusicUserToken(): string {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i) || '';
+      if (!k.startsWith('music.') || !k.endsWith('.u')) continue;
+      const v = localStorage.getItem(k);
+      if (v && v.trim().length > 20) return v.trim();
+    }
+  } catch {
+    /* ignore */
+  }
+  return '';
+}
+
 /**
  * Authorize MusicKit. Works around Apple’s hang-after-Allow by also polling musicUserToken.
  */
@@ -154,6 +169,13 @@ export async function authorizeMusicKit(
         window.clearInterval(timer);
         settled = true;
         resolve(token);
+        return;
+      }
+      const stored = readStoredMusicUserToken();
+      if (stored) {
+        window.clearInterval(timer);
+        settled = true;
+        resolve(stored);
         return;
       }
       if (Date.now() - started > timeoutMs) {
