@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { API_BASE } from '../config';
 import { hostFetch } from '../utils/hostFetch';
-import { configureMusicKit, getMusicKitInstance } from '../utils/musicKitHost';
+import { configureMusicKit, getMusicKitInstance, type MusicKitInstance } from '../utils/musicKitHost';
 
 export type AppleHostPlayback = {
   songId: string;
@@ -12,58 +12,63 @@ export type AppleHostPlayback = {
 type Props = {
   playback: AppleHostPlayback;
   volume: number;
-  /** When false, pause MusicKit without tearing down. */
+  /** When false, pause MusicKit without tearing down the queue. */
   isPlaying: boolean;
 };
 
+async function ensureConfigured(): Promise<MusicKitInstance | null> {
+  try {
+    const existing = getMusicKitInstance();
+    if (existing) return existing;
+    const r = await hostFetch(`${API_BASE || ''}/api/apple/music/developer-token?_=${Date.now()}`, {
+      cache: 'no-store',
+    });
+    const data = (await r.json().catch(() => ({}))) as { success?: boolean; token?: string };
+    if (!r.ok || !data.token) return null;
+    return await configureMusicKit(data.token);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Host-browser MusicKit snippet player. Server owns call order; this only transports audio.
+ *
+ * Important: one play pipeline + generation counters. A competing pause/play effect and
+ * stale snippet timers were silencing every other song on advance.
  */
 export function HostAppleMusicPlayer({ playback, volume, isPlaying }: Props) {
-  const lastSongRef = useRef<string | null>(null);
   const snippetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const readyRef = useRef(false);
+  const clipGenerationRef = useRef(0);
+  const volumeRef = useRef(volume);
+  const isPlayingRef = useRef(isPlaying);
+  const lastLoadedKeyRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await hostFetch(`${API_BASE || ''}/api/apple/music/developer-token?_=${Date.now()}`, {
-          cache: 'no-store',
-        });
-        const data = (await r.json().catch(() => ({}))) as { success?: boolean; token?: string };
-        if (!r.ok || !data.token || cancelled) return;
-        await configureMusicKit(data.token);
-        readyRef.current = true;
-      } catch {
-        readyRef.current = false;
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  volumeRef.current = volume;
+  isPlayingRef.current = isPlaying;
 
+  // Keep MusicKit volume in sync without touching transport.
   useEffect(() => {
     const mk = getMusicKitInstance();
     if (!mk) return;
-    const vol = Math.min(1, Math.max(0, volume / 100));
     try {
-      mk.volume = vol;
+      mk.volume = Math.min(1, Math.max(0, volume / 100));
     } catch {
       /* ignore */
     }
   }, [volume]);
 
+  // Load / start each call once. Do not depend on isPlaying (that cancelled in-flight setQueue).
   useEffect(() => {
     if (snippetTimerRef.current) {
       clearTimeout(snippetTimerRef.current);
       snippetTimerRef.current = null;
     }
 
-    const mk = getMusicKitInstance();
-    if (!playback?.songId || !mk) {
-      lastSongRef.current = null;
+    if (!playback?.songId) {
+      clipGenerationRef.current += 1;
+      lastLoadedKeyRef.current = null;
+      const mk = getMusicKitInstance();
       try {
         void mk?.pause();
       } catch {
@@ -73,41 +78,53 @@ export function HostAppleMusicPlayer({ playback, volume, isPlaying }: Props) {
     }
 
     const songKey = `${playback.songId}:${playback.startMs}:${playback.snippetSeconds}`;
-    if (lastSongRef.current === songKey && isPlaying) {
-      try {
-        void mk.play();
-      } catch {
-        /* ignore */
-      }
-      return;
-    }
-    lastSongRef.current = songKey;
+    const gen = ++clipGenerationRef.current;
+    lastLoadedKeyRef.current = songKey;
 
     let cancelled = false;
     (async () => {
+      const mk = await ensureConfigured();
+      if (!mk || cancelled || gen !== clipGenerationRef.current) return;
+
       try {
-        if (!readyRef.current) {
-          const r = await hostFetch(`${API_BASE || ''}/api/apple/music/developer-token?_=${Date.now()}`, {
-            cache: 'no-store',
-          });
-          const data = (await r.json().catch(() => ({}))) as { token?: string };
-          if (data.token) await configureMusicKit(data.token);
-          readyRef.current = true;
-        }
-        if (cancelled) return;
-        await mk.setQueue({ song: playback.songId });
-        if (cancelled) return;
-        const startSec = Math.max(0, (playback.startMs || 0) / 1000);
-        await mk.play();
-        if (startSec > 0) {
+        mk.volume = Math.min(1, Math.max(0, volumeRef.current / 100));
+      } catch {
+        /* ignore */
+      }
+
+      try {
+        // MusicKit often no-ops or errors on setQueue while already playing — stop first.
+        try {
+          await mk.stop();
+        } catch {
           try {
-            await mk.seekToTime(startSec);
+            await mk.pause();
           } catch {
             /* ignore */
           }
         }
+        if (cancelled || gen !== clipGenerationRef.current) return;
+
+        await mk.setQueue({ song: playback.songId });
+        if (cancelled || gen !== clipGenerationRef.current) return;
+
+        const startSec = Math.max(0, (playback.startMs || 0) / 1000);
+        if (isPlayingRef.current) {
+          await mk.play();
+          if (startSec > 0) {
+            try {
+              await mk.seekToTime(startSec);
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+
         const snippetMs = Math.max(1000, (playback.snippetSeconds || 30) * 1000);
+        if (snippetTimerRef.current) clearTimeout(snippetTimerRef.current);
         snippetTimerRef.current = setTimeout(() => {
+          // Only pause if this clip is still the active one (avoids silencing the next song).
+          if (gen !== clipGenerationRef.current) return;
           try {
             void mk.pause();
           } catch {
@@ -115,7 +132,9 @@ export function HostAppleMusicPlayer({ playback, volume, isPlaying }: Props) {
           }
         }, snippetMs);
       } catch (e) {
-        console.warn('Apple Music host playback failed:', e);
+        if (gen === clipGenerationRef.current) {
+          console.warn('Apple Music host playback failed:', e);
+        }
       }
     })();
 
@@ -126,25 +145,23 @@ export function HostAppleMusicPlayer({ playback, volume, isPlaying }: Props) {
         snippetTimerRef.current = null;
       }
     };
-  }, [playback, isPlaying]);
+  }, [playback?.songId, playback?.startMs, playback?.snippetSeconds]);
 
+  // Host pause / resume only — never reload the queue or depend on songId
+  // (that raced with setQueue and silenced every other advance).
   useEffect(() => {
     const mk = getMusicKitInstance();
-    if (!mk || !playback?.songId) return;
-    if (!isPlaying) {
-      try {
+    if (!mk || !lastLoadedKeyRef.current) return;
+    try {
+      if (!isPlaying) {
         void mk.pause();
-      } catch {
-        /* ignore */
-      }
-    } else {
-      try {
+      } else {
         void mk.play();
-      } catch {
-        /* ignore */
       }
+    } catch {
+      /* ignore */
     }
-  }, [isPlaying, playback?.songId]);
+  }, [isPlaying]);
 
   return null;
 }
