@@ -452,6 +452,7 @@ function cloneSongForSnapshot(s: Song): Song {
     duration: s.duration,
     explicit: s.explicit,
     youtubeMusic: s.youtubeMusic,
+    appleMusic: s.appleMusic,
     sourcePlaylistId: s.sourcePlaylistId,
     sourcePlaylistName: s.sourcePlaylistName,
     originPlaylistName: s.originPlaylistName,
@@ -5604,7 +5605,7 @@ const HostView: React.FC = () => {
       alert(
         needsHostSpotifyForStart
           ? 'No songs loaded from playlists. Ensure Spotify is connected and playlists have tracks, then try again.'
-          : 'No songs loaded. Open Connection and connect YouTube Music if needed, load playlists, then try Show Playlists or Start Game again.'
+          : 'No songs loaded. Open Connection and connect YouTube or Apple Music if needed, load playlists, then try Show Playlists or Start Game again.'
       );
       return false;
     }

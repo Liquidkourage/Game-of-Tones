@@ -2351,14 +2351,33 @@ function applyYoutubePlaybackHints(playlists, songs) {
 
 /**
  * Host payloads sometimes omit `appleMusic` on tracks. Recover from playlist rows.
+ * If every playlist in the round is Apple Music, tag the whole deck (avoids Spotify locked-device path).
  */
 function applyApplePlaybackHints(playlists, songs) {
   if (!Array.isArray(songs) || songs.length === 0) return songs;
-  const applePlaylistIds = new Set(
-    (Array.isArray(playlists) ? playlists : [])
-      .filter((p) => p && p.appleMusic === true)
-      .map((p) => String(p.id))
+  const applePlaylists = (Array.isArray(playlists) ? playlists : []).filter(
+    (p) => p && p.appleMusic === true,
   );
+  const allPlaylistsApple =
+    Array.isArray(playlists) &&
+    playlists.length > 0 &&
+    playlists.every((p) => p && p.appleMusic === true);
+
+  if (allPlaylistsApple) {
+    let tagged = 0;
+    const out = songs.map((s) => {
+      if (!s) return s;
+      if (s.appleMusic === true) return s;
+      tagged++;
+      return { ...s, appleMusic: true };
+    });
+    if (tagged > 0) {
+      routineServerLog(`🍎 Tagged ${tagged} song row(s) as Apple Music (Apple-only playlist mix)`);
+    }
+    return out;
+  }
+
+  const applePlaylistIds = new Set(applePlaylists.map((p) => String(p.id)));
   let tagged = 0;
   const out = songs.map((s) => {
     if (!s || s.appleMusic === true) return s;
@@ -10113,6 +10132,38 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           );
           perListFetched.push({ id: playlist.id, name: playlist.name, songs: embedded });
           allSongs.push(...embedded);
+          continue;
+        }
+        if (playlist.youtubeMusic === true) {
+          const uid = room.ownerUserId;
+          if (uid != null && youtubeMusic.hasCredentials(uid)) {
+            try {
+              const songs = await youtubeMusic.listPlaylistItems(uid, String(playlist.id), {
+                playlistName: playlist.name || '',
+              });
+              perListFetched.push({ id: playlist.id, name: playlist.name, songs });
+              allSongs.push(...songs);
+            } catch (error) {
+              console.error(`❌ Error fetching YouTube playlist ${playlist.id}:`, error);
+              perListFetched.push({ id: playlist.id, name: playlist.name, songs: [] });
+            }
+          }
+          continue;
+        }
+        if (playlist.appleMusic === true) {
+          const uid = room.ownerUserId;
+          if (uid != null && appleMusic.hasCredentials(uid)) {
+            try {
+              const songs = await appleMusic.listPlaylistItems(uid, String(playlist.id), {
+                playlistName: playlist.name || '',
+              });
+              perListFetched.push({ id: playlist.id, name: playlist.name, songs });
+              allSongs.push(...songs);
+            } catch (error) {
+              console.error(`❌ Error fetching Apple Music playlist ${playlist.id}:`, error);
+              perListFetched.push({ id: playlist.id, name: playlist.name, songs: [] });
+            }
+          }
           continue;
         }
         try {
