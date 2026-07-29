@@ -3402,10 +3402,10 @@ const HostView: React.FC = () => {
 
     newSocket.on('replay-snippet-result', (data: any) => {
       if (data?.ok) {
-        addLog('Replayed current snippet', 'info');
-        showToast('Replayed clip', 'info');
+        addLog('Bumped snippet to a new start', 'info');
+        showToast('Bumped clip', 'info');
       } else {
-        showToast('Could not replay clip', 'error');
+        showToast('Could not bump clip', 'error');
       }
     });
 

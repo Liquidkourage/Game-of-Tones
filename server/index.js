@@ -847,7 +847,7 @@ function emitDisplayPresence(roomId, room) {
   io.to(roomId).emit('display-presence', buildDisplayPresencePayload(room));
 }
 
-/** Re-play the current pool index without advancing (new snippet start). */
+/** Re-play the current pool index without advancing (host bump → new snippet start). */
 async function replayCurrentSnippet(roomId, deviceId) {
   const room = rooms.get(roomId);
   if (!room || room.gameState !== 'playing' || !Array.isArray(room.playlistSongs) || !room.playlistSongs.length) {
@@ -860,7 +860,7 @@ async function replayCurrentSnippet(roomId, deviceId) {
   clearRoomTimer(roomId);
   clearPlaybackWatcher(roomId);
   const dev = deviceId || room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id || '';
-  await playSongAtIndex(roomId, dev, idx);
+  await playSongAtIndex(roomId, dev, idx, { bump: true });
   return { ok: true, songIndex: idx };
 }
 
@@ -1197,21 +1197,30 @@ function setRoomTimer(roomId, callback, delay) {
 }
 
 // Play song at specific index without changing the index
-async function playSongAtIndex(roomId, deviceId, songIndex) {
+async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
   routineServerLog(`🎵 Playing song at index ${songIndex} for room:`, roomId);
   const room = rooms.get(roomId);
   if (!room || room.gameState !== 'playing' || !room.playlistSongs) {
     routineServerLog('❌ Cannot play song: Room not in playing state or no playlist songs');
     return;
   }
+  const bump = options?.bump === true;
 
   try {
     const song = room.playlistSongs[songIndex];
     routineServerLog(`🎵 Playing song ${songIndex + 1}/${room.playlistSongs.length}: ${song.name} by ${song.artist}`);
 
     if (songUsesHostBrowserPlayback(song)) {
-      const startMs = computeSnippetRandomStartMs(room, song);
+      const startMs = bump
+        ? computeBumpSnippetStartMs(room, song, {
+            avoidMs: room.currentSongStartMs,
+            contextLabel: songUsesApplePlayback(song) ? 'bump-apple' : 'bump-youtube',
+          })
+        : computeSnippetRandomStartMs(room, song);
       room.currentSongStartMs = startMs;
+      if (bump) {
+        routineServerLog(`🔁 Bump snippet start → ${startMs}ms (${Math.floor(startMs / 1000)}s) for ${song.name}`);
+      }
       room.currentSong = {
         id: song.id,
         name: song.name,
@@ -1268,13 +1277,22 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     }
     routineServerLog(`🎵 Starting playback on device: ${targetDeviceId}`);
 
+    let startMs = 0;
     try {
       const startTime = Date.now();
       routineServerLog(`🎵 Starting playback at ${startTime} - Song: ${song.name} by ${song.artist}`);
       // Enforce deterministic playback mode for direct index plays
       try { await spotifyFor(roomId).setShuffleState(false, targetDeviceId); } catch (_) {}
       try { await spotifyFor(roomId).setRepeatState('off', targetDeviceId); } catch (_) {}
-      const startMs = computeSpotifySnippetRandomStartMs(room, song, 'playSongAtIndex');
+      startMs = bump
+        ? computeBumpSnippetStartMs(room, song, {
+            avoidMs: room.currentSongStartMs,
+            contextLabel: 'bump-spotify',
+          })
+        : computeSpotifySnippetRandomStartMs(room, song, 'playSongAtIndex');
+      if (bump) {
+        routineServerLog(`🔁 Bump snippet start → ${startMs}ms (${Math.floor(startMs / 1000)}s) for ${song.name}`);
+      }
       await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs);
       const endTime = Date.now();
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId} (took ${endTime - startTime}ms)`);
@@ -2947,6 +2965,44 @@ function computeSpotifySnippetRandomStartMs(room, song, contextLabel) {
   } else if (room.randomStarts === 'random') {
     const safeWindow = Math.max(0, durationMs - snippetMs - bufferMs - 30000);
     if (safeWindow > 3000) startMs = Math.floor(Math.random() * safeWindow);
+  }
+  return startMs;
+}
+
+/**
+ * Host "Bump": always pick a new snippet start on the same track (does not advance the pool).
+ * Uses the full-track random window so hosts can escape bad intros, tone shifts, or fade-outs
+ * even when Random Starts is Off. Tries to land away from the current offset.
+ */
+function computeBumpSnippetStartMs(room, song, { avoidMs = null, contextLabel = 'bump' } = {}) {
+  const snippetMs = (room.snippetLength || 30) * 1000;
+  const bufferMs = 1500;
+  const durationMs =
+    Number.isFinite(song?.duration_ms) && Number(song.duration_ms) > 0
+      ? Math.max(0, Number(song.duration_ms))
+      : Number.isFinite(song?.duration) && Number(song.duration) > 0
+        ? Math.max(0, Number(song.duration))
+        : resolveSpotifyTrackDurationMsForRandomStart(song, contextLabel);
+
+  const safeWindow = Math.max(0, durationMs - snippetMs - bufferMs - 30000);
+  if (safeWindow <= 3000) {
+    // Short tracks: fall back to early window (or 0).
+    const earlyWindow = Math.min(90000, Math.max(0, durationMs - snippetMs - bufferMs));
+    if (earlyWindow <= 3000) return 0;
+    return Math.floor(Math.random() * earlyWindow);
+  }
+
+  const avoid = Number.isFinite(Number(avoidMs)) ? Math.max(0, Number(avoidMs)) : null;
+  const minDeltaMs = 8000;
+  let startMs = Math.floor(Math.random() * safeWindow);
+  if (avoid != null && safeWindow > minDeltaMs + 1000) {
+    for (let i = 0; i < 10; i++) {
+      const candidate = Math.floor(Math.random() * safeWindow);
+      if (Math.abs(candidate - avoid) >= minDeltaMs) {
+        startMs = candidate;
+        break;
+      }
+    }
   }
   return startMs;
 }
@@ -7319,7 +7375,7 @@ io.on('connection', (socket) => {
       const result = await replayCurrentSnippet(roomId, room.selectedDeviceId);
       socket.emit('replay-snippet-result', result);
       if (result.ok) {
-        routineServerLog(`🔁 Host replayed current snippet in room ${roomId} (index ${result.songIndex})`);
+        routineServerLog(`🔁 Host bumped current snippet in room ${roomId} (index ${result.songIndex})`);
       }
     } catch (e) {
       console.error('❌ replay-current-snippet:', e?.message || e);

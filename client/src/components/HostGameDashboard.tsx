@@ -392,10 +392,10 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                     className="btn-secondary"
                     onClick={onReplayClip}
                     disabled={!currentSong}
-                    title="Replay this snippet from a new start (does not advance the pool)"
+                    title="Same song, new start position (does not skip / advance the pool)"
                   >
                     <RotateCw className="w-4 h-4" aria-hidden />
-                    Replay clip
+                    Bump
                   </button>
                   <button
                     type="button"
@@ -683,6 +683,16 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
               <button type="button" className="host-r4-action-tile" onClick={onSkip}>
                 <SkipForward className="w-5 h-5" aria-hidden />
                 Skip song
+              </button>
+              <button
+                type="button"
+                className="host-r4-action-tile"
+                onClick={onReplayClip}
+                disabled={!currentSong}
+                title="Same song, new start position (does not skip / advance the pool)"
+              >
+                <RotateCw className="w-5 h-5" aria-hidden />
+                Bump clip
               </button>
               <button type="button" className="host-r4-action-tile" onClick={onOpenLibrary}>
                 <ListPlus className="w-5 h-5" aria-hidden />
