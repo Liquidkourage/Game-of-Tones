@@ -21,6 +21,8 @@ export interface RoundBucketSettingsRound {
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
   savedMixSnapshot?: { songs: { length: number }; mixGeometry: string; savedAt: number };
+  /** Optional prize shown on projector + night winners board. */
+  prize?: string;
 }
 
 export interface RoundBucketBingoPatch {
@@ -31,6 +33,7 @@ export interface RoundBucketBingoPatch {
   linesRequired?: number;
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
+  prize?: string;
 }
 
 interface RoundBucketSettingsProps {
@@ -127,6 +130,20 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
 
   return (
     <div className="round-bucket-settings host-ui">
+      <div className="round-bucket-settings__row">
+        <label className="round-bucket-settings__field round-bucket-settings__field--prize">
+          <span className="round-bucket-settings__label">Prize</span>
+          <input
+            type="text"
+            className="round-bucket-settings__input"
+            maxLength={120}
+            placeholder="e.g. Free pitcher"
+            value={round.prize ?? ''}
+            onChange={(e) => onUpdateBingo(roundIndex, { prize: e.target.value })}
+          />
+        </label>
+      </div>
+
       <div className="round-bucket-settings__row">
         <label className="round-bucket-settings__field">
           <span className="round-bucket-settings__label">Pattern</span>

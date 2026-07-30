@@ -2888,6 +2888,141 @@
   max-width: none;
 }
 
+.host-view .host-panic-strip {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 0 0 10px;
+}
+
+.host-view .host-panic-strip__label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(0, 255, 163, 0.85);
+  flex: 0 0 auto;
+}
+
+.host-view .host-panic-strip__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1 1 auto;
+}
+
+.host-view .host-panic-strip__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f2f2f2;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.host-view .host-panic-strip__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.host-view .host-panic-strip__btn--danger {
+  border-color: rgba(255, 96, 96, 0.45);
+  background: rgba(255, 64, 64, 0.16);
+}
+
+.host-view .host-panic-strip__btn--go {
+  border-color: rgba(0, 255, 136, 0.45);
+  background: rgba(0, 255, 136, 0.14);
+  color: #b8ffd9;
+}
+
+.host-view .host-night-board {
+  margin: 0 0 10px;
+  padding: 12px 14px;
+}
+
+.host-view .host-night-board__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-bottom: 10px;
+}
+
+.host-view .host-night-board__title {
+  margin: 0;
+  font-size: 1rem;
+  color: #00ff88;
+}
+
+.host-view .host-night-board__summary {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.host-view .host-night-board__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  user-select: none;
+}
+
+.host-view .host-night-board__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.host-view .host-night-board__row {
+  display: grid;
+  grid-template-columns: minmax(5rem, 1fr) minmax(5rem, 1.4fr) minmax(5rem, 1fr);
+  gap: 8px 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.85rem;
+}
+
+.host-view .host-night-board__row--done {
+  border-color: rgba(0, 255, 136, 0.22);
+  background: rgba(0, 255, 136, 0.07);
+}
+
+.host-view .host-night-board__round {
+  font-weight: 700;
+  color: #e8e8e8;
+}
+
+.host-view .host-night-board__prize {
+  color: rgba(255, 255, 255, 0.72);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-view .host-night-board__winner {
+  font-weight: 700;
+  color: #b8ffd9;
+  text-align: right;
+}
+
 .host-view .host-show-actions {
   display: flex;
   flex-wrap: wrap;

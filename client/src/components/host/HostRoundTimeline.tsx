@@ -11,6 +11,8 @@ export type RoundTimelineRow = {
   playlistNames?: string[];
   saved: boolean;
   isCurrent: boolean;
+  /** Optional prize label for this round. */
+  prize?: string;
 };
 
 type HostRoundTimelineProps = {
@@ -182,6 +184,7 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                   </>
                 )}
                 {r.saved ? ' · saved' : ''}
+                {r.prize ? ` · ${r.prize}` : ''}
               </span>
               {r.playlistNames && r.playlistNames.length === 1 ? (
                 /* Round Mix: one playlist supplies all 75 — just say the title. */

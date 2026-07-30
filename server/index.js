@@ -2822,12 +2822,24 @@ function bingoColumnLettersForRoom(room) {
   return sanitizeBingoColumnLetters(room?.bingoColumnLetters) || 'BINGO';
 }
 
+function sanitizeRoundPrizeText(raw) {
+  if (typeof raw !== 'string') return '';
+  return raw.replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+
+function sanitizeRoundNameText(raw) {
+  if (typeof raw !== 'string') return '';
+  return raw.replace(/\s+/g, ' ').trim().slice(0, 80);
+}
+
 function publicDisplayRoomStateExtras(room) {
   const pending =
     room.gameState === 'paused_for_verification' &&
     Array.isArray(room.bingoVerificationQueue) &&
     room.bingoVerificationQueue.length > 0;
   const head = pending ? room.bingoVerificationQueue[0]?.verificationData : null;
+  const prize = sanitizeRoundPrizeText(room.currentRoundPrize || '');
+  const roundName = sanitizeRoundNameText(room.currentRoundName || '');
   return {
     publicDisplayRevealState: publicDisplayRevealStateForClient(room),
     bingoVerificationPending: pending,
@@ -2836,6 +2848,9 @@ function publicDisplayRoomStateExtras(room) {
     bingoColumnLetters: bingoColumnLettersForRoom(room),
     maxPlayerBingoCards: maxPlayerBingoCardsForRoom(room),
     bingoWinPolicy: bingoWinPolicyForRoom(room),
+    currentRoundName: roundName || null,
+    currentRoundPrize: prize || null,
+    showNightBoard: room.showNightBoard === true,
   };
 }
 
@@ -2907,11 +2922,13 @@ function emitSongPlayingToRoom(roomId, room, song, currentIndex) {
 
 function storeLastDisplayWinnerFromBingoCalled(room, payload) {
   if (!payload?.playerName || !payload?.winningCard || !Array.isArray(payload.winningCard.squares)) return;
+  const prize = sanitizeRoundPrizeText(payload.prize || '');
   room.lastDisplayWinner = {
     playerName: String(payload.playerName),
     squares: payload.winningCard.squares,
     winningPositions: Array.isArray(payload.winningPositions) ? payload.winningPositions : [],
     pattern: typeof payload.pattern === 'string' ? payload.pattern : 'line',
+    ...(prize ? { prize } : {}),
   };
 }
 
@@ -5515,6 +5532,26 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Host: show/hide night winners board on the projector
+  socket.on('set-night-board-visible', (data = {}) => {
+    try {
+      const { roomId, visible } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost =
+        room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+      room.showNightBoard = visible === true;
+      io.to(roomId).emit('night-board-visibility', {
+        visible: room.showNightBoard,
+        roundWinners: room.roundWinners || [],
+      });
+      routineServerLog(`🏆 Night board for room ${roomId}: ${room.showNightBoard ? 'visible' : 'hidden'}`);
+    } catch (e) {
+      console.error('❌ Error setting night board visibility:', e?.message || e);
+    }
+  });
+
   // Host: custom five column letters for cards / call list headers (BINGO, TEMPO, TONES, …)
   socket.on('set-bingo-column-letters', (data = {}) => {
     try {
@@ -6100,6 +6137,23 @@ io.on('connection', (socket) => {
         };
       }
       
+      // Store round winner (prize/name from Start Game) before display events
+      if (!room.roundWinners) room.roundWinners = [];
+      const winnerPrize = sanitizeRoundPrizeText(room.currentRoundPrize || '');
+      const winnerRoundName =
+        sanitizeRoundNameText(room.currentRoundName || '') ||
+        `Round ${(room.roundWinners.length || 0) + 1}`;
+      const roundWinnerEntry = {
+        roundNumber: (room.roundWinners.length || 0) + 1,
+        playerName: player.name,
+        playerId: resolvedPlayerId,
+        timestamp: new Date().toISOString(),
+        ...(winnerPrize ? { prize: winnerPrize } : {}),
+        ...(winnerRoundName ? { roundName: winnerRoundName } : {}),
+      };
+      room.roundWinners.push(roundWinnerEntry);
+      room.showNightBoard = true;
+
       // NOW emit the actual winner event for public display
       const bingoCalledPayload = { 
         playerId: resolvedPlayerId, 
@@ -6112,6 +6166,11 @@ io.on('connection', (socket) => {
         pattern: room.pattern || 'line',
         winningCard: winningCardPayload,
         winningPositions,
+        prize: winnerPrize || null,
+        roundName: winnerRoundName || null,
+        roundNumber: roundWinnerEntry.roundNumber,
+        roundWinners: room.roundWinners,
+        showNightBoard: true,
       };
       storeLastDisplayWinnerFromBingoCalled(room, bingoCalledPayload);
       io.to(roomId).emit('bingo-called', bingoCalledPayload);
@@ -6138,15 +6197,6 @@ io.on('connection', (socket) => {
       if (player.playerUserId != null) {
         void playerAccountsStore.recordBingoWon(db, player.playerUserId, playerStatsContext(room, player));
       }
-      
-      // Store round winner
-      if (!room.roundWinners) room.roundWinners = [];
-      room.roundWinners.push({
-        roundNumber: (room.roundWinners.length || 0) + 1,
-        playerName: player.name,
-        playerId: resolvedPlayerId,
-        timestamp: new Date().toISOString()
-      });
       
       // Notify ALL hosts with next round options (not just the approving host)
       // This ensures modal appears even if host reconnected or multiple hosts exist
@@ -6220,6 +6270,9 @@ io.on('connection', (socket) => {
         winner: player.name,
         roundNumber: room.roundWinners.length,
         roundWinners: room.roundWinners,
+        prize: winnerPrize || null,
+        roundName: winnerRoundName || null,
+        showNightBoard: true,
         message: `Round ${room.roundWinners.length} complete! Waiting for next round...`
       });
 
@@ -6406,6 +6459,9 @@ io.on('connection', (socket) => {
     room.calledSongIds = [];
     room.bingoVerificationQueue = [];
     room.roundWinners = []; // Reset round winners
+    room.currentRoundName = '';
+    room.currentRoundPrize = '';
+    room.showNightBoard = false;
     clearPublicDisplaySessionState(room);
     
     // Reset all player bingo status but keep their cards
@@ -6421,7 +6477,10 @@ io.on('connection', (socket) => {
         currentSong: null,
         winners: [],
         playedSongs: [],
-        roundWinners: []
+        roundWinners: [],
+        showNightBoard: false,
+        currentRoundName: null,
+        currentRoundPrize: null,
       }
     });
     
@@ -6545,6 +6604,9 @@ io.on('connection', (socket) => {
     room.host = hostToKeep;
     room.roundWinners = roundWinnersToKeep;
     room.selectedDeviceId = deviceToKeep;
+    room.currentRoundName = '';
+    room.currentRoundPrize = '';
+    room.showNightBoard = false;
     
     // CRITICAL: Clean up temporary playlist if it exists
     if (room.temporaryPlaylistId) {
@@ -6562,6 +6624,9 @@ io.on('connection', (socket) => {
       roundNumber: roundWinnersToKeep.length + 1,
       totalRounds: roundWinnersToKeep.length,
       roundWinners: roundWinnersToKeep,
+      showNightBoard: false,
+      currentRoundName: null,
+      currentRoundPrize: null,
       resetToSetup: true,
       roomState: {
         gameState: 'waiting',
@@ -6837,7 +6902,7 @@ io.on('connection', (socket) => {
 
   socket.on('start-game', async (data) => {
     routineServerLog('🎮 Start game event received:', data);
-    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, customPatternName: incomingCustomPatternName, freeSpace, savedRoundPlayback } = data;
+    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, customPatternName: incomingCustomPatternName, freeSpace, savedRoundPlayback, roundName: incomingRoundName, prize: incomingRoundPrize } = data;
     const room = rooms.get(roomId);
     
     routineServerLog('🔍 Room found:', !!room);
@@ -6878,6 +6943,9 @@ io.on('connection', (socket) => {
       room.playlists = playlists;
         room.selectedDeviceId = deviceId; // Store the selected device ID
         room.randomStarts = randomStarts || 'none';
+        room.currentRoundName = sanitizeRoundNameText(incomingRoundName) || `Round ${(room.roundWinners?.length || 0) + 1}`;
+        room.currentRoundPrize = sanitizeRoundPrizeText(incomingRoundPrize);
+        room.showNightBoard = false;
         // Initialize call history and round
         room.calledSongIds = [];
         room.bingoVerificationQueue = [];
@@ -7158,6 +7226,10 @@ io.on('connection', (socket) => {
           patternComposite: patternCompositeForClient(room),
           playbackOrder: playbackOrderPayload,
           ...patternExtrasForClient(room),
+          currentRoundName: room.currentRoundName || null,
+          currentRoundPrize: room.currentRoundPrize || null,
+          showNightBoard: false,
+          roundWinners: room.roundWinners || [],
         });
 
         routineServerLog('🎵 Starting automatic playback (sequential 1→N through pool)...');

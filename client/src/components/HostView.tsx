@@ -148,6 +148,8 @@ import HostPlayersPanel from './host/HostPlayersPanel';
 import HostSettingsPanel from './host/HostSettingsPanel';
 import HostPreShowChecklist, { type PreShowCheckItem } from './host/HostPreShowChecklist';
 import HostRoundTimeline from './host/HostRoundTimeline';
+import HostNightBoardPanel from './host/HostNightBoardPanel';
+import HostPanicStrip from './host/HostPanicStrip';
 import HostPoolQualityReport from './host/HostPoolQualityReport';
 import HostGameLivePanel from './host/HostGameLivePanel';
 import HostDisplayExtrasPanel from './host/HostDisplayExtrasPanel';
@@ -386,6 +388,8 @@ interface EventRound {
   savedMixSnapshot?: SavedRoundMixSnapshot;
   /** Stamped when the round completes: played ids + unplayed pool tracks. Feeds the night-wide Leftovers virtual playlist. */
   playRecap?: RoundPlayRecap;
+  /** Optional prize label for this round (shown on projector + night winners board). */
+  prize?: string;
 }
 
 interface RoundPlayRecap {
@@ -1362,6 +1366,8 @@ const HostView: React.FC = () => {
   const verificationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [roundComplete, setRoundComplete] = useState<any>(null);
   const [roundWinners, setRoundWinners] = useState<Array<any>>([]);
+  /** Projector night winners board visibility (host toggle). */
+  const [showNightBoard, setShowNightBoard] = useState(false);
   const [stripGoTPrefix, setStripGoTPrefix] = useState<boolean>(true);
   const [customMask, setCustomMask] = useState<string[]>([]);
   const [customPattern, setCustomPattern] = useState<string[]>([]);
@@ -3523,6 +3529,8 @@ const HostView: React.FC = () => {
       console.log('?? SET GAME STATE TO PLAYING');
       setIsStartingGame(false);
       setBingoColumnPlaylistNames([]);
+      setShowNightBoard(false);
+      if (Array.isArray(data?.roundWinners)) setRoundWinners(data.roundWinners);
       addLog('Game started - state set to playing', 'info');
       setShowSongList(false);
       schedulePlayerCardsRefresh(800);
@@ -3695,7 +3703,17 @@ const HostView: React.FC = () => {
       if (data.roundWinners) {
         setRoundWinners(data.roundWinners);
       }
+      if (data.showNightBoard !== undefined) {
+        setShowNightBoard(!!data.showNightBoard);
+      } else {
+        setShowNightBoard(true);
+      }
       // Don't set roundComplete here - it's set by bingo-verified for host only
+    });
+
+    newSocket.on('night-board-visibility', (data: any) => {
+      if (data?.visible !== undefined) setShowNightBoard(!!data.visible);
+      if (Array.isArray(data?.roundWinners)) setRoundWinners(data.roundWinners);
     });
 
     newSocket.on('game-resumed', () => {
@@ -3799,6 +3817,7 @@ const HostView: React.FC = () => {
       // Reset host state
       setWinners([]);
       setRoundWinners([]);
+      setShowNightBoard(false);
       setRoundComplete(null);
       setIsPlaying(false);
       setGamePaused(false);
@@ -3870,6 +3889,7 @@ const HostView: React.FC = () => {
       if (data.roundWinners) {
         setRoundWinners(data.roundWinners);
       }
+      setShowNightBoard(false);
       
       addLog(`Round ${data.roundNumber} - Fresh setup ready! Select playlists to start.`, 'info');
       setHostSetupStep('playlist');
@@ -4059,6 +4079,9 @@ const HostView: React.FC = () => {
       }
       if (Array.isArray(payload?.roundWinners)) {
         setRoundWinners(payload.roundWinners);
+      }
+      if (payload?.showNightBoard !== undefined) {
+        setShowNightBoard(!!payload.showNightBoard);
       }
       if (payload?.mixFinalized !== undefined) {
         setMixFinalized(!!payload.mixFinalized);
@@ -5724,6 +5747,8 @@ const HostView: React.FC = () => {
           : {}),
         freeSpace: freeSpaceForStart,
         savedRoundPlayback: useSavedRoundPlayback,
+        roundName: roundForStart?.name || `Round ${(currentRoundIndex ?? 0) + 1}`,
+        prize: typeof roundForStart?.prize === 'string' ? roundForStart.prize.trim() : '',
       });
       
       // Safety timeout in case no response comes back
@@ -7633,6 +7658,16 @@ const HostView: React.FC = () => {
     }
   }, [socket, roomId, playbackState.currentTime]);
 
+  const setNightBoardVisible = useCallback(
+    (visible: boolean) => {
+      setShowNightBoard(visible);
+      if (socket && roomId) {
+        socket.emit('set-night-board-visible', { roomId, visible });
+      }
+    },
+    [socket, roomId],
+  );
+
   // Bingo verification functions
   const approveBingo = useCallback(async () => {
     if (!socket || !pendingVerification) return;
@@ -7999,6 +8034,7 @@ const HostView: React.FC = () => {
           | 'linesRequired'
           | 'customMatchAllowRotation'
           | 'customMatchAllowMirror'
+          | 'prize'
         >
       >,
     ) => {
@@ -8006,6 +8042,10 @@ const HostView: React.FC = () => {
         const r = prev[roundIndex];
         if (!r) return prev;
         let updated: EventRound = { ...r, ...patch };
+        if (Object.prototype.hasOwnProperty.call(patch, 'prize')) {
+          const trimmed = typeof patch.prize === 'string' ? patch.prize.replace(/\s+/g, ' ').trim().slice(0, 120) : '';
+          updated = { ...updated, prize: trimmed || undefined };
+        }
         if (patch.bingoPattern != null && patch.bingoPattern !== 'custom' && patch.bingoPattern !== 'composite') {
           updated = { ...updated, customPatternMask: undefined, patternComposite: undefined };
         }
@@ -8032,7 +8072,9 @@ const HostView: React.FC = () => {
         } catch {
           /* ignore */
         }
-        if (roundIndex === currentRoundIndexRef.current) {
+        const prizeOnlyPatch =
+          Object.keys(patch).length === 1 && Object.prototype.hasOwnProperty.call(patch, 'prize');
+        if (roundIndex === currentRoundIndexRef.current && !prizeOnlyPatch) {
           applyRoundBingoToHost(updated);
         }
         return next;
@@ -11406,6 +11448,7 @@ const HostView: React.FC = () => {
         ),
         saved: Boolean(r.savedMixSnapshot?.songs?.length),
         isCurrent: index === currentRoundIndex,
+        prize: typeof r.prize === 'string' && r.prize.trim() ? r.prize.trim() : undefined,
       })),
     [eventRounds, currentRoundIndex, titleFlagStripList],
   );
@@ -11799,6 +11842,30 @@ const HostView: React.FC = () => {
                     columnLetters={bingoColumnLettersArr}
                   />
                 </div>
+                {(eventRounds.length > 0 || roundWinners.length > 0) && (
+                  <HostNightBoardPanel
+                    plannedRounds={eventRounds.map((r) => ({
+                      name: r.name,
+                      prize: r.prize,
+                      status: r.status,
+                    }))}
+                    winners={roundWinners}
+                    showOnProjector={showNightBoard}
+                    onToggleProjector={setNightBoardVisible}
+                  />
+                )}
+                {(gameState === 'playing' || gamePaused || !!pendingVerification) && (
+                  <HostPanicStrip
+                    onSkip={skipSong}
+                    onBump={replayCurrentClip}
+                    onRejectBingo={() => void rejectBingo()}
+                    onResume={handleManualResumeGame}
+                    onRedoLastCall={handleSkipToPrevious}
+                    canRejectBingo={!!pendingVerification && !isProcessingVerification}
+                    canResume={gamePaused || !!pendingVerification}
+                    transportLocked={!!pendingVerification || isProcessingVerification}
+                  />
+                )}
                   <HostGameDashboard
                     gameState={gameState}
                     currentSong={currentSong}
@@ -13010,6 +13077,7 @@ const HostView: React.FC = () => {
                   {roundWinners.map((winner: any, idx: number) => (
                     <div key={idx} style={{ color: '#fff', fontSize: '0.85rem', marginBottom: '4px' }}>
                       Round {winner.roundNumber}: {winner.playerName}
+                      {winner.prize ? ` — ${winner.prize}` : ''}
                     </div>
                   ))}
                 </div>

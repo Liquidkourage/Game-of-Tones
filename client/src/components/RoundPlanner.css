@@ -552,6 +552,17 @@
   text-align: center;
 }
 
+.round-bucket-settings__field--prize {
+  flex: 1 1 12rem;
+  max-width: 22rem;
+}
+
+.round-bucket-settings__field--prize .round-bucket-settings__input {
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+}
+
 .round-bucket-settings__actions {
   display: flex;
   flex-wrap: wrap;

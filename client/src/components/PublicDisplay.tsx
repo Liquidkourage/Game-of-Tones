@@ -1656,7 +1656,22 @@ const PublicDisplay: React.FC = () => {
     }>;
     winningPositions: string[];
     pattern: string;
+    prize?: string | null;
   } | null>(null);
+  /** Live round prize / night winners board (host prep + verify). */
+  const [currentRoundName, setCurrentRoundName] = useState<string | null>(null);
+  const [currentRoundPrize, setCurrentRoundPrize] = useState<string | null>(null);
+  const [showNightBoard, setShowNightBoard] = useState(false);
+  const [roundWinnersBoard, setRoundWinnersBoard] = useState<
+    Array<{ roundNumber: number; playerName: string; prize?: string; roundName?: string }>
+  >([]);
+  const [roomPhase, setRoomPhase] = useState<string>('waiting');
+  /** After a verified win, let the card celebrate then reveal the night board underneath. */
+  useEffect(() => {
+    if (!winnerCardModal || !showNightBoard || roundWinnersBoard.length === 0) return;
+    const t = window.setTimeout(() => setWinnerCardModal(null), 9000);
+    return () => window.clearTimeout(t);
+  }, [winnerCardModal, showNightBoard, roundWinnersBoard.length]);
   const [remoteHybridNotice, setRemoteHybridNotice] = useState<string>('');
   // Connection status and sync management
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
@@ -2087,6 +2102,30 @@ const PublicDisplay: React.FC = () => {
             setBingoColumnLetters(payload.bingoColumnLetters.toUpperCase());
           }
 
+          if (payload.currentRoundName !== undefined) {
+            setCurrentRoundName(
+              typeof payload.currentRoundName === 'string' && payload.currentRoundName.trim()
+                ? payload.currentRoundName.trim()
+                : null,
+            );
+          }
+          if (payload.currentRoundPrize !== undefined) {
+            setCurrentRoundPrize(
+              typeof payload.currentRoundPrize === 'string' && payload.currentRoundPrize.trim()
+                ? payload.currentRoundPrize.trim()
+                : null,
+            );
+          }
+          if (payload.showNightBoard !== undefined) {
+            setShowNightBoard(!!payload.showNightBoard);
+          }
+          if (Array.isArray(payload.roundWinners)) {
+            setRoundWinnersBoard(payload.roundWinners);
+          }
+          if (typeof payload.gameState === 'string') {
+            setRoomPhase(payload.gameState);
+          }
+
           // CRITICAL: Sync currentIndexRef from server state (needed for proper display on refresh)
           if (typeof payload.currentSongIndex === 'number') {
             currentIndexRef.current = payload.currentSongIndex;
@@ -2255,6 +2294,12 @@ const PublicDisplay: React.FC = () => {
                 squares: lw.squares,
                 winningPositions: Array.isArray(lw.winningPositions) ? lw.winningPositions : [],
                 pattern: typeof lw.pattern === 'string' ? lw.pattern : 'line',
+                prize:
+                  typeof lw.prize === 'string' && lw.prize.trim()
+                    ? lw.prize.trim()
+                    : typeof payload.currentRoundPrize === 'string' && payload.currentRoundPrize.trim()
+                      ? payload.currentRoundPrize.trim()
+                      : null,
               };
             });
           }
@@ -2719,6 +2764,19 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('game-started', (data: any) => {
       setWinnerCardModal(null);
       setIsVerificationPending(false);
+      setShowNightBoard(false);
+      setRoomPhase('playing');
+      setCurrentRoundName(
+        typeof data?.currentRoundName === 'string' && data.currentRoundName.trim()
+          ? data.currentRoundName.trim()
+          : null,
+      );
+      setCurrentRoundPrize(
+        typeof data?.currentRoundPrize === 'string' && data.currentRoundPrize.trim()
+          ? data.currentRoundPrize.trim()
+          : null,
+      );
+      if (Array.isArray(data?.roundWinners)) setRoundWinnersBoard(data.roundWinners);
       setGameState(prev => ({ 
         ...prev, 
         isPlaying: true,
@@ -2877,6 +2935,8 @@ const PublicDisplay: React.FC = () => {
                 squares: wc.squares,
                 winningPositions: Array.isArray(data.winningPositions) ? data.winningPositions : [],
                 pattern: typeof data.pattern === 'string' ? data.pattern : 'line',
+                prize:
+                  typeof data.prize === 'string' && data.prize.trim() ? data.prize.trim() : null,
               });
               playPublicCelebrationSound();
             } else {
@@ -2890,9 +2950,37 @@ const PublicDisplay: React.FC = () => {
               const celebrationTime = isFirstWinner ? 6000 : 4000;
               setTimeout(() => setShowWinnerBanner(false), celebrationTime);
             }
+            if (Array.isArray(data.roundWinners)) setRoundWinnersBoard(data.roundWinners);
+            if (data.showNightBoard !== undefined) setShowNightBoard(!!data.showNightBoard);
+            else setShowNightBoard(true);
+            if (typeof data.roundName === 'string' && data.roundName.trim()) {
+              setCurrentRoundName(data.roundName.trim());
+            }
+            if (typeof data.prize === 'string') {
+              setCurrentRoundPrize(data.prize.trim() || null);
+            }
+            setRoomPhase('round_complete');
           }
         } catch {}
       }
+    });
+
+    newSocket.on('round-complete', (data: any) => {
+      if (Array.isArray(data?.roundWinners)) setRoundWinnersBoard(data.roundWinners);
+      if (data?.showNightBoard !== undefined) setShowNightBoard(!!data.showNightBoard);
+      else setShowNightBoard(true);
+      if (typeof data?.roundName === 'string' && data.roundName.trim()) {
+        setCurrentRoundName(data.roundName.trim());
+      }
+      if (typeof data?.prize === 'string') {
+        setCurrentRoundPrize(data.prize.trim() || null);
+      }
+      setRoomPhase('round_complete');
+    });
+
+    newSocket.on('night-board-visibility', (data: any) => {
+      if (data?.visible !== undefined) setShowNightBoard(!!data.visible);
+      if (Array.isArray(data?.roundWinners)) setRoundWinnersBoard(data.roundWinners);
     });
 
     newSocket.on('mix-finalized', (payload: any) => {
@@ -2948,6 +3036,11 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('game-restarted', (data: any) => {
       console.log('Game restarted:', data);
       setWinnerCardModal(null);
+      setShowNightBoard(false);
+      setRoundWinnersBoard([]);
+      setCurrentRoundName(null);
+      setCurrentRoundPrize(null);
+      setRoomPhase('waiting');
       // Reset display state
       setGameState({
         isPlaying: false,
@@ -2990,6 +3083,11 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('next-round-reset', (data: any) => {
       console.log('Next round reset (public display):', data);
       setWinnerCardModal(null);
+      setShowNightBoard(false);
+      setCurrentRoundName(null);
+      setCurrentRoundPrize(null);
+      setRoomPhase('waiting');
+      if (Array.isArray(data?.roundWinners)) setRoundWinnersBoard(data.roundWinners);
       // Reset display state completely
       setGameState({
         isPlaying: false,
@@ -5041,6 +5139,20 @@ const PublicDisplay: React.FC = () => {
                   />
                   <span style={{ maxWidth: '100%', wordBreak: 'break-word' }}>{winnerCardModal.playerName}</span>
                 </div>
+                {winnerCardModal.prize ? (
+                  <div
+                    style={{
+                      fontSize: 'clamp(1.1rem, 3vmin, 2.2rem)',
+                      fontWeight: 800,
+                      color: '#f5d061',
+                      lineHeight: 1.2,
+                      maxWidth: '100%',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {winnerCardModal.prize}
+                  </div>
+                ) : null}
                 <div
                   style={{
                     fontSize: 'clamp(1.05rem, 2.8vmin, 2.1rem)',
@@ -5194,6 +5306,109 @@ const PublicDisplay: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {showNightBoard && roundWinnersBoard.length > 0 && (
+        <div
+          className="public-night-board"
+          role="region"
+          aria-label="Tonight's winners"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2500,
+            background: 'rgba(0,0,0,0.82)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 'clamp(16px, 3vmin, 40px)',
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            style={{
+              width: 'min(92vw, 900px)',
+              maxHeight: 'min(88vh, 900px)',
+              overflow: 'auto',
+              background: pdGlass.glassPanelStrong,
+              border: `max(2px, 0.3vmin) solid ${pdGlass.borderMintStrong}`,
+              borderRadius: 'clamp(14px, 2vmin, 24px)',
+              boxShadow: `${pdGlass.glowMint}, 0 24px 64px rgba(0,0,0,0.55)`,
+              padding: 'clamp(18px, 3vmin, 36px)',
+            }}
+          >
+            <div
+              style={{
+                fontSize: 'clamp(1.1rem, 2.6vmin, 1.8rem)',
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+                fontWeight: 800,
+                color: 'rgba(0,255,170,0.92)',
+                textAlign: 'center',
+                marginBottom: 'clamp(12px, 2vmin, 22px)',
+              }}
+            >
+              Tonight&apos;s board
+            </div>
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'clamp(8px, 1.2vmin, 14px)' }}>
+              {roundWinnersBoard.map((w, idx) => (
+                <li
+                  key={`${w.roundNumber}-${w.playerName}-${idx}`}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(5rem, 1.1fr) minmax(5rem, 1.4fr) minmax(5rem, 1.2fr)',
+                    gap: 'clamp(8px, 1.5vmin, 18px)',
+                    alignItems: 'center',
+                    padding: 'clamp(10px, 1.4vmin, 16px) clamp(12px, 1.6vmin, 18px)',
+                    borderRadius: 12,
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(0,255,136,0.22)',
+                  }}
+                >
+                  <span style={{ fontWeight: 800, fontSize: 'clamp(1rem, 2.2vmin, 1.45rem)' }}>
+                    {w.roundName || `Round ${w.roundNumber}`}
+                  </span>
+                  <span
+                    style={{
+                      color: '#f5d061',
+                      fontWeight: 700,
+                      fontSize: 'clamp(0.95rem, 2vmin, 1.35rem)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {(w.prize || '').trim() || '—'}
+                  </span>
+                  <span
+                    style={{
+                      fontWeight: 900,
+                      fontSize: 'clamp(1.05rem, 2.4vmin, 1.6rem)',
+                      color: '#eafff8',
+                      textAlign: 'right',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {w.playerName}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {roomPhase === 'round_complete' && currentRoundPrize ? (
+              <div
+                style={{
+                  marginTop: 'clamp(12px, 2vmin, 20px)',
+                  textAlign: 'center',
+                  fontSize: 'clamp(0.9rem, 1.8vmin, 1.2rem)',
+                  color: 'rgba(255,255,255,0.65)',
+                }}
+              >
+                Latest prize: {currentRoundPrize}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
 
       {typeof document !== 'undefined' &&
         createPortal(
@@ -5809,6 +6024,25 @@ const PublicDisplay: React.FC = () => {
             >
               <div className="bingo-card-header center" style={{ justifyContent: 'center' }}>
                 <h2 className="pattern-title-text">{getPatternName()}</h2>
+                {(currentRoundName || currentRoundPrize) && (
+                  <div
+                    className="public-round-prize-line"
+                    style={{
+                      marginTop: '0.35em',
+                      fontSize: 'clamp(0.85rem, 1.8vmin, 1.35rem)',
+                      fontWeight: 800,
+                      letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                      color: 'rgba(245, 208, 97, 0.95)',
+                      textAlign: 'center',
+                      lineHeight: 1.25,
+                      maxWidth: '100%',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {[currentRoundName, currentRoundPrize].filter(Boolean).join(' · ')}
+                  </div>
+                )}
                 {pattern === 'composite' && patternComposite && patternComposite.clauses.length > 0 && (
                   <div className="composite-pattern-header-block">
                     <div className="composite-pattern-and-or-hint" style={{ color: '#f5d061', textAlign: 'center' }}>
