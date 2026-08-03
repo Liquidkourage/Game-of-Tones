@@ -6696,6 +6696,72 @@ button.conn-chip.conn-chip-compact {
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
+.player-container--v2 .player-v2-feedback-open,
+.player-container--v2 .player-v2-feedback-submit {
+  flex: 0 0 auto;
+  cursor: pointer;
+  background: var(--player-v2-control-active-bg);
+  border-color: var(--player-v2-control-active-border);
+  color: var(--player-v2-control-active-text);
+}
+
+.player-container--v2 .player-v2-feedback-form {
+  width: 100%;
+}
+
+.player-container--v2 .player-v2-feedback-input {
+  display: block;
+  width: 100%;
+  min-height: 76px;
+  padding: 10px 12px;
+  resize: vertical;
+  border-radius: 12px;
+  border: 1px solid var(--player-v2-control-border);
+  background: var(--player-v2-control-bg);
+  color: var(--player-v2-text-primary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.player-container--v2 .player-v2-feedback-input:focus {
+  outline: none;
+  border-color: var(--player-v2-control-active-border);
+  box-shadow: 0 0 0 2px var(--player-v2-accent-glow);
+}
+
+.player-container--v2 .player-v2-feedback-input::placeholder {
+  color: var(--player-v2-text-muted);
+}
+
+.player-container--v2 .player-v2-feedback-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.player-container--v2 .player-v2-feedback-status {
+  font-size: 11px;
+  color: var(--player-v2-text-muted);
+}
+
+.player-container--v2 .player-v2-feedback-status--sent {
+  color: var(--player-v2-pill-connected-text);
+  font-weight: 700;
+}
+
+.player-container--v2 .player-v2-feedback-status--error {
+  color: #ff8888;
+  font-weight: 700;
+}
+
+.player-container--v2 .player-v2-feedback-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .player-container--v2 .player-v2-inline-button--connected {
   background: var(--player-v2-pill-connected-bg);
   border-color: var(--player-v2-pill-connected-border);

@@ -4978,6 +4978,58 @@ io.on('connection', (socket) => {
     })();
   });
 
+  // Short rehearsal feedback from a joined player to the active host.
+  socket.on('player-feedback', (data = {}, acknowledge) => {
+    const reply = (payload) => {
+      if (typeof acknowledge === 'function') acknowledge(payload);
+    };
+
+    try {
+      const roomId = typeof data.roomId === 'string' ? data.roomId : '';
+      const room = rooms.get(roomId);
+      const player = room?.players?.get(socket.id);
+      const message =
+        typeof data.message === 'string'
+          ? data.message.replace(/\s+/g, ' ').trim().slice(0, 300)
+          : '';
+
+      if (!room || !player || player.isHost || isDisplayConnectionPlayer(player) || !message) {
+        reply({ ok: false });
+        return;
+      }
+
+      const now = Date.now();
+      if (socket.lastPlayerFeedbackAt && now - socket.lastPlayerFeedbackAt < 2000) {
+        reply({ ok: false });
+        return;
+      }
+      socket.lastPlayerFeedbackAt = now;
+
+      const feedback = {
+        id: `${now}-${socket.id}`,
+        playerName: player.name || 'Player',
+        message,
+        submittedAt: now,
+      };
+      room.playerFeedback = [...(Array.isArray(room.playerFeedback) ? room.playerFeedback : []), feedback].slice(-50);
+
+      const hostSocketIds = new Set();
+      if (room.host) hostSocketIds.add(room.host);
+      for (const [playerId, roomPlayer] of room.players) {
+        if (roomPlayer?.isHost) hostSocketIds.add(playerId);
+      }
+      for (const hostSocketId of hostSocketIds) {
+        io.to(hostSocketId).emit('player-feedback', feedback);
+      }
+
+      routineServerLog(`💬 Player feedback in room ${roomId} from ${feedback.playerName}: ${message}`);
+      reply({ ok: true });
+    } catch (error) {
+      console.error('player-feedback failed:', error?.message || error);
+      reply({ ok: false });
+    }
+  });
+
   // Start game
   socket.on('finalize-mix', async (data) => {
     const { roomId, playlists, songList, freeSpace } = data;

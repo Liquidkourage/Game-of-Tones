@@ -3424,6 +3424,18 @@ const HostView: React.FC = () => {
       }
       schedulePlayerCardsRefresh(450);
     });
+    newSocket.on('player-feedback', (data: any) => {
+      const playerName =
+        typeof data?.playerName === 'string' && data.playerName.trim()
+          ? data.playerName.trim()
+          : 'Player';
+      const message = typeof data?.message === 'string' ? data.message.trim() : '';
+      if (!message) return;
+      addLog(`Player feedback — ${playerName}: ${message}`, 'info');
+      const toastMessage =
+        message.length > 140 ? `${message.slice(0, 137)}…` : message;
+      showToast(`Feedback from ${playerName}: ${toastMessage}`, 'info');
+    });
     newSocket.on('prequeue-updated', (data: any) => {
       setPreQueueEnabled(!!data?.enabled);
       if (typeof data?.window === 'number') setPreQueueWindow(data.window);

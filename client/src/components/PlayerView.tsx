@@ -207,6 +207,9 @@ const PlayerView: React.FC = () => {
   const [playedSongIds, setPlayedSongIds] = useState<string[]>([]);
   const [connectionToast, setConnectionToast] = useState<string>('');
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackStatus, setFeedbackStatus] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle');
   const [hybridPrizeInPersonOnly, setHybridPrizeInPersonOnly] = useState(false);
   const previousPlayedSongIdsRef = useRef<string[]>([]); // Track previous state for missed songs calculation
   const wasReconnectingRef = useRef<boolean>(false); // Track if we're in a reconnection state
@@ -614,6 +617,39 @@ const PlayerView: React.FC = () => {
     } finally {
       setDisplayNameBusy(false);
     }
+  };
+
+  const submitPlayerFeedback = () => {
+    const message = feedbackText.trim();
+    if (!message || feedbackStatus === 'submitting') return;
+    if (!socket?.connected) {
+      setFeedbackStatus('error');
+      return;
+    }
+
+    setFeedbackStatus('submitting');
+    let settled = false;
+    const timeoutId = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      setFeedbackStatus('error');
+    }, 5000);
+
+    socket.emit(
+      'player-feedback',
+      { roomId, message },
+      (result: { ok?: boolean } | undefined) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        if (result?.ok) {
+          setFeedbackText('');
+          setFeedbackStatus('sent');
+        } else {
+          setFeedbackStatus('error');
+        }
+      },
+    );
   };
 
   useEffect(() => {
@@ -2737,6 +2773,61 @@ const PlayerView: React.FC = () => {
                         : ''}
                     </div>
                   </div>
+                </div>
+
+                <div className={`player-v2-sheet-row${feedbackOpen ? ' player-v2-sheet-row--stacked' : ''}`}>
+                  <div className="player-v2-sheet-copy">
+                    <div className="player-v2-sheet-label">Feedback</div>
+                    <div className="player-v2-sheet-note">Send a short note to the host.</div>
+                  </div>
+                  {!feedbackOpen ? (
+                    <button
+                      type="button"
+                      className="player-v2-inline-button player-v2-feedback-open"
+                      onClick={() => {
+                        setFeedbackOpen(true);
+                        setFeedbackStatus('idle');
+                      }}
+                    >
+                      Feedback
+                    </button>
+                  ) : (
+                    <div className="player-v2-feedback-form">
+                      <textarea
+                        className="player-v2-feedback-input"
+                        value={feedbackText}
+                        maxLength={300}
+                        rows={3}
+                        placeholder="What should the host know?"
+                        aria-label="Feedback for the host"
+                        onChange={(event) => {
+                          setFeedbackText(event.target.value);
+                          if (feedbackStatus !== 'submitting') setFeedbackStatus('idle');
+                        }}
+                      />
+                      <div className="player-v2-feedback-actions">
+                        <span
+                          className={`player-v2-feedback-status player-v2-feedback-status--${feedbackStatus}`}
+                          role="status"
+                          aria-live="polite"
+                        >
+                          {feedbackStatus === 'sent'
+                            ? 'Sent to host'
+                            : feedbackStatus === 'error'
+                              ? 'Could not send. Check your connection.'
+                              : `${feedbackText.length}/300`}
+                        </span>
+                        <button
+                          type="button"
+                          className="player-v2-inline-button player-v2-feedback-submit"
+                          disabled={!feedbackText.trim() || feedbackStatus === 'submitting'}
+                          onClick={submitPlayerFeedback}
+                        >
+                          {feedbackStatus === 'submitting' ? 'Sending…' : 'Submit'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {playerAccount ? (
