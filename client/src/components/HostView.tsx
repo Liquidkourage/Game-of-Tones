@@ -7723,22 +7723,44 @@ const HostView: React.FC = () => {
     [socket, roomId],
   );
 
+  const roundBuilderFocusIndexRef = useRef(roundBuilderFocusIndex);
+  useEffect(() => {
+    roundBuilderFocusIndexRef.current = roundBuilderFocusIndex;
+  }, [roundBuilderFocusIndex]);
+
   /** Keep projector Round · prize in sync whenever the call list can show (not only Start Game). */
   const syncRoundDisplayMeta = useCallback(() => {
     if (!socket || !roomId) return;
-    const idx = currentRoundIndexRef.current;
-    const r = idx >= 0 ? eventRoundsRef.current[idx] : undefined;
+    const rounds = eventRoundsRef.current;
+    if (!rounds.length) return;
+    // currentRoundIndex is often -1 during prep — fall back to focused / first round.
+    // Never emit blanks in that case or we wipe Round + prize off the projector.
+    let idx = currentRoundIndexRef.current;
+    if (idx < 0 || idx >= rounds.length) {
+      const focus = roundBuilderFocusIndexRef.current;
+      idx = focus >= 0 && focus < rounds.length ? focus : 0;
+    }
+    const r = rounds[idx];
+    if (!r) return;
     socket.emit('set-round-display-meta', {
       roomId,
-      roundName: r?.name || (idx >= 0 ? `Round ${idx + 1}` : ''),
-      prize: typeof r?.prize === 'string' ? r.prize.trim() : '',
+      roundName: r.name || `Round ${idx + 1}`,
+      prize: typeof r.prize === 'string' ? r.prize.trim() : '',
     });
   }, [socket, roomId]);
 
+  const displayMetaRoundIndex =
+    currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
+      ? currentRoundIndex
+      : roundBuilderFocusIndex >= 0 && roundBuilderFocusIndex < eventRounds.length
+        ? roundBuilderFocusIndex
+        : eventRounds.length > 0
+          ? 0
+          : -1;
   const activeRoundDisplayPrize =
-    currentRoundIndex >= 0 ? eventRounds[currentRoundIndex]?.prize ?? '' : '';
+    displayMetaRoundIndex >= 0 ? eventRounds[displayMetaRoundIndex]?.prize ?? '' : '';
   const activeRoundDisplayName =
-    currentRoundIndex >= 0 ? eventRounds[currentRoundIndex]?.name ?? '' : '';
+    displayMetaRoundIndex >= 0 ? eventRounds[displayMetaRoundIndex]?.name ?? '' : '';
 
   useEffect(() => {
     if (!socket || !roomId) return;
@@ -7747,7 +7769,7 @@ const HostView: React.FC = () => {
   }, [
     socket,
     roomId,
-    currentRoundIndex,
+    displayMetaRoundIndex,
     activeRoundDisplayName,
     activeRoundDisplayPrize,
     syncRoundDisplayMeta,

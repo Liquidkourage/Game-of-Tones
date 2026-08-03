@@ -2109,19 +2109,13 @@ const PublicDisplay: React.FC = () => {
             setBingoColumnLetters(payload.bingoColumnLetters.toUpperCase());
           }
 
-          if (payload.currentRoundName !== undefined) {
-            setCurrentRoundName(
-              typeof payload.currentRoundName === 'string' && payload.currentRoundName.trim()
-                ? payload.currentRoundName.trim()
-                : null,
-            );
+          // Only apply non-empty meta from room-state. Empty strings used to wipe a good
+          // host push when prep briefly had no currentRoundIndex.
+          if (typeof payload.currentRoundName === 'string' && payload.currentRoundName.trim()) {
+            setCurrentRoundName(payload.currentRoundName.trim());
           }
-          if (payload.currentRoundPrize !== undefined) {
-            setCurrentRoundPrize(
-              typeof payload.currentRoundPrize === 'string' && payload.currentRoundPrize.trim()
-                ? payload.currentRoundPrize.trim()
-                : null,
-            );
+          if (typeof payload.currentRoundPrize === 'string' && payload.currentRoundPrize.trim()) {
+            setCurrentRoundPrize(payload.currentRoundPrize.trim());
           }
           if (payload.showNightBoard !== undefined) {
             setShowNightBoard(!!payload.showNightBoard);
@@ -3024,16 +3018,21 @@ const PublicDisplay: React.FC = () => {
     });
 
     newSocket.on('round-display-meta', (data: any) => {
-      setCurrentRoundName(
-        typeof data?.currentRoundName === 'string' && data.currentRoundName.trim()
-          ? data.currentRoundName.trim()
-          : null,
-      );
-      setCurrentRoundPrize(
-        typeof data?.currentRoundPrize === 'string' && data.currentRoundPrize.trim()
-          ? data.currentRoundPrize.trim()
-          : null,
-      );
+      // Authoritative host push — allow clearing prize/name when the host updates prep.
+      if (data?.currentRoundName !== undefined) {
+        setCurrentRoundName(
+          typeof data.currentRoundName === 'string' && data.currentRoundName.trim()
+            ? data.currentRoundName.trim()
+            : null,
+        );
+      }
+      if (data?.currentRoundPrize !== undefined) {
+        setCurrentRoundPrize(
+          typeof data.currentRoundPrize === 'string' && data.currentRoundPrize.trim()
+            ? data.currentRoundPrize.trim()
+            : null,
+        );
+      }
     });
 
     newSocket.on('mix-finalized', (payload: any) => {
