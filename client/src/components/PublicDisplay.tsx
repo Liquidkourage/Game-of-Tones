@@ -6219,15 +6219,19 @@ const PublicDisplay: React.FC = () => {
               transition={{ duration: 0.6, delay: 0.2 }}
             >
               <div className="bingo-card-header center" style={{ justifyContent: 'center' }}>
-                <h2 className="pattern-title-text">{getPatternName()}</h2>
-                {(currentRoundName || currentRoundPrize) && (
+                <h2 className="pattern-title-text">
+                  {currentRoundName
+                    ? `${currentRoundName} - ${getPatternName()}`
+                    : getPatternName()}
+                </h2>
+                {currentRoundPrize ? (
                   <div
                     className="public-round-prize-line"
                     style={{
-                      marginTop: '0.35em',
-                      fontSize: 'clamp(0.85rem, 1.8vmin, 1.35rem)',
+                      marginTop: '0.3em',
+                      fontSize: 'clamp(0.9rem, 2vmin, 1.45rem)',
                       fontWeight: 800,
-                      letterSpacing: '0.04em',
+                      letterSpacing: '0.03em',
                       textTransform: 'uppercase',
                       color: 'rgba(245, 208, 97, 0.95)',
                       textAlign: 'center',
@@ -6236,14 +6240,9 @@ const PublicDisplay: React.FC = () => {
                       wordBreak: 'break-word',
                     }}
                   >
-                    {[
-                      currentRoundName,
-                      currentRoundPrize ? `Prize: ${currentRoundPrize}` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
+                    {currentRoundPrize}
                   </div>
-                )}
+                ) : null}
                 {pattern === 'composite' && patternComposite && patternComposite.clauses.length > 0 && (
                   <div className="composite-pattern-header-block">
                     <div className="composite-pattern-and-or-hint" style={{ color: '#f5d061', textAlign: 'center' }}>
