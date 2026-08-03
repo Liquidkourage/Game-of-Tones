@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowUpRight, ListMusic } from 'lucide-react';
+import { playlistDisplayParts } from '../../utils/roundPrintLabels';
 import './HostSetupCockpit.css';
 
 export type HostSetupPlaylistStepProps = {
@@ -64,15 +65,23 @@ const HostSetupPlaylistStep: React.FC<HostSetupPlaylistStepProps> = ({
         </div>
         {playlistNames.length > 0 ? (
           <ul className="host-setup-playlist__list">
-            {playlistNames.map((name, i) => (
-              <li key={`${name}-${i}`}>
-                <ListMusic className="w-4 h-4" aria-hidden />
-                {columnMode ? (
-                  <span className="host-setup-playlist__column-label">Column {i + 1}</span>
-                ) : null}
-                {name}
-              </li>
-            ))}
+            {playlistNames.map((name, i) => {
+              const { title, poolSize } = playlistDisplayParts(name);
+              return (
+                <li key={`${name}-${i}`}>
+                  <ListMusic className="w-4 h-4" aria-hidden />
+                  {columnMode ? (
+                    <span className="host-setup-playlist__column-label">Column {i + 1}</span>
+                  ) : null}
+                  {title}
+                  {poolSize ? (
+                    <span className="host-playlist-pool-size-chip" aria-label={`${poolSize} song pool`}>
+                      ({poolSize})
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         ) : null}
         {spotifyCacheInfo ? (

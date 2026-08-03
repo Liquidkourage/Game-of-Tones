@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AlertTriangle, ArrowDownToLine, GripVertical, ListMusic, X } from 'lucide-react';
 import { BINGO_COLUMN_LETTERS } from '../../utils/bingoColumnOrder';
 import { ROUND_PLAYLIST_REORDER_MIME } from '../../utils/roundPlaylistOrder';
+import { playlistDisplayParts } from '../../utils/roundPrintLabels';
 import './HostPlaylistLibrary.css';
 
 export type SelectedRoundPlaylistRow = {
@@ -154,6 +155,7 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
           {playlists.map((p, i) => {
             const isDropTarget = dropChipIndex === i && dragChipIndex !== null;
             const isDragging = dragChipIndex === i;
+            const { title: displayName, poolSize } = playlistDisplayParts(p.name);
             return (
               <li
                 key={p.id}
@@ -215,15 +217,20 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
                     {letters[i]}
                   </span>
                 ) : null}
-                <span className="host-selected-round__name" title={p.name}>
-                  {p.name}
+                <span className="host-selected-round__name" title={displayName}>
+                  {displayName}
                 </span>
+                {poolSize ? (
+                  <span className="host-playlist-pool-size-chip" aria-label={`${poolSize} song pool`}>
+                    ({poolSize})
+                  </span>
+                ) : null}
                 {canEdit ? (
                   <button
                     type="button"
                     className="host-selected-round__remove"
-                    title={`Remove ${p.name} from this round`}
-                    aria-label={`Remove ${p.name} from this round`}
+                    title={`Remove ${displayName} from this round`}
+                    aria-label={`Remove ${displayName} from this round`}
                     onClick={() => onRemovePlaylist(p.id)}
                   >
                     <X className="w-3.5 h-3.5" aria-hidden />

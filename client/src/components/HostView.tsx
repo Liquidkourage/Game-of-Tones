@@ -114,7 +114,12 @@ import {
   buildOfflineShowPackPdfBlob,
   type OfflineShowPackRound,
 } from '../utils/offlineShowPackPdf';
-import { roundPatternLabelForPrint, roundPrintablePdfSubtitle, printablePlaylistLabelsFromNames } from '../utils/roundPrintLabels';
+import {
+  playlistDisplayParts,
+  printablePlaylistLabelsFromNames,
+  roundPatternLabelForPrint,
+  roundPrintablePdfSubtitle,
+} from '../utils/roundPrintLabels';
 import { buildRoundCallSheetPdfBlob } from '../utils/printRoundCallSheetPdf';
 import {
   normalizePublicDisplayTitleRevealMode,
@@ -10729,6 +10734,10 @@ const HostView: React.FC = () => {
               <div className="host-catalog-pack-list">
                 {tempoLibraryPacks.map((pack) => {
                   const isSel = selectedCatalogPlaylists.some((p) => p.id === pack.id);
+                  const rawDisplayName = stripGoTPrefix
+                    ? stripTitleFlagPrefix(pack.name, titleFlagStripList)
+                    : pack.name;
+                  const { title: displayName, poolSize } = playlistDisplayParts(rawDisplayName);
                   return (
                     <div
                       key={pack.id}
@@ -10769,8 +10778,22 @@ const HostView: React.FC = () => {
                             );
                           }}
                         />
-                        <span style={{ color: '#fff', flex: 1, minWidth: 0 }}>
-                          {stripGoTPrefix ? stripTitleFlagPrefix(pack.name, titleFlagStripList) : pack.name}
+                        <span
+                          style={{
+                            color: '#fff',
+                            flex: 1,
+                            minWidth: 0,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                          }}
+                        >
+                          {displayName}
+                          {poolSize ? (
+                            <span className="host-playlist-pool-size-chip" aria-label={`${poolSize} song pool`}>
+                              ({poolSize})
+                            </span>
+                          ) : null}
                         </span>
                         <span style={{ color: '#8899aa', fontSize: '0.78rem', flexShrink: 0 }}>
                           {pack.tracks} songs
@@ -10778,7 +10801,7 @@ const HostView: React.FC = () => {
                       </label>
                       <HostPlaylistRoundAssignMenu
                         playlistId={pack.id}
-                        playlistName={stripGoTPrefix ? stripTitleFlagPrefix(pack.name, titleFlagStripList) : pack.name}
+                        playlistName={rawDisplayName}
                         rounds={eventRounds}
                         onAssign={(roundIndex) => addPlaylistToRoundBucket(roundIndex, pack.id)}
                         onUnassign={(roundIndex) =>
@@ -11367,6 +11390,10 @@ const HostView: React.FC = () => {
                           const availGap = (p.tracksRemoved ?? 0) + (p.tracksUnplayable ?? 0);
                           const isInsufficient = trackCount < 15;
                           const isAcceptable = trackCount >= 15;
+                          const rawDisplayName = stripGoTPrefix
+                            ? stripTitleFlagPrefix(p.name, titleFlagStripList)
+                            : p.name;
+                          const { title: displayName, poolSize } = playlistDisplayParts(rawDisplayName);
                           
                           return (
                             <div
@@ -11434,7 +11461,15 @@ const HostView: React.FC = () => {
                                   fontSize: '0.9rem',
                                   color: isAcceptable ? '#00ff88' : '#fff',
                                 }}>
-                                  {stripGoTPrefix ? stripTitleFlagPrefix(p.name, titleFlagStripList) : p.name}
+                                  {displayName}
+                                  {poolSize ? (
+                                    <span
+                                      className="host-playlist-pool-size-chip"
+                                      aria-label={`${poolSize} song pool`}
+                                    >
+                                      ({poolSize})
+                                    </span>
+                                  ) : null}
                                   {p.youtubeMusic ? (
                                     <span
                                       style={{
@@ -11569,7 +11604,7 @@ const HostView: React.FC = () => {
                                 {eventRounds.length > 1 ? (
                                   <HostPlaylistRoundAssignMenu
                                     playlistId={p.id}
-                                    playlistName={stripGoTPrefix ? stripTitleFlagPrefix(p.name, titleFlagStripList) : p.name}
+                                    playlistName={rawDisplayName}
                                     rounds={eventRounds}
                                     onAssign={(roundIndex) => addPlaylistToRoundBucket(roundIndex, p.id)}
                                     onUnassign={(roundIndex) =>

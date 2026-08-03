@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { BINGO_COLUMN_LETTERS } from '../../utils/bingoColumnOrder';
+import { playlistDisplayParts } from '../../utils/roundPrintLabels';
 
 export type RoundTimelineRow = {
   index: number;
@@ -39,6 +40,20 @@ const statusLabel: Record<RoundTimelineRow['status'], string> = {
   active: 'Live',
   planned: 'Planned',
   unplanned: 'Draft',
+};
+
+const PlaylistDisplayLabel: React.FC<{ name: string }> = ({ name }) => {
+  const { title, poolSize } = playlistDisplayParts(name);
+  return (
+    <>
+      <span className="host-round-timeline__playlist-chip-name">{title}</span>
+      {poolSize ? (
+        <span className="host-playlist-pool-size-chip" aria-label={`${poolSize} song pool`}>
+          ({poolSize})
+        </span>
+      ) : null}
+    </>
+  );
 };
 
 const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
@@ -192,8 +207,11 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
               </span>
               {r.playlistNames && r.playlistNames.length === 1 ? (
                 /* Round Mix: one playlist supplies all 75 — just say the title. */
-                <span className="host-round-timeline__playlists" title={r.playlistNames[0]}>
-                  {r.playlistNames[0]}
+                <span
+                  className="host-round-timeline__playlists"
+                  title={playlistDisplayParts(r.playlistNames[0]).title}
+                >
+                  <PlaylistDisplayLabel name={r.playlistNames[0]} />
                 </span>
               ) : r.playlistNames && r.playlistNames.length > 1 ? (
                 /* Column mode: every playlist as a small chip, in stored order (= B–O card columns). */
@@ -204,8 +222,8 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                       className="host-round-timeline__playlist-chip"
                       title={
                         r.playlistNames!.length === 5
-                          ? `${letters[i]} column · ${n}`
-                          : n
+                          ? `${letters[i]} column · ${playlistDisplayParts(n).title}`
+                          : playlistDisplayParts(n).title
                       }
                     >
                       {r.playlistNames!.length === 5 ? (
@@ -213,7 +231,7 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                           {letters[i]}
                         </span>
                       ) : null}
-                      <span className="host-round-timeline__playlist-chip-name">{n}</span>
+                      <PlaylistDisplayLabel name={n} />
                     </span>
                   ))}
                 </span>

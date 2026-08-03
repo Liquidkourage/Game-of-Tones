@@ -4,6 +4,7 @@ import {
   roundAssignmentLabel,
   roundIndicesForPlaylist,
 } from '../../utils/playlistRoundAssignments';
+import { playlistDisplayParts } from '../../utils/roundPrintLabels';
 import './HostPlaylistLibrary.css';
 
 export type HostPlaylistRoundAssignMenuProps = {
@@ -30,6 +31,7 @@ const HostPlaylistRoundAssignMenu: React.FC<HostPlaylistRoundAssignMenuProps> = 
   const assignedIndices = roundIndicesForPlaylist(playlistId, rounds);
   const usedInEvent = assignedIndices.length > 0;
   const reusedAcrossRounds = assignedIndices.length > 1;
+  const { title: displayName, poolSize } = playlistDisplayParts(playlistName);
 
   useEffect(() => {
     if (!open) return;
@@ -65,7 +67,7 @@ const HostPlaylistRoundAssignMenu: React.FC<HostPlaylistRoundAssignMenuProps> = 
         aria-expanded={open}
         aria-controls={menuId}
         disabled={disabled || rounds.length === 0}
-        title={`Assign ${playlistName} to rounds`}
+        title={`Assign ${displayName} to rounds`}
         onClick={() => setOpen((v) => !v)}
       >
         Rounds
@@ -73,6 +75,14 @@ const HostPlaylistRoundAssignMenu: React.FC<HostPlaylistRoundAssignMenuProps> = 
       </button>
       {open ? (
         <div id={menuId} className="host-playlist-assign__menu" role="dialog" aria-label="Assign to rounds">
+          <p className="host-playlist-assign__playlist-name">
+            Assign {displayName}
+            {poolSize ? (
+              <span className="host-playlist-pool-size-chip" aria-label={`${poolSize} song pool`}>
+                ({poolSize})
+              </span>
+            ) : null}
+          </p>
           {usedInEvent ? (
             <p className="host-playlist-assign__caution">
               <AlertTriangle className="w-3.5 h-3.5" aria-hidden />

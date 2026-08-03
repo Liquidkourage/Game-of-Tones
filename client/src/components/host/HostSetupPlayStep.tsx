@@ -2,6 +2,7 @@ import React from 'react';
 import { CheckCircle2, Image as ImageIcon, ListChecks, ListMusic, Loader2, Play } from 'lucide-react';
 import HostPlaylistAvailabilityWarnings from '../HostPlaylistAvailabilityWarnings';
 import type { PlaylistAvailabilityIssue } from '../HostPlaylistAvailabilityWarnings';
+import { playlistDisplayParts } from '../../utils/roundPrintLabels';
 import HostPreShowChecklist, { type PreShowCheckItem } from './HostPreShowChecklist';
 import HostEventActivationBar from './HostEventActivationBar';
 
@@ -89,9 +90,19 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
           <dd>
             {playlistNames.length > 0 ? (
               <ul className="host-setup-play__playlist-list">
-                {playlistNames.map((name, i) => (
-                  <li key={`${name}-${i}`}>{name}</li>
-                ))}
+                {playlistNames.map((name, i) => {
+                  const { title, poolSize } = playlistDisplayParts(name);
+                  return (
+                    <li key={`${name}-${i}`}>
+                      {title}
+                      {poolSize ? (
+                        <span className="host-playlist-pool-size-chip" aria-label={`${poolSize} song pool`}>
+                          ({poolSize})
+                        </span>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               'None selected'

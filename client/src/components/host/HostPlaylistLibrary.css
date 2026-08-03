@@ -56,6 +56,30 @@
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
+.host-playlist-assign__playlist-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.host-playlist-pool-size-chip {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 255, 136, 0.32);
+  background: rgba(0, 255, 136, 0.12);
+  color: #9fffcf;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .host-playlist-assign__caution {
   display: flex;
   align-items: flex-start;
