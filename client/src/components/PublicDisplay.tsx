@@ -25,6 +25,7 @@ import {
   type PublicDisplayTitleRevealMode,
 } from '../utils/publicDisplayTitleReveal';
 import { effectivePublicDisplayFontScale } from '../utils/publicDisplayFontScale';
+import { playlistDisplayParts } from '../utils/roundPrintLabels';
 import { pdGlass } from '../publicDisplayGlassTheme';
 import './PublicDisplayGlassTheme.css';
 import {
@@ -997,10 +998,6 @@ function carouselDwellMsForLeftColumn(leftColumnIndex: number, totalPopulatedBan
 
   const speed = CAROUSEL_EARLY_SPEED - (CAROUSEL_EARLY_SPEED - 1) * t;
   return Math.round(CAROUSEL_BASE_DWELL_MS / speed);
-}
-
-function stripGotPlaylistDisplayName(raw: string): string {
-  return String(raw || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
 }
 
 /**
@@ -4521,7 +4518,7 @@ const PublicDisplay: React.FC = () => {
     layoutMode: '5x15' | '1x75',
     activeColumnIndex: number | null = null,
   ): React.ReactNode => {
-    const cleaned = playlistNames.map((raw) => stripGotPlaylistDisplayName(String(raw || '')));
+    const cleaned = playlistNames.map((raw) => playlistDisplayParts(String(raw || '')).title);
     const nonEmpty = cleaned.filter(Boolean);
     if (nonEmpty.length === 0) return null;
 

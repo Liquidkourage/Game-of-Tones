@@ -25,6 +25,7 @@ import {
   sortRoundPlaylistsByBingoColumns,
   ROUND_PLAYLIST_REORDER_MIME,
 } from '../utils/roundPlaylistOrder';
+import { playlistDisplayParts } from '../utils/roundPrintLabels';
 
 /** Minimum unique tracks in the bingo pool for this round (matches save/PDF thresholds). */
 function minBingoPoolTracksForRound(
@@ -695,7 +696,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
               {playlistIds.map((playlistId, chipIndex) => {
                 const playlist = playlists.find((p) => p.id === playlistId);
                 if (!playlist) return null;
-                const cleanName = playlist.name.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
+                const { title: cleanName, poolSize } = playlistDisplayParts(playlist.name);
                 const colLetter = bingoColumnLetterForPlaylistName(playlist.name);
                 const canEditChips = !isLive && focused.status !== 'completed';
                 const isDropTarget = dropChipIndex === chipIndex && dragChipIndex !== null;
@@ -761,6 +762,11 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
                     <span className="round-planner-chip__name" title={cleanName}>
                       {cleanName}
                     </span>
+                    {poolSize ? (
+                      <span className="round-planner-chip__count" aria-label={`${poolSize} song pool`}>
+                        ({poolSize})
+                      </span>
+                    ) : null}
                     {canEditChips ? (
                       <button
                         type="button"
@@ -788,10 +794,15 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
             {playlistIds.map((playlistId) => {
               const playlist = playlists.find((p) => p.id === playlistId);
               if (!playlist) return null;
-              const cleanName = playlist.name.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
+              const { title: cleanName, poolSize } = playlistDisplayParts(playlist.name);
               return (
                 <span key={playlistId} className="round-planner-bucket__playlist-readonly-chip">
                   {cleanName}
+                  {poolSize ? (
+                    <span className="round-planner-chip__count" aria-label={`${poolSize} song pool`}>
+                      ({poolSize})
+                    </span>
+                  ) : null}
                 </span>
               );
             })}

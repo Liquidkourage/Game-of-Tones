@@ -36,6 +36,13 @@
   margin-bottom: 0;
 }
 
+.host-custom-pattern__grid-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .host-custom-pattern__variants {
   display: flex;
   flex-direction: column;

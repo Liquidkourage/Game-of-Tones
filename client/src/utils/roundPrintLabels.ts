@@ -43,6 +43,18 @@ export function stemPlaylistDisplayName(raw: string): string {
   return stemmed || trimmed;
 }
 
+/** Display-only playlist title plus an optional trailing pool-size token. */
+export function playlistDisplayParts(raw: string): { title: string; poolSize?: 75 } {
+  const stemmed = stemPlaylistDisplayName(raw);
+  const poolSizeSuffix = /\s+75$/;
+  if (!poolSizeSuffix.test(stemmed)) return { title: stemmed };
+
+  return {
+    title: stemmed.replace(poolSizeSuffix, '').trim(),
+    poolSize: 75,
+  };
+}
+
 /** 5×15 column labels or 1×75 single title — omit for other playlist counts. */
 export function printablePlaylistLabelsFromNames(names: string[]): {
   columnLabels?: string[];

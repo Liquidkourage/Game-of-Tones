@@ -367,6 +367,24 @@ body {
   min-height: 0;
   padding: 16px 12px 12px;
 }
+.App .left-col .public-pattern-header {
+  overflow: visible;
+  padding-top: max(6px, 0.2em);
+}
+.App .left-col .public-pattern-header h2.pattern-title-text {
+  line-height: 1.2;
+  padding-block: 0.08em 0.04em;
+  word-break: normal;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+.App .left-col .public-round-eyebrow,
+.App .left-col .public-round-prize-line {
+  line-height: 1.25;
+  word-break: normal;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
 .App .left-col .info-grid {
   flex: 0 1 auto;
   max-height: 40vh;

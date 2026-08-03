@@ -297,6 +297,15 @@
   white-space: nowrap;
 }
 
+.round-planner-chip__count {
+  flex-shrink: 0;
+  margin-left: 2px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #00ff88;
+  letter-spacing: 0.02em;
+}
+
 .round-planner-chip__remove {
   flex-shrink: 0;
   width: 22px;

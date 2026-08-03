@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Trash2 } from 'lucide-react';
+import { RefreshCcw, Save, Trash2 } from 'lucide-react';
 import { saveCustomPattern, validatePatternPositions } from '../patternDefinitions';
 import HostSubmodalPortal from './HostSubmodalPortal';
 import './CustomPatternModal.css';
@@ -73,6 +73,15 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
     setSelectedPositions([]);
   };
 
+  const handleReverse = () => {
+    const selected = new Set(selectedPositions);
+    setSelectedPositions(
+      Array.from({ length: 25 }, (_, index) => `${Math.floor(index / 5)}-${index % 5}`).filter(
+        (position) => !selected.has(position),
+      ),
+    );
+  };
+
   if (!isOpen) return null;
 
   const modalTitle = initialPattern ? 'Edit custom pattern' : 'Create custom pattern';
@@ -103,10 +112,16 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
         <div className="host-custom-pattern__field host-custom-pattern__grid-field">
           <div className="host-custom-pattern__grid-header">
             <span className="host-custom-pattern__field-label">Select pattern squares</span>
-            <button type="button" className="btn-danger-outline host-btn--sm" onClick={handleClear}>
-              <Trash2 className="w-3.5 h-3.5" aria-hidden />
-              Clear grid
-            </button>
+            <div className="host-custom-pattern__grid-actions">
+              <button type="button" className="btn-secondary host-btn--sm" onClick={handleReverse}>
+                <RefreshCcw className="w-3.5 h-3.5" aria-hidden />
+                Reverse
+              </button>
+              <button type="button" className="btn-danger-outline host-btn--sm" onClick={handleClear}>
+                <Trash2 className="w-3.5 h-3.5" aria-hidden />
+                Clear grid
+              </button>
+            </div>
           </div>
 
           <div className="host-custom-pattern__variants">
