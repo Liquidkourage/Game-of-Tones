@@ -348,8 +348,8 @@ body {
 .App .display-content {
   height: 100%;
   min-height: 0;
-  /* Keep pattern title / prize below the viewport edge (and absolute TEMPO lockup). */
-  padding: max(14px, env(safe-area-inset-top, 0px)) 12px 12px;
+  /* Keep pattern title / prize clear of the viewport edge (and absolute TEMPO lockup). */
+  padding: max(22px, calc(env(safe-area-inset-top, 0px) + 10px)) 14px 12px;
   box-sizing: border-box;
 }
 .App .bottom-row { height: 100%; min-height: 0; }
@@ -365,7 +365,7 @@ body {
   height: auto;
   max-height: 100%;
   min-height: 0;
-  padding-top: 12px;
+  padding: 16px 12px 12px;
 }
 .App .left-col .info-grid {
   flex: 0 1 auto;

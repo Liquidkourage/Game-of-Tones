@@ -1488,9 +1488,9 @@ code {
   max-height: none;
   overflow: visible;
   width: 100%;
-  margin: 0 0 4px;
-  padding: 2px 4px 6px;
-  gap: 0.25em;
+  margin: 0 0 6px;
+  padding: 4px 6px 8px;
+  gap: 0.3em;
 }
 
 .bingo-card-display.public-pattern-panel .bingo-card-content {
