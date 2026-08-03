@@ -1097,6 +1097,12 @@
   flex-shrink: 0;
 }
 
+.round-planner__offline-pack-help {
+  flex-basis: 100%;
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.52);
+}
+
 .round-planner__cards-pdf input {
   width: 4rem;
   padding: 4px 6px;

@@ -631,6 +631,9 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
             {printablePdfLoading ? 'Saving offline pack…' : `Save for offline play (${savedRoundCount})`}
           </button>
         ) : null}
+        <span className="round-planner__offline-pack-help">
+          Works without Wi-Fi — printables + track list for offline audio.
+        </span>
       </div>
       ) : null}
 

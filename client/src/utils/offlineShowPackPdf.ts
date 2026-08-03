@@ -26,6 +26,7 @@ export type OfflineShowPackRound = {
   roundName: string;
   patternLabel?: string;
   prize?: string;
+  mixGeometry?: string;
   playlists: OfflineShowPackPlaylist[];
   tracks: OfflineShowPackTrack[];
 };
@@ -158,51 +159,84 @@ function playlistLabel(round: OfflineShowPackRound): string {
   return round.playlists.map((playlist) => clean(playlist.name) || clean(playlist.id)).join(', ');
 }
 
+function geometryLabel(round: OfflineShowPackRound): string {
+  if (round.mixGeometry === '5x15') return '5 x 15 column mode - five playlists, one per card column';
+  if (round.mixGeometry === '1x75') return '1 x 75 round mix - one playlist supplies the full pool';
+  return 'Saved mixed pool';
+}
+
 function drawRunOfShow(doc: jsPDF, rounds: OfflineShowPackRound[]): void {
-  let y = addPage(doc);
-  y = drawWrapped(doc, 'Run of show', y, { size: 22, style: 'bold', gapAfter: 12 });
+  addPage(doc);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.setTextColor(28, 28, 32);
+  doc.text('Run of show', MARGIN, MARGIN);
+  const columnGap = 24;
+  const columnWidth = (pageWidth(doc) - MARGIN * 2 - columnGap) / 2;
+  const rowHeight = 108;
+  const startY = 82;
+
   rounds.forEach((round, index) => {
-    y = ensureSpace(doc, y, 88);
-    y = drawWrapped(doc, `${index + 1}. ${round.roundName}`, y, {
-      size: 14,
-      style: 'bold',
-      gapAfter: 3,
-    });
-    y = drawWrapped(doc, `Pattern: ${round.patternLabel || 'Not specified'}`, y, { indent: 14 });
-    y = drawWrapped(doc, `Prize: ${round.prize || 'Not specified'}`, y, { indent: 14 });
-    y = drawWrapped(doc, `Playlist${round.playlists.length === 1 ? '' : 's'}: ${playlistLabel(round)}`, y, {
-      indent: 14,
-      gapAfter: 9,
-    });
+    const column = index >= 6 ? 1 : 0;
+    const row = index % 6;
+    const x = MARGIN + column * (columnWidth + columnGap);
+    let y = startY + row * rowHeight;
+    const lines = (value: string, maxLines = 2) =>
+      (doc.splitTextToSize(clean(value), columnWidth) as string[]).slice(0, maxLines);
+    const write = (value: string, size: number, style: 'normal' | 'bold', maxLines = 2) => {
+      doc.setFont('helvetica', style);
+      doc.setFontSize(size);
+      doc.setTextColor(28, 28, 32);
+      const wrapped = lines(value, maxLines);
+      doc.text(wrapped, x, y);
+      y += wrapped.length * Math.max(11, size * 1.2);
+    };
+
+    write(`${index + 1}. ${round.roundName}`, 11, 'bold');
+    write(`Pattern: ${round.patternLabel || 'Not specified'}`, 8.5, 'normal');
+    write(`Prize: ${round.prize || 'Not specified'}`, 8.5, 'normal', 1);
+    write(geometryLabel(round), 8.5, 'normal');
+    write(`Playlist${round.playlists.length === 1 ? '' : 's'}: ${playlistLabel(round)}`, 8, 'normal');
   });
 }
 
 function drawProjectorCues(doc: jsPDF, rounds: OfflineShowPackRound[]): void {
   rounds.forEach((round, index) => {
-    addPage(doc);
+    doc.addPage('letter', 'landscape');
     const centerX = pageWidth(doc) / 2;
+    const pageH = pageHeight(doc);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(28, 28, 32);
+    doc.setFillColor(20, 24, 32);
+    doc.rect(0, 0, pageWidth(doc), pageH, 'F');
+    doc.setTextColor(0, 255, 136);
     doc.setFontSize(18);
-    doc.text(`ROUND ${index + 1}`, centerX, 205, { align: 'center' });
+    doc.text(`ROUND ${index + 1}`, centerX, 105, { align: 'center' });
     const roundLines = doc.splitTextToSize(clean(round.roundName), pageWidth(doc) - 2 * MARGIN);
+    doc.setTextColor(255, 255, 255);
     doc.setFontSize(30);
-    doc.text(roundLines, centerX, 255, { align: 'center' });
-    const patternY = 255 + roundLines.length * 38 + 30;
+    doc.text(roundLines, centerX, 155, { align: 'center' });
+    const patternY = 155 + roundLines.length * 38 + 25;
+    doc.setTextColor(0, 255, 136);
     doc.setFontSize(22);
-    doc.text(`Pattern: ${clean(round.patternLabel) || 'Not specified'}`, centerX, patternY, {
+    const patternLines = doc.splitTextToSize(
+      `Pattern: ${clean(round.patternLabel) || 'Not specified'}`,
+      pageWidth(doc) - 2 * MARGIN,
+    );
+    doc.text(patternLines, centerX, patternY, {
       align: 'center',
     });
     const prizeLines = doc.splitTextToSize(
       `Prize: ${clean(round.prize) || 'Not specified'}`,
       pageWidth(doc) - 2 * MARGIN,
     );
+    doc.setTextColor(255, 255, 255);
     doc.setFontSize(24);
-    doc.text(prizeLines, centerX, patternY + 58, { align: 'center' });
+    doc.text(prizeLines, centerX, patternY + patternLines.length * 28 + 30, { align: 'center' });
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
-    doc.setTextColor(100, 100, 105);
-    doc.text('Static projector cue - advance to the next round manually', centerX, 690, {
+    doc.setTextColor(180, 184, 194);
+    doc.text(geometryLabel(round), centerX, pageH - 58, { align: 'center' });
+    doc.text('Static projector cue - advance to the next round manually', centerX, pageH - 38, {
       align: 'center',
     });
   });
@@ -278,10 +312,23 @@ function drawAudioChecklist(doc: jsPDF, rounds: OfflineShowPackRound[]): void {
     round.tracks.forEach((track, trackIndex) => {
       y = drawWrapped(
         doc,
-        `${trackIndex + 1}. ${clean(track.artist) || '-'} - ${clean(track.name) || '-'}`,
+        `[  ] ${trackIndex + 1}. ${clean(track.artist) || '-'} - ${clean(track.name) || '-'}`,
         y,
         { size: 9, indent: 12, gapAfter: 2 },
       );
+      const id = clean(track.id);
+      if (id) {
+        const source = track.youtubeMusic ? 'YouTube Music' : track.appleMusic ? 'Apple Music' : 'Spotify';
+        const idLine = SPOTIFY_ID.test(id) && source === 'Spotify'
+          ? `Spotify ID: ${id} | URI: spotify:track:${id}`
+          : `${source} ID: ${id}`;
+        y = drawWrapped(doc, idLine, y, {
+          size: 8,
+          indent: 24,
+          color: [72, 72, 78],
+          gapAfter: 2,
+        });
+      }
     });
     y += 10;
   });
@@ -297,9 +344,9 @@ export async function buildOfflineShowPackPdfBlob(opts: OfflineShowPackPdfOpts):
   drawCover(doc, opts);
   drawInstructions(doc);
   drawRunOfShow(doc, opts.rounds);
-  drawProjectorCues(doc, opts.rounds);
   drawAudioChecklist(doc, opts.rounds);
   appendMultiRoundCallSheetsToDoc(doc, opts.callSections, cursor);
   await appendMultiRoundPrintableCardsToDoc(doc, opts.cardSections, cursor);
+  drawProjectorCues(doc, opts.rounds);
   return doc.output('blob');
 }

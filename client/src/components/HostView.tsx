@@ -5548,6 +5548,7 @@ const HostView: React.FC = () => {
             roundName: round.name,
             patternLabel: roundPatternLabelForPrint(roundPrintMetaFor(round)),
             prize: round.prize,
+            mixGeometry: round.savedMixSnapshot!.mixGeometry,
             playlists,
             tracks: round.savedMixSnapshot!.songs.map((song) => ({
               id: song.id,
