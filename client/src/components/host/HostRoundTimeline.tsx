@@ -168,7 +168,12 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
             }}
           >
             <button type="button" className="host-round-timeline__main" onClick={() => onSelectRound(r.index)}>
-              <span className="host-round-timeline__name">{r.name}</span>
+              <span className="host-round-timeline__name">
+                {r.name}
+                {r.prize ? (
+                  <span className="host-round-timeline__prize"> · Prize: {r.prize}</span>
+                ) : null}
+              </span>
               <span className={`host-round-timeline__status host-round-timeline__status--${r.status}`}>
                 {statusLabel[r.status]}
               </span>
@@ -184,7 +189,6 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                   </>
                 )}
                 {r.saved ? ' · saved' : ''}
-                {r.prize ? ` · ${r.prize}` : ''}
               </span>
               {r.playlistNames && r.playlistNames.length === 1 ? (
                 /* Round Mix: one playlist supplies all 75 — just say the title. */

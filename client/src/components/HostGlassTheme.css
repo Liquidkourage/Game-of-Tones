@@ -1941,6 +1941,17 @@
   gap: 2px;
 }
 
+.host-glass-theme .host-round-timeline__name {
+  font-weight: 700;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.host-glass-theme .host-round-timeline__prize {
+  font-weight: 700;
+  color: rgba(245, 208, 97, 0.92);
+}
+
 .host-glass-theme .host-round-timeline__remove {
   display: flex;
   align-items: center;
