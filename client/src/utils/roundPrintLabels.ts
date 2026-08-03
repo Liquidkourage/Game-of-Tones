@@ -43,16 +43,20 @@ export function stemPlaylistDisplayName(raw: string): string {
   return stemmed || trimmed;
 }
 
-/** Display-only playlist title plus an optional trailing pool-size token. */
-export function playlistDisplayParts(raw: string): { title: string; poolSize?: 75 } {
+/** Display-only playlist title plus an optional pool-size token. Actual count wins over name intent. */
+export function playlistDisplayParts(
+  raw: string,
+  actualTrackCount?: number | null,
+): { title: string; poolSize?: 75 } {
   const stemmed = stemPlaylistDisplayName(raw);
   const poolSizeSuffix = /\s+75$/;
-  if (!poolSizeSuffix.test(stemmed)) return { title: stemmed };
+  const hasPoolSuffix = poolSizeSuffix.test(stemmed);
+  const title = hasPoolSuffix ? stemmed.replace(poolSizeSuffix, '').trim() : stemmed;
+  const hasActualCount = Number.isFinite(actualTrackCount);
+  const isPoolSize =
+    hasActualCount ? Number(actualTrackCount) >= 75 : hasPoolSuffix;
 
-  return {
-    title: stemmed.replace(poolSizeSuffix, '').trim(),
-    poolSize: 75,
-  };
+  return isPoolSize ? { title, poolSize: 75 } : { title };
 }
 
 /** 5×15 column labels or 1×75 single title — omit for other playlist counts. */

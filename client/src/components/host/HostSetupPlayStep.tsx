@@ -97,7 +97,7 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
                       {title}
                       {poolSize ? (
                         <span className="host-playlist-pool-size-chip" aria-label={`${poolSize} song pool`}>
-                          ({poolSize})
+                          {poolSize}+
                         </span>
                       ) : null}
                     </li>

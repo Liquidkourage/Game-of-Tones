@@ -696,14 +696,21 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
               {playlistIds.map((playlistId, chipIndex) => {
                 const playlist = playlists.find((p) => p.id === playlistId);
                 if (!playlist) return null;
-                const { title: cleanName, poolSize } = playlistDisplayParts(playlist.name);
+                const trackCount =
+                  playlist.tracksLoaded != null && playlist.tracksLoaded > 0
+                    ? playlist.tracksLoaded
+                    : playlist.tracks;
+                const { title: cleanName, poolSize } = playlistDisplayParts(
+                  playlist.name,
+                  trackCount,
+                );
                 const colLetter = bingoColumnLetterForPlaylistName(playlist.name);
                 const canEditChips = !isLive && focused.status !== 'completed';
                 const isDropTarget = dropChipIndex === chipIndex && dragChipIndex !== null;
                 return (
                   <div
                     key={playlistId}
-                    className={`round-planner-chip${isDropTarget ? ' round-planner-chip--drop-target' : ''}${
+                    className={`round-planner-chip${poolSize ? ' round-planner-chip--pool' : ''}${isDropTarget ? ' round-planner-chip--drop-target' : ''}${
                       dragChipIndex === chipIndex ? ' round-planner-chip--dragging' : ''
                     }`}
                     draggable={canEditChips}
@@ -764,7 +771,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
                     </span>
                     {poolSize ? (
                       <span className="round-planner-chip__count" aria-label={`${poolSize} song pool`}>
-                        ({poolSize})
+                        {poolSize}+
                       </span>
                     ) : null}
                     {canEditChips ? (
@@ -794,13 +801,25 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
             {playlistIds.map((playlistId) => {
               const playlist = playlists.find((p) => p.id === playlistId);
               if (!playlist) return null;
-              const { title: cleanName, poolSize } = playlistDisplayParts(playlist.name);
+              const trackCount =
+                playlist.tracksLoaded != null && playlist.tracksLoaded > 0
+                  ? playlist.tracksLoaded
+                  : playlist.tracks;
+              const { title: cleanName, poolSize } = playlistDisplayParts(
+                playlist.name,
+                trackCount,
+              );
               return (
-                <span key={playlistId} className="round-planner-bucket__playlist-readonly-chip">
+                <span
+                  key={playlistId}
+                  className={`round-planner-bucket__playlist-readonly-chip${
+                    poolSize ? ' round-planner-bucket__playlist-readonly-chip--pool' : ''
+                  }`}
+                >
                   {cleanName}
                   {poolSize ? (
                     <span className="round-planner-chip__count" aria-label={`${poolSize} song pool`}>
-                      ({poolSize})
+                      {poolSize}+
                     </span>
                   ) : null}
                 </span>

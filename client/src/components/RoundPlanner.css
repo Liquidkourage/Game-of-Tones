@@ -252,6 +252,12 @@
   cursor: default;
 }
 
+.round-planner-chip--pool {
+  border-color: rgba(0, 255, 136, 0.42);
+  background: rgba(0, 255, 136, 0.13);
+  box-shadow: inset 2px 0 0 rgba(0, 255, 136, 0.5);
+}
+
 .round-planner-chip[draggable='true'] {
   cursor: grab;
 }

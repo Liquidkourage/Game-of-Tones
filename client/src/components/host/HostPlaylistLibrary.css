@@ -78,6 +78,20 @@
   font-size: 0.68rem;
   font-weight: 800;
   line-height: 1.35;
+  box-shadow: 0 0 8px rgba(0, 255, 136, 0.16);
+}
+
+.host-playlist-pool-nudge {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(159, 255, 207, 0.25);
+  background: rgba(0, 255, 136, 0.06);
+  color: #b8f0d4;
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .host-playlist-assign__caution {
@@ -256,6 +270,12 @@
   border: 1px solid rgba(255, 179, 71, 0.28);
 }
 
+.host-selected-round__warn--pool {
+  color: #b8f0d4;
+  background: rgba(0, 255, 136, 0.07);
+  border-color: rgba(0, 255, 136, 0.24);
+}
+
 .host-selected-round__list {
   margin: 0;
   padding: 0;
@@ -275,6 +295,12 @@
   background: rgba(0, 0, 0, 0.2);
   font-size: 0.84rem;
   color: rgba(255, 255, 255, 0.92);
+}
+
+.host-selected-round__row--pool {
+  border-color: rgba(0, 255, 136, 0.38);
+  background: rgba(0, 255, 136, 0.09);
+  box-shadow: inset 2px 0 0 rgba(0, 255, 136, 0.48);
 }
 
 .host-selected-round__row--draggable {

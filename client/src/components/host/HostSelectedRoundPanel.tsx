@@ -8,6 +8,7 @@ import './HostPlaylistLibrary.css';
 export type SelectedRoundPlaylistRow = {
   id: string;
   name: string;
+  trackCount?: number;
 };
 
 export type HostSelectedRoundPanelProps = {
@@ -55,6 +56,7 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
   columnLetters,
 }) => {
   const lowSongs = playlists.length > 0 && songCount > 0 && songCount < 15;
+  const needsForPool = songCount >= 50 && songCount < 75 ? 75 - songCount : 0;
   const [libraryDragOver, setLibraryDragOver] = useState(false);
   const [dragChipIndex, setDragChipIndex] = useState<number | null>(null);
   const [dropChipIndex, setDropChipIndex] = useState<number | null>(null);
@@ -150,18 +152,25 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
           Fewer than 15 listed songs — this round may not reach the card-ready track minimum.
         </p>
       ) : null}
+      {needsForPool ? (
+        <p className="host-selected-round__warn host-selected-round__warn--pool" role="status">
+          <AlertTriangle className="w-3.5 h-3.5" aria-hidden />
+          Need {needsForPool} for 75+
+        </p>
+      ) : null}
       {playlists.length > 0 ? (
         <ul className="host-selected-round__list">
           {playlists.map((p, i) => {
             const isDropTarget = dropChipIndex === i && dragChipIndex !== null;
             const isDragging = dragChipIndex === i;
-            const { title: displayName, poolSize } = playlistDisplayParts(p.name);
+            const { title: displayName, poolSize } = playlistDisplayParts(p.name, p.trackCount);
             return (
               <li
                 key={p.id}
                 className={[
                   'host-selected-round__row',
                   canReorder ? 'host-selected-round__row--draggable' : '',
+                  poolSize ? 'host-selected-round__row--pool' : '',
                   isDropTarget ? 'host-selected-round__row--drop-target' : '',
                   isDragging ? 'host-selected-round__row--dragging' : '',
                 ]
@@ -222,7 +231,7 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
                 </span>
                 {poolSize ? (
                   <span className="host-playlist-pool-size-chip" aria-label={`${poolSize} song pool`}>
-                    ({poolSize})
+                    {poolSize}+
                   </span>
                 ) : null}
                 {canEdit ? (

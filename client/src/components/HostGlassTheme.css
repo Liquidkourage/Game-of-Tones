@@ -1923,9 +1923,19 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
+.host-glass-theme .host-round-timeline__chip--pool {
+  border-color: rgba(0, 255, 136, 0.26);
+  background: rgba(0, 255, 136, 0.06);
+}
+
 .host-glass-theme .host-round-timeline__chip--current {
   border-color: var(--host-glass-border-mint);
   box-shadow: 0 0 16px rgba(0, 255, 136, 0.15);
+}
+
+.host-glass-theme .host-round-timeline__pool-nudge {
+  color: #9fffcf;
+  font-weight: 650;
 }
 
 .host-glass-theme .host-round-timeline__main {

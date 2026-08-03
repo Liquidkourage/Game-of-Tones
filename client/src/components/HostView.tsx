@@ -8736,9 +8736,22 @@ const HostView: React.FC = () => {
       playlists: ids.map((id, i) => ({
         id: String(id),
         name: stripTitleFlagPrefix(String(names[i] ?? id), titleFlagStripList),
+        trackCount: (() => {
+          const playlist = playlistsForRoundPlanner.find((p) => p.id === String(id));
+          if (!playlist) return undefined;
+          return playlist.tracksLoaded != null && playlist.tracksLoaded > 0
+            ? playlist.tracksLoaded
+            : playlist.tracks;
+        })(),
       })),
     };
-  }, [eventRounds, roundBuilderFocusIndex, currentRoundIndex, titleFlagStripList]);
+  }, [
+    eventRounds,
+    roundBuilderFocusIndex,
+    currentRoundIndex,
+    titleFlagStripList,
+    playlistsForRoundPlanner,
+  ]);
 
   /** Pick a round for advance prep: sync mix + pattern/snippet UI without marking rounds active/completed or leaving Manager. */
   const handleSelectRoundForPrep = useCallback(
@@ -10737,11 +10750,15 @@ const HostView: React.FC = () => {
                   const rawDisplayName = stripGoTPrefix
                     ? stripTitleFlagPrefix(pack.name, titleFlagStripList)
                     : pack.name;
-                  const { title: displayName, poolSize } = playlistDisplayParts(rawDisplayName);
+                  const { title: displayName, poolSize } = playlistDisplayParts(
+                    rawDisplayName,
+                    pack.tracks,
+                  );
+                  const needsForPool = pack.tracks >= 50 && pack.tracks < 75 ? 75 - pack.tracks : 0;
                   return (
                     <div
                       key={pack.id}
-                      className="host-catalog-pack-row"
+                      className={`host-catalog-pack-row${poolSize ? ' host-catalog-pack-row--pool' : ''}`}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -10791,13 +10808,21 @@ const HostView: React.FC = () => {
                           {displayName}
                           {poolSize ? (
                             <span className="host-playlist-pool-size-chip" aria-label={`${poolSize} song pool`}>
-                              ({poolSize})
+                              {poolSize}+
                             </span>
                           ) : null}
                         </span>
                         <span style={{ color: '#8899aa', fontSize: '0.78rem', flexShrink: 0 }}>
                           {pack.tracks} songs
                         </span>
+                        {needsForPool ? (
+                          <span
+                            className="host-playlist-pool-nudge"
+                            title={`${needsForPool} more songs needed for a 75+ pool`}
+                          >
+                            Need {needsForPool} for 75+
+                          </span>
+                        ) : null}
                       </label>
                       <HostPlaylistRoundAssignMenu
                         playlistId={pack.id}
@@ -11393,15 +11418,21 @@ const HostView: React.FC = () => {
                           const rawDisplayName = stripGoTPrefix
                             ? stripTitleFlagPrefix(p.name, titleFlagStripList)
                             : p.name;
-                          const { title: displayName, poolSize } = playlistDisplayParts(rawDisplayName);
+                          const { title: displayName, poolSize } = playlistDisplayParts(
+                            rawDisplayName,
+                            trackCount,
+                          );
+                          const needsForPool = trackCount >= 50 && trackCount < 75 ? 75 - trackCount : 0;
                           
                           return (
                             <div
                               key={p.id}
                               className={
-                                isAcceptable
-                                  ? 'host-playlist-library-row host-playlist-library-row--ok'
-                                  : 'host-playlist-library-row'
+                                [
+                                  'host-playlist-library-row',
+                                  isAcceptable ? 'host-playlist-library-row--ok' : '',
+                                  poolSize ? 'host-playlist-library-row--pool' : '',
+                                ].filter(Boolean).join(' ')
                               }
                               draggable
                               onDragStart={(e) => {
@@ -11467,7 +11498,7 @@ const HostView: React.FC = () => {
                                       className="host-playlist-pool-size-chip"
                                       aria-label={`${poolSize} song pool`}
                                     >
-                                      ({poolSize})
+                                      {poolSize}+
                                     </span>
                                   ) : null}
                                   {p.youtubeMusic ? (
@@ -11635,6 +11666,14 @@ const HostView: React.FC = () => {
                                   Need 15+
                                 </span>
                               )}
+                              {needsForPool ? (
+                                <span
+                                  className="host-playlist-pool-nudge"
+                                  title={`${needsForPool} more songs needed for a 75+ pool`}
+                                >
+                                  Need {needsForPool} for 75+
+                                </span>
+                              ) : null}
                             </div>
                           );
                         })

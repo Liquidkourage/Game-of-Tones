@@ -42,14 +42,17 @@ const statusLabel: Record<RoundTimelineRow['status'], string> = {
   unplanned: 'Draft',
 };
 
-const PlaylistDisplayLabel: React.FC<{ name: string }> = ({ name }) => {
-  const { title, poolSize } = playlistDisplayParts(name);
+const PlaylistDisplayLabel: React.FC<{ name: string; trackCount?: number }> = ({
+  name,
+  trackCount,
+}) => {
+  const { title, poolSize } = playlistDisplayParts(name, trackCount);
   return (
     <>
       <span className="host-round-timeline__playlist-chip-name">{title}</span>
       {poolSize ? (
         <span className="host-playlist-pool-size-chip" aria-label={`${poolSize} song pool`}>
-          ({poolSize})
+          {poolSize}+
         </span>
       ) : null}
     </>
@@ -155,6 +158,7 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
               onDropPlaylist && r.playlistCount === 0 ? 'host-round-timeline__chip--drop-idle' : '',
               onDropPlaylist && dropTargetsActive ? 'host-round-timeline__chip--drop-ready' : '',
               dragOverRound === r.index ? 'host-round-timeline__chip--drag-over' : '',
+              (r.songCount ?? 0) >= 75 ? 'host-round-timeline__chip--pool' : '',
             ]
               .filter(Boolean)
               .join(' ')}
@@ -201,6 +205,12 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                     {/* Tempo round rule: 1 playlist (mix) or 5 (columns) */}
                     {r.playlistCount !== 1 && r.playlistCount !== 5 ? ' · needs 1 or 5' : ''}
                     {(r.songCount ?? 0) > 0 ? ` · ${r.songCount} songs` : ''}
+                    {(r.songCount ?? 0) >= 50 && (r.songCount ?? 0) < 75 ? (
+                      <span className="host-round-timeline__pool-nudge">
+                        {' '}
+                        · Need {75 - (r.songCount ?? 0)} for 75+
+                      </span>
+                    ) : null}
                   </>
                 )}
                 {r.saved ? ' · saved' : ''}
@@ -211,7 +221,10 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                   className="host-round-timeline__playlists"
                   title={playlistDisplayParts(r.playlistNames[0]).title}
                 >
-                  <PlaylistDisplayLabel name={r.playlistNames[0]} />
+                  <PlaylistDisplayLabel
+                    name={r.playlistNames[0]}
+                    trackCount={(r.songCount ?? 0) > 0 ? r.songCount : undefined}
+                  />
                 </span>
               ) : r.playlistNames && r.playlistNames.length > 1 ? (
                 /* Column mode: every playlist as a small chip, in stored order (= B–O card columns). */

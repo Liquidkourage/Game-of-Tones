@@ -260,6 +260,12 @@
   color: #b8f0d4;
 }
 
+.round-planner-bucket__playlist-readonly-chip--pool {
+  background: rgba(0, 255, 136, 0.18);
+  border-color: rgba(0, 255, 136, 0.44);
+  box-shadow: 0 0 8px rgba(0, 255, 136, 0.12);
+}
+
 .round-planner--playlists .round-planner__main {
   margin-top: 0;
 }

@@ -66,7 +66,10 @@ const HostSetupPlaylistStep: React.FC<HostSetupPlaylistStepProps> = ({
         {playlistNames.length > 0 ? (
           <ul className="host-setup-playlist__list">
             {playlistNames.map((name, i) => {
-              const { title, poolSize } = playlistDisplayParts(name);
+              const { title, poolSize } = playlistDisplayParts(
+                name,
+                playlistNames.length === 1 && poolCount > 0 ? poolCount : undefined,
+              );
               return (
                 <li key={`${name}-${i}`}>
                   <ListMusic className="w-4 h-4" aria-hidden />
@@ -76,7 +79,7 @@ const HostSetupPlaylistStep: React.FC<HostSetupPlaylistStepProps> = ({
                   {title}
                   {poolSize ? (
                     <span className="host-playlist-pool-size-chip" aria-label={`${poolSize} song pool`}>
-                      ({poolSize})
+                      {poolSize}+
                     </span>
                   ) : null}
                 </li>
