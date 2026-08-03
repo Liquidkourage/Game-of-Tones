@@ -7723,6 +7723,36 @@ const HostView: React.FC = () => {
     [socket, roomId],
   );
 
+  /** Keep projector Round · prize in sync whenever the call list can show (not only Start Game). */
+  const syncRoundDisplayMeta = useCallback(() => {
+    if (!socket || !roomId) return;
+    const idx = currentRoundIndexRef.current;
+    const r = idx >= 0 ? eventRoundsRef.current[idx] : undefined;
+    socket.emit('set-round-display-meta', {
+      roomId,
+      roundName: r?.name || (idx >= 0 ? `Round ${idx + 1}` : ''),
+      prize: typeof r?.prize === 'string' ? r.prize.trim() : '',
+    });
+  }, [socket, roomId]);
+
+  const activeRoundDisplayPrize =
+    currentRoundIndex >= 0 ? eventRounds[currentRoundIndex]?.prize ?? '' : '';
+  const activeRoundDisplayName =
+    currentRoundIndex >= 0 ? eventRounds[currentRoundIndex]?.name ?? '' : '';
+
+  useEffect(() => {
+    if (!socket || !roomId) return;
+    const t = window.setTimeout(() => syncRoundDisplayMeta(), 200);
+    return () => window.clearTimeout(t);
+  }, [
+    socket,
+    roomId,
+    currentRoundIndex,
+    activeRoundDisplayName,
+    activeRoundDisplayPrize,
+    syncRoundDisplayMeta,
+  ]);
+
   const saveSponsorScreenConfig = useCallback(
     (next: Omit<SponsorScreenConfig, 'visible'>) => {
       const merged: SponsorScreenConfig = {

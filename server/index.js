@@ -5585,6 +5585,30 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Host: push round name + prize to projector before/after Start Game (call-list header)
+  socket.on('set-round-display-meta', (data = {}) => {
+    try {
+      const { roomId } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost =
+        room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+      room.currentRoundName = sanitizeRoundNameText(data.roundName);
+      room.currentRoundPrize = sanitizeRoundPrizeText(data.prize);
+      const payload = {
+        currentRoundName: room.currentRoundName || null,
+        currentRoundPrize: room.currentRoundPrize || null,
+      };
+      io.to(roomId).emit('round-display-meta', payload);
+      routineServerLog(
+        `🏷️ Round display meta for room ${roomId}: ${payload.currentRoundName || '—'} / ${payload.currentRoundPrize || '—'}`,
+      );
+    } catch (e) {
+      console.error('❌ Error setting round display meta:', e?.message || e);
+    }
+  });
+
   // Host: show/hide night winners board on the projector
   socket.on('set-night-board-visible', (data = {}) => {
     try {

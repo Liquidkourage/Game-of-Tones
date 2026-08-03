@@ -3023,6 +3023,19 @@ const PublicDisplay: React.FC = () => {
       });
     });
 
+    newSocket.on('round-display-meta', (data: any) => {
+      setCurrentRoundName(
+        typeof data?.currentRoundName === 'string' && data.currentRoundName.trim()
+          ? data.currentRoundName.trim()
+          : null,
+      );
+      setCurrentRoundPrize(
+        typeof data?.currentRoundPrize === 'string' && data.currentRoundPrize.trim()
+          ? data.currentRoundPrize.trim()
+          : null,
+      );
+    });
+
     newSocket.on('mix-finalized', (payload: any) => {
       setWinnerCardModal(null);
       try {
