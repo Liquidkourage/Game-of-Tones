@@ -1672,6 +1672,13 @@ const PublicDisplay: React.FC = () => {
     const t = window.setTimeout(() => setWinnerCardModal(null), 9000);
     return () => window.clearTimeout(t);
   }, [winnerCardModal, showNightBoard, roundWinnersBoard.length]);
+  const [sponsorScreen, setSponsorScreen] = useState<{
+    mediaUrl: string;
+    text: string;
+    qrUrl: string;
+    mediaKind: 'image' | 'video';
+    visible: boolean;
+  }>({ mediaUrl: '', text: '', qrUrl: '', mediaKind: 'image', visible: false });
   const [remoteHybridNotice, setRemoteHybridNotice] = useState<string>('');
   // Connection status and sync management
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
@@ -2124,6 +2131,16 @@ const PublicDisplay: React.FC = () => {
           }
           if (typeof payload.gameState === 'string') {
             setRoomPhase(payload.gameState);
+          }
+          if (payload.sponsorScreen && typeof payload.sponsorScreen === 'object') {
+            const ss = payload.sponsorScreen;
+            setSponsorScreen({
+              mediaUrl: typeof ss.mediaUrl === 'string' ? ss.mediaUrl : '',
+              text: typeof ss.text === 'string' ? ss.text : '',
+              qrUrl: typeof ss.qrUrl === 'string' ? ss.qrUrl : '',
+              mediaKind: ss.mediaKind === 'video' ? 'video' : 'image',
+              visible: !!ss.visible,
+            });
           }
 
           // CRITICAL: Sync currentIndexRef from server state (needed for proper display on refresh)
@@ -2765,6 +2782,7 @@ const PublicDisplay: React.FC = () => {
       setWinnerCardModal(null);
       setIsVerificationPending(false);
       setShowNightBoard(false);
+      setSponsorScreen((prev) => ({ ...prev, visible: false }));
       setRoomPhase('playing');
       setCurrentRoundName(
         typeof data?.currentRoundName === 'string' && data.currentRoundName.trim()
@@ -2777,6 +2795,16 @@ const PublicDisplay: React.FC = () => {
           : null,
       );
       if (Array.isArray(data?.roundWinners)) setRoundWinnersBoard(data.roundWinners);
+      if (data?.sponsorScreen && typeof data.sponsorScreen === 'object') {
+        const ss = data.sponsorScreen;
+        setSponsorScreen({
+          mediaUrl: typeof ss.mediaUrl === 'string' ? ss.mediaUrl : '',
+          text: typeof ss.text === 'string' ? ss.text : '',
+          qrUrl: typeof ss.qrUrl === 'string' ? ss.qrUrl : '',
+          mediaKind: ss.mediaKind === 'video' ? 'video' : 'image',
+          visible: false,
+        });
+      }
       setGameState(prev => ({ 
         ...prev, 
         isPlaying: true,
@@ -2981,6 +3009,18 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('night-board-visibility', (data: any) => {
       if (data?.visible !== undefined) setShowNightBoard(!!data.visible);
       if (Array.isArray(data?.roundWinners)) setRoundWinnersBoard(data.roundWinners);
+    });
+
+    newSocket.on('sponsor-screen-updated', (data: any) => {
+      const ss = data?.sponsorScreen;
+      if (!ss || typeof ss !== 'object') return;
+      setSponsorScreen({
+        mediaUrl: typeof ss.mediaUrl === 'string' ? ss.mediaUrl : '',
+        text: typeof ss.text === 'string' ? ss.text : '',
+        qrUrl: typeof ss.qrUrl === 'string' ? ss.qrUrl : '',
+        mediaKind: ss.mediaKind === 'video' ? 'video' : 'image',
+        visible: !!ss.visible,
+      });
     });
 
     newSocket.on('mix-finalized', (payload: any) => {
@@ -5306,6 +5346,132 @@ const PublicDisplay: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {sponsorScreen.visible &&
+        (roomPhase !== 'playing' && roomPhase !== 'paused_for_verification') &&
+        (sponsorScreen.mediaUrl || sponsorScreen.text || sponsorScreen.qrUrl) && (
+        <div
+          className="public-sponsor-screen"
+          role="dialog"
+          aria-label="Sponsor"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2700,
+            background: 'rgba(0,0,0,0.92)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 'clamp(16px, 3vmin, 48px)',
+          }}
+        >
+          <div
+            style={{
+              width: 'min(96vw, 1400px)',
+              maxHeight: 'min(94vh, 1000px)',
+              display: 'grid',
+              gridTemplateColumns:
+                sponsorScreen.qrUrl.trim()
+                  ? 'minmax(0, 1.6fr) minmax(140px, 0.55fr)'
+                  : '1fr',
+              gap: 'clamp(16px, 2.5vmin, 36px)',
+              alignItems: 'center',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 'clamp(12px, 2vmin, 24px)',
+                minWidth: 0,
+                alignItems: 'center',
+              }}
+            >
+              {sponsorScreen.mediaUrl ? (
+                sponsorScreen.mediaKind === 'video' ? (
+                  <video
+                    key={sponsorScreen.mediaUrl}
+                    src={sponsorScreen.mediaUrl}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    style={{
+                      width: '100%',
+                      maxHeight: sponsorScreen.text ? 'min(68vh, 720px)' : 'min(82vh, 860px)',
+                      objectFit: 'contain',
+                      borderRadius: 'clamp(12px, 1.5vmin, 20px)',
+                      background: '#000',
+                    }}
+                  />
+                ) : (
+                  <img
+                    src={sponsorScreen.mediaUrl}
+                    alt=""
+                    style={{
+                      width: '100%',
+                      maxHeight: sponsorScreen.text ? 'min(68vh, 720px)' : 'min(82vh, 860px)',
+                      objectFit: 'contain',
+                      borderRadius: 'clamp(12px, 1.5vmin, 20px)',
+                      background: '#000',
+                    }}
+                  />
+                )
+              ) : null}
+              {sponsorScreen.text ? (
+                <div
+                  style={{
+                    fontSize: 'clamp(1.35rem, 3.6vmin, 2.75rem)',
+                    fontWeight: 800,
+                    textAlign: 'center',
+                    color: '#eafff8',
+                    lineHeight: 1.2,
+                    maxWidth: '40ch',
+                    textShadow: '0 4px 24px rgba(0,0,0,0.55)',
+                  }}
+                >
+                  {sponsorScreen.text}
+                </div>
+              ) : null}
+            </div>
+            {sponsorScreen.qrUrl.trim() ? (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 'clamp(10px, 1.5vmin, 16px)',
+                  justifySelf: 'center',
+                }}
+              >
+                <img
+                  src={`${API_BASE || ''}/api/qr?size=640&data=${encodeURIComponent(sponsorScreen.qrUrl.trim())}`}
+                  alt="Sponsor QR code"
+                  style={{
+                    width: 'min(28vw, 280px)',
+                    height: 'min(28vw, 280px)',
+                    objectFit: 'contain',
+                    background: '#fff',
+                    borderRadius: 16,
+                    padding: 12,
+                  }}
+                />
+                <div
+                  style={{
+                    fontSize: 'clamp(0.85rem, 1.6vmin, 1.15rem)',
+                    fontWeight: 700,
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    color: 'rgba(255,255,255,0.7)',
+                  }}
+                >
+                  Scan
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
 
       {showNightBoard && roundWinnersBoard.length > 0 && (
         <div

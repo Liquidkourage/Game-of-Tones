@@ -2832,6 +2832,58 @@ function sanitizeRoundNameText(raw) {
   return raw.replace(/\s+/g, ' ').trim().slice(0, 80);
 }
 
+function sanitizeHttpUrl(raw, maxLen = 2000) {
+  if (typeof raw !== 'string') return '';
+  const trimmed = raw.trim().slice(0, maxLen);
+  if (!trimmed) return '';
+  try {
+    const u = new URL(trimmed);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    return u.toString();
+  } catch {
+    return '';
+  }
+}
+
+function detectSponsorMediaKind(mediaUrl, explicit) {
+  if (explicit === 'video' || explicit === 'image') return explicit;
+  if (typeof mediaUrl === 'string' && /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(mediaUrl)) return 'video';
+  return 'image';
+}
+
+function sanitizeSponsorScreenConfig(raw = {}) {
+  const mediaUrl = sanitizeHttpUrl(raw.mediaUrl, 2000);
+  const qrUrl = sanitizeHttpUrl(raw.qrUrl, 2000);
+  const text =
+    typeof raw.text === 'string' ? raw.text.replace(/\s+/g, ' ').trim().slice(0, 280) : '';
+  const mediaKind = detectSponsorMediaKind(mediaUrl, raw.mediaKind);
+  return { mediaUrl, text, qrUrl, mediaKind };
+}
+
+function sponsorScreenForClient(room) {
+  const cfg = sanitizeSponsorScreenConfig(room.sponsorScreen || {});
+  return {
+    mediaUrl: cfg.mediaUrl || '',
+    text: cfg.text || '',
+    qrUrl: cfg.qrUrl || '',
+    mediaKind: cfg.mediaKind === 'video' ? 'video' : 'image',
+    visible: room.sponsorScreenVisible === true,
+  };
+}
+
+function roomAllowsSponsorScreenShow(room) {
+  const gs = room?.gameState;
+  // Never during a live round (playing or paused for bingo verify).
+  return gs !== 'playing' && gs !== 'paused_for_verification';
+}
+
+function hideSponsorScreen(room) {
+  if (!room) return false;
+  if (room.sponsorScreenVisible !== true) return false;
+  room.sponsorScreenVisible = false;
+  return true;
+}
+
 function publicDisplayRoomStateExtras(room) {
   const pending =
     room.gameState === 'paused_for_verification' &&
@@ -2851,6 +2903,7 @@ function publicDisplayRoomStateExtras(room) {
     currentRoundName: roundName || null,
     currentRoundPrize: prize || null,
     showNightBoard: room.showNightBoard === true,
+    sponsorScreen: sponsorScreenForClient(room),
   };
 }
 
@@ -5552,6 +5605,65 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Host: configure between-rounds sponsor screen (media + text + optional QR)
+  socket.on('set-sponsor-screen', (data = {}) => {
+    try {
+      const { roomId } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost =
+        room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+      room.sponsorScreen = sanitizeSponsorScreenConfig(data);
+      // If media cleared while visible, hide.
+      if (!room.sponsorScreen.mediaUrl && !room.sponsorScreen.text && !room.sponsorScreen.qrUrl) {
+        room.sponsorScreenVisible = false;
+      }
+      io.to(roomId).emit('sponsor-screen-updated', { sponsorScreen: sponsorScreenForClient(room) });
+      routineServerLog(`📣 Sponsor screen config updated for room ${roomId}`);
+    } catch (e) {
+      console.error('❌ Error setting sponsor screen:', e?.message || e);
+    }
+  });
+
+  // Host: show/hide sponsor screen — never while a round is live
+  socket.on('set-sponsor-screen-visible', (data = {}) => {
+    try {
+      const { roomId, visible } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost =
+        room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+      if (visible === true) {
+        if (!roomAllowsSponsorScreenShow(room)) {
+          socket.emit('sponsor-screen-updated', {
+            sponsorScreen: sponsorScreenForClient(room),
+            error: 'Sponsor screen can only be shown between rounds.',
+          });
+          return;
+        }
+        const cfg = sanitizeSponsorScreenConfig(room.sponsorScreen || {});
+        if (!cfg.mediaUrl && !cfg.text && !cfg.qrUrl) {
+          socket.emit('sponsor-screen-updated', {
+            sponsorScreen: sponsorScreenForClient(room),
+            error: 'Add media, text, or a QR link before showing the sponsor screen.',
+          });
+          return;
+        }
+        room.sponsorScreenVisible = true;
+      } else {
+        room.sponsorScreenVisible = false;
+      }
+      io.to(roomId).emit('sponsor-screen-updated', { sponsorScreen: sponsorScreenForClient(room) });
+      routineServerLog(
+        `📣 Sponsor screen for room ${roomId}: ${room.sponsorScreenVisible ? 'visible' : 'hidden'}`,
+      );
+    } catch (e) {
+      console.error('❌ Error setting sponsor screen visibility:', e?.message || e);
+    }
+  });
+
   // Host: custom five column letters for cards / call list headers (BINGO, TEMPO, TONES, …)
   socket.on('set-bingo-column-letters', (data = {}) => {
     try {
@@ -6946,6 +7058,8 @@ io.on('connection', (socket) => {
         room.currentRoundName = sanitizeRoundNameText(incomingRoundName) || `Round ${(room.roundWinners?.length || 0) + 1}`;
         room.currentRoundPrize = sanitizeRoundPrizeText(incomingRoundPrize);
         room.showNightBoard = false;
+        // Never show sponsor during a live round.
+        hideSponsorScreen(room);
         // Initialize call history and round
         room.calledSongIds = [];
         room.bingoVerificationQueue = [];
@@ -7230,7 +7344,9 @@ io.on('connection', (socket) => {
           currentRoundPrize: room.currentRoundPrize || null,
           showNightBoard: false,
           roundWinners: room.roundWinners || [],
+          sponsorScreen: sponsorScreenForClient(room),
         });
+        io.to(roomId).emit('sponsor-screen-updated', { sponsorScreen: sponsorScreenForClient(room) });
 
         routineServerLog('🎵 Starting automatic playback (sequential 1→N through pool)...');
         await startAutomaticPlayback(roomId, playlists, deviceId, showDeck);

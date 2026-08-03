@@ -150,6 +150,7 @@ import HostPreShowChecklist, { type PreShowCheckItem } from './host/HostPreShowC
 import HostRoundTimeline from './host/HostRoundTimeline';
 import HostNightBoardPanel from './host/HostNightBoardPanel';
 import HostPanicStrip from './host/HostPanicStrip';
+import HostSponsorScreenPanel, { type SponsorScreenConfig } from './host/HostSponsorScreenPanel';
 import HostPoolQualityReport from './host/HostPoolQualityReport';
 import HostGameLivePanel from './host/HostGameLivePanel';
 import HostDisplayExtrasPanel from './host/HostDisplayExtrasPanel';
@@ -1368,6 +1369,24 @@ const HostView: React.FC = () => {
   const [roundWinners, setRoundWinners] = useState<Array<any>>([]);
   /** Projector night winners board visibility (host toggle). */
   const [showNightBoard, setShowNightBoard] = useState(false);
+  const [sponsorScreen, setSponsorScreen] = useState<SponsorScreenConfig>(() => {
+    try {
+      const raw = localStorage.getItem(`sponsor-screen-${roomId}`);
+      if (!raw) {
+        return { mediaUrl: '', text: '', qrUrl: '', mediaKind: 'image', visible: false };
+      }
+      const parsed = JSON.parse(raw);
+      return {
+        mediaUrl: typeof parsed.mediaUrl === 'string' ? parsed.mediaUrl : '',
+        text: typeof parsed.text === 'string' ? parsed.text : '',
+        qrUrl: typeof parsed.qrUrl === 'string' ? parsed.qrUrl : '',
+        mediaKind: parsed.mediaKind === 'video' ? 'video' : 'image',
+        visible: false,
+      };
+    } catch {
+      return { mediaUrl: '', text: '', qrUrl: '', mediaKind: 'image', visible: false };
+    }
+  });
   const [stripGoTPrefix, setStripGoTPrefix] = useState<boolean>(true);
   const [customMask, setCustomMask] = useState<string[]>([]);
   const [customPattern, setCustomPattern] = useState<string[]>([]);
@@ -3530,7 +3549,18 @@ const HostView: React.FC = () => {
       setIsStartingGame(false);
       setBingoColumnPlaylistNames([]);
       setShowNightBoard(false);
+      setSponsorScreen((prev) => ({ ...prev, visible: false }));
       if (Array.isArray(data?.roundWinners)) setRoundWinners(data.roundWinners);
+      if (data?.sponsorScreen && typeof data.sponsorScreen === 'object') {
+        const ss = data.sponsorScreen;
+        setSponsorScreen({
+          mediaUrl: typeof ss.mediaUrl === 'string' ? ss.mediaUrl : '',
+          text: typeof ss.text === 'string' ? ss.text : '',
+          qrUrl: typeof ss.qrUrl === 'string' ? ss.qrUrl : '',
+          mediaKind: ss.mediaKind === 'video' ? 'video' : 'image',
+          visible: false,
+        });
+      }
       addLog('Game started - state set to playing', 'info');
       setShowSongList(false);
       schedulePlayerCardsRefresh(800);
@@ -3714,6 +3744,21 @@ const HostView: React.FC = () => {
     newSocket.on('night-board-visibility', (data: any) => {
       if (data?.visible !== undefined) setShowNightBoard(!!data.visible);
       if (Array.isArray(data?.roundWinners)) setRoundWinners(data.roundWinners);
+    });
+
+    newSocket.on('sponsor-screen-updated', (data: any) => {
+      const ss = data?.sponsorScreen;
+      if (!ss || typeof ss !== 'object') return;
+      setSponsorScreen({
+        mediaUrl: typeof ss.mediaUrl === 'string' ? ss.mediaUrl : '',
+        text: typeof ss.text === 'string' ? ss.text : '',
+        qrUrl: typeof ss.qrUrl === 'string' ? ss.qrUrl : '',
+        mediaKind: ss.mediaKind === 'video' ? 'video' : 'image',
+        visible: !!ss.visible,
+      });
+      if (typeof data?.error === 'string' && data.error.trim()) {
+        addLog(data.error.trim(), 'warn');
+      }
     });
 
     newSocket.on('game-resumed', () => {
@@ -4082,6 +4127,16 @@ const HostView: React.FC = () => {
       }
       if (payload?.showNightBoard !== undefined) {
         setShowNightBoard(!!payload.showNightBoard);
+      }
+      if (payload?.sponsorScreen && typeof payload.sponsorScreen === 'object') {
+        const ss = payload.sponsorScreen;
+        setSponsorScreen({
+          mediaUrl: typeof ss.mediaUrl === 'string' ? ss.mediaUrl : '',
+          text: typeof ss.text === 'string' ? ss.text : '',
+          qrUrl: typeof ss.qrUrl === 'string' ? ss.qrUrl : '',
+          mediaKind: ss.mediaKind === 'video' ? 'video' : 'image',
+          visible: !!ss.visible,
+        });
       }
       if (payload?.mixFinalized !== undefined) {
         setMixFinalized(!!payload.mixFinalized);
@@ -7667,6 +7722,63 @@ const HostView: React.FC = () => {
     },
     [socket, roomId],
   );
+
+  const saveSponsorScreenConfig = useCallback(
+    (next: Omit<SponsorScreenConfig, 'visible'>) => {
+      const merged: SponsorScreenConfig = {
+        ...next,
+        visible: sponsorScreen.visible,
+      };
+      setSponsorScreen(merged);
+      try {
+        localStorage.setItem(
+          `sponsor-screen-${roomId}`,
+          JSON.stringify({
+            mediaUrl: merged.mediaUrl,
+            text: merged.text,
+            qrUrl: merged.qrUrl,
+            mediaKind: merged.mediaKind,
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
+      if (socket && roomId) {
+        socket.emit('set-sponsor-screen', { roomId, ...next });
+      }
+    },
+    [socket, roomId, sponsorScreen.visible],
+  );
+
+  const setSponsorScreenVisible = useCallback(
+    (visible: boolean) => {
+      // Host maps live + verify-pause → 'playing'; waiting/ended (incl. after bingo) can show.
+      if (visible && gameState === 'playing') {
+        addLog('Sponsor screen can only be shown between rounds.', 'warn');
+        return;
+      }
+      setSponsorScreen((prev) => ({ ...prev, visible }));
+      if (socket && roomId) {
+        socket.emit('set-sponsor-screen-visible', { roomId, visible });
+      }
+    },
+    [socket, roomId, gameState, addLog],
+  );
+
+  // Push local draft to server once on connect so projector has config even before Show.
+  useEffect(() => {
+    if (!socket || !roomId) return;
+    if (!sponsorScreen.mediaUrl && !sponsorScreen.text && !sponsorScreen.qrUrl) return;
+    socket.emit('set-sponsor-screen', {
+      roomId,
+      mediaUrl: sponsorScreen.mediaUrl,
+      text: sponsorScreen.text,
+      qrUrl: sponsorScreen.qrUrl,
+      mediaKind: sponsorScreen.mediaKind,
+    });
+    // Only on socket/room ready — not on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, roomId]);
 
   // Bingo verification functions
   const approveBingo = useCallback(async () => {
@@ -12176,6 +12288,13 @@ const HostView: React.FC = () => {
               Event rules
             </h2>
           </motion.section>
+
+          <HostSponsorScreenPanel
+            config={sponsorScreen}
+            canShow={gameState !== 'playing'}
+            onSave={saveSponsorScreenConfig}
+            onSetVisible={setSponsorScreenVisible}
+          />
 
           <HostDisplayExtrasPanel
             displayConnected={displayPresence.connected}

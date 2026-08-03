@@ -2888,6 +2888,111 @@
   max-width: none;
 }
 
+.host-view .host-sponsor-screen {
+  margin: 0 0 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.host-view .host-sponsor-screen__header {
+  margin-bottom: 2px;
+}
+
+.host-view .host-sponsor-screen__title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1rem;
+  color: #00ff88;
+}
+
+.host-view .host-sponsor-screen__icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+}
+
+.host-view .host-sponsor-screen__summary {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.host-view .host-sponsor-screen__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.host-view .host-sponsor-screen__label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.host-view .host-sponsor-screen__input,
+.host-view .host-sponsor-screen__textarea {
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: #f0f4f8;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 255, 136, 0.28);
+  background: rgba(0, 0, 0, 0.42);
+  padding: 8px 10px;
+}
+
+.host-view .host-sponsor-screen__textarea {
+  resize: vertical;
+  min-height: 56px;
+}
+
+.host-view .host-sponsor-screen__kind {
+  display: flex;
+  gap: 8px;
+}
+
+.host-view .host-sponsor-screen__kind-btn {
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.host-view .host-sponsor-screen__kind-btn--on {
+  border-color: rgba(0, 255, 136, 0.45);
+  background: rgba(0, 255, 136, 0.14);
+  color: #b8ffd9;
+}
+
+.host-view .host-sponsor-screen__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 4px;
+}
+
+.host-view .host-sponsor-screen__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.host-view .host-sponsor-screen__hint {
+  font-size: 0.8rem;
+  color: rgba(255, 210, 120, 0.9);
+}
+
 .host-view .host-panic-strip {
   flex-direction: row;
   flex-wrap: wrap;
