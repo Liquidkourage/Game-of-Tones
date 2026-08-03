@@ -1479,12 +1479,17 @@ code {
 
 .bingo-card-display.public-pattern-panel .bingo-card-header {
   flex: 0 1 auto;
-  /* Room for reveal-toast-sized pattern titles; still leave the grid animating. */
-  max-height: min(40%, 16rem);
-  overflow: hidden;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  /* Round + pattern + prize need vertical room; do not clip the prize onto the title row. */
+  max-height: none;
+  overflow: visible;
+  width: 100%;
   margin-bottom: 4px;
-  padding-bottom: 4px;
-  gap: 2px;
+  padding-bottom: 6px;
+  gap: 0.25em;
 }
 
 .bingo-card-display.public-pattern-panel .bingo-card-content {
@@ -1624,30 +1629,29 @@ code {
   flex: 1;
 }
 
-.bingo-card-display.public-pattern-panel .bingo-card-header {
-  flex-direction: column;
-  align-items: center;
-  gap: 0.2em;
-}
-
 .bingo-card-display.public-pattern-panel .bingo-card-header h2.pattern-title-text {
   font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
   /* Match reveal-toast readability on the projector */
-  font-size: clamp(1.5rem, 3.8vmin, 2.8rem);
+  font-size: clamp(1.35rem, 3.4vmin, 2.5rem);
   font-weight: 800;
   letter-spacing: 0.05em;
   line-height: 1.15;
   text-align: center;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
-  flex: 1 1 100%;
+  flex: 0 1 auto;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
+  margin: 0;
   word-break: break-word;
   overflow-wrap: anywhere;
   text-transform: uppercase;
 }
 
 .bingo-card-display.public-pattern-panel .public-round-eyebrow {
+  display: block;
+  width: 100%;
+  flex: 0 0 auto;
   font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
   font-size: clamp(0.95rem, 2.2vmin, 1.45rem);
   font-weight: 800;
@@ -1656,23 +1660,26 @@ code {
   text-align: center;
   color: rgba(255, 255, 255, 0.72);
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.75);
-  max-width: 100%;
   word-break: break-word;
 }
 
 .bingo-card-display.public-pattern-panel .public-round-prize-line {
-  margin-top: 0.15em;
+  display: block;
+  width: 100%;
+  flex: 0 0 auto;
+  flex-basis: 100%;
+  margin: 0.1em 0 0;
   font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
-  font-size: clamp(0.9rem, 2vmin, 1.45rem);
+  font-size: clamp(0.95rem, 2.1vmin, 1.5rem);
   font-weight: 800;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: rgba(245, 208, 97, 0.95);
   text-align: center;
   line-height: 1.25;
-  max-width: 100%;
   word-break: break-word;
   overflow-wrap: anywhere;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.75);
 }
 
 /* Public display: room / players / songs — scales with panel width (QR unchanged elsewhere). */

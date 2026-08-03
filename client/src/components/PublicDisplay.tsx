@@ -6238,7 +6238,7 @@ const PublicDisplay: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
             >
-              <div className="bingo-card-header center" style={{ justifyContent: 'center' }}>
+              <div className="bingo-card-header center public-pattern-header">
                 {roundHeaderLabel && !inlineRoundWithPattern ? (
                   <div className="public-round-eyebrow">{roundHeaderLabel}</div>
                 ) : null}
@@ -6248,8 +6248,8 @@ const PublicDisplay: React.FC = () => {
                     : patternHeaderLabel}
                 </h2>
                 {currentRoundPrize ? (
-                  <div className="public-round-prize-line">
-                    Prize: {currentRoundPrize}
+                  <div className="public-round-prize-line" title={currentRoundPrize}>
+                    {`Prize: ${currentRoundPrize}`}
                   </div>
                 ) : null}
                 {pattern === 'composite' && patternComposite && patternComposite.clauses.length > 0 && (
