@@ -7934,6 +7934,7 @@ const HostView: React.FC = () => {
       roomId,
       roundName: r.name || `Round ${idx + 1}`,
       prize: typeof r.prize === 'string' ? r.prize.trim() : '',
+      playlistNames: (r.playlistNames || []).slice(0, 5),
     });
   }, [socket, roomId]);
 
@@ -7949,6 +7950,10 @@ const HostView: React.FC = () => {
     displayMetaRoundIndex >= 0 ? eventRounds[displayMetaRoundIndex]?.prize ?? '' : '';
   const activeRoundDisplayName =
     displayMetaRoundIndex >= 0 ? eventRounds[displayMetaRoundIndex]?.name ?? '' : '';
+  const activeRoundDisplayPlaylistNames =
+    displayMetaRoundIndex >= 0
+      ? (eventRounds[displayMetaRoundIndex]?.playlistNames || []).slice(0, 5).join('\0')
+      : '';
 
   useEffect(() => {
     if (!socket || !roomId) return;
@@ -7960,6 +7965,7 @@ const HostView: React.FC = () => {
     displayMetaRoundIndex,
     activeRoundDisplayName,
     activeRoundDisplayPrize,
+    activeRoundDisplayPlaylistNames,
     syncRoundDisplayMeta,
   ]);
 

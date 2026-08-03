@@ -2118,6 +2118,12 @@ const PublicDisplay: React.FC = () => {
           if (typeof payload.currentRoundPrize === 'string' && payload.currentRoundPrize.trim()) {
             setCurrentRoundPrize(payload.currentRoundPrize.trim());
           }
+          if (
+            Array.isArray(payload.currentRoundPlaylistNames) &&
+            payload.currentRoundPlaylistNames.some((name: unknown) => String(name || '').trim())
+          ) {
+            setPlaylistNames(payload.currentRoundPlaylistNames.slice(0, 5));
+          }
           if (payload.showNightBoard !== undefined) {
             setShowNightBoard(!!payload.showNightBoard);
           }
@@ -2841,6 +2847,9 @@ const PublicDisplay: React.FC = () => {
         }
       snippetCountdownSongIdRef.current = null;
       clearPoolLayoutState();
+      if (Array.isArray(data?.currentRoundPlaylistNames)) {
+        setPlaylistNames(data.currentRoundPlaylistNames.slice(0, 5));
+      }
       ensureGrid();
       // Always request sync to ensure we have columns and latest state
       // Use longer delay to ensure server has finished generating cards and emitting columns
@@ -3019,7 +3028,7 @@ const PublicDisplay: React.FC = () => {
     });
 
     newSocket.on('round-display-meta', (data: any) => {
-      // Authoritative host push — allow clearing prize/name when the host updates prep.
+      // Authoritative host push — allow clearing round header fields when prep changes.
       if (data?.currentRoundName !== undefined) {
         setCurrentRoundName(
           typeof data.currentRoundName === 'string' && data.currentRoundName.trim()
@@ -3033,6 +3042,9 @@ const PublicDisplay: React.FC = () => {
             ? data.currentRoundPrize.trim()
             : null,
         );
+      }
+      if (Array.isArray(data?.currentRoundPlaylistNames)) {
+        setPlaylistNames(data.currentRoundPlaylistNames.slice(0, 5));
       }
     });
 

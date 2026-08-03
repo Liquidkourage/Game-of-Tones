@@ -2832,6 +2832,13 @@ function sanitizeRoundNameText(raw) {
   return raw.replace(/\s+/g, ' ').trim().slice(0, 80);
 }
 
+function sanitizeRoundPlaylistNames(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 5).map((name) =>
+    typeof name === 'string' ? name.replace(/\s+/g, ' ').trim().slice(0, 120) : '',
+  );
+}
+
 function sanitizeHttpUrl(raw, maxLen = 2000) {
   if (typeof raw !== 'string') return '';
   const trimmed = raw.trim().slice(0, maxLen);
@@ -2892,6 +2899,7 @@ function publicDisplayRoomStateExtras(room) {
   const head = pending ? room.bingoVerificationQueue[0]?.verificationData : null;
   const prize = sanitizeRoundPrizeText(room.currentRoundPrize || '');
   const roundName = sanitizeRoundNameText(room.currentRoundName || '');
+  const playlistNames = sanitizeRoundPlaylistNames(room.currentRoundPlaylistNames);
   return {
     publicDisplayRevealState: publicDisplayRevealStateForClient(room),
     bingoVerificationPending: pending,
@@ -2902,6 +2910,7 @@ function publicDisplayRoomStateExtras(room) {
     bingoWinPolicy: bingoWinPolicyForRoom(room),
     currentRoundName: roundName || null,
     currentRoundPrize: prize || null,
+    currentRoundPlaylistNames: playlistNames,
     showNightBoard: room.showNightBoard === true,
     sponsorScreen: sponsorScreenForClient(room),
   };
@@ -5641,7 +5650,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Host: push round name + prize to projector before/after Start Game (call-list header)
+  // Host: push round name, prize, and playlist headers before/after Start Game.
   socket.on('set-round-display-meta', (data = {}) => {
     try {
       const { roomId } = data;
@@ -5652,9 +5661,11 @@ io.on('connection', (socket) => {
       if (!isCurrentHost) return;
       room.currentRoundName = sanitizeRoundNameText(data.roundName);
       room.currentRoundPrize = sanitizeRoundPrizeText(data.prize);
+      room.currentRoundPlaylistNames = sanitizeRoundPlaylistNames(data.playlistNames);
       const payload = {
         currentRoundName: room.currentRoundName || null,
         currentRoundPrize: room.currentRoundPrize || null,
+        currentRoundPlaylistNames: room.currentRoundPlaylistNames,
       };
       io.to(roomId).emit('round-display-meta', payload);
       routineServerLog(
@@ -6653,6 +6664,7 @@ io.on('connection', (socket) => {
     room.roundWinners = []; // Reset round winners
     room.currentRoundName = '';
     room.currentRoundPrize = '';
+    room.currentRoundPlaylistNames = [];
     room.showNightBoard = false;
     clearPublicDisplaySessionState(room);
     
@@ -6798,6 +6810,7 @@ io.on('connection', (socket) => {
     room.selectedDeviceId = deviceToKeep;
     room.currentRoundName = '';
     room.currentRoundPrize = '';
+    room.currentRoundPlaylistNames = [];
     room.showNightBoard = false;
     
     // CRITICAL: Clean up temporary playlist if it exists
@@ -7142,6 +7155,9 @@ io.on('connection', (socket) => {
         room.randomStarts = randomStarts || 'none';
         room.currentRoundName = sanitizeRoundNameText(incomingRoundName) || `Round ${(room.roundWinners?.length || 0) + 1}`;
         room.currentRoundPrize = sanitizeRoundPrizeText(incomingRoundPrize);
+        room.currentRoundPlaylistNames = sanitizeRoundPlaylistNames(
+          Array.isArray(playlists) ? playlists.map((playlist) => playlist?.name) : [],
+        );
         room.showNightBoard = false;
         // Never show sponsor during a live round.
         hideSponsorScreen(room);
@@ -7441,6 +7457,7 @@ io.on('connection', (socket) => {
           ...patternExtrasForClient(room),
           currentRoundName: room.currentRoundName || null,
           currentRoundPrize: room.currentRoundPrize || null,
+          currentRoundPlaylistNames: room.currentRoundPlaylistNames,
           showNightBoard: false,
           roundWinners: room.roundWinners || [],
           sponsorScreen: sponsorScreenForClient(room),
