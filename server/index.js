@@ -5011,7 +5011,11 @@ io.on('connection', (socket) => {
         message,
         submittedAt: now,
       };
-      room.playerFeedback = [...(Array.isArray(room.playerFeedback) ? room.playerFeedback : []), feedback].slice(-50);
+      // A rehearsal night should fit comfortably while keeping room memory bounded.
+      room.playerFeedback = [
+        ...(Array.isArray(room.playerFeedback) ? room.playerFeedback : []),
+        feedback,
+      ].slice(-500);
 
       const hostSocketIds = new Set();
       if (room.host) hostSocketIds.add(room.host);
@@ -6941,6 +6945,11 @@ io.on('connection', (socket) => {
         syncTimestamp: Date.now(),
         hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline
       };
+
+      const syncingPlayer = room.players.get(socket.id);
+      if (socket.id === room.host || syncingPlayer?.isHost) {
+        payload.playerFeedback = Array.isArray(room.playerFeedback) ? room.playerFeedback : [];
+      }
       
       Object.assign(payload, publicDisplayRoomStateExtras(room));
       if (room.fiveByFifteenColumnsIds && Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) {

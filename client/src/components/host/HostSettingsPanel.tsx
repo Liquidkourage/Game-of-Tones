@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, Link2 } from 'lucide-react';
+import { Copy, Download, Link2 } from 'lucide-react';
 import HostActivityFeed from './HostActivityFeed';
 import HostEventActivationBar from './HostEventActivationBar';
 import type { HostActivityEntry } from '../../host/hostActivityLog';
@@ -11,6 +11,9 @@ type HostSettingsPanelProps = {
   connectionPanel: React.ReactNode;
   activityEntries: HostActivityEntry[];
   onExportEventRecap: () => void;
+  playerFeedbackCount: number;
+  onDownloadPlayerFeedback: () => void;
+  onCopyPlayerFeedback: () => void;
   hybridInPersonPlusOnline: boolean;
   onHybridChange: (v: boolean) => void;
   bingoWinPolicy: BingoWinPolicy;
@@ -40,6 +43,9 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
   connectionPanel,
   activityEntries,
   onExportEventRecap,
+  playerFeedbackCount,
+  onDownloadPlayerFeedback,
+  onCopyPlayerFeedback,
   hybridInPersonPlusOnline,
   onHybridChange,
   bingoWinPolicy,
@@ -257,6 +263,36 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
           <Download className="w-4 h-4" aria-hidden />
           Export JSON
         </button>
+      </section>
+
+      <section className="host-glass-panel host-settings-workspace__export">
+        <h2 className="host-settings-workspace__title">Player feedback</h2>
+        <p className="host-host-prefs__hint">
+          {playerFeedbackCount === 0
+            ? 'No feedback received yet.'
+            : `${playerFeedbackCount} message${playerFeedbackCount === 1 ? '' : 's'} saved in this browser.`}
+          {' '}Up to 500 messages are kept for this room.
+        </p>
+        <div className="host-host-prefs__radios">
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={onDownloadPlayerFeedback}
+            disabled={playerFeedbackCount === 0}
+          >
+            <Download className="w-4 h-4" aria-hidden />
+            Download .txt
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={onCopyPlayerFeedback}
+            disabled={playerFeedbackCount === 0}
+          >
+            <Copy className="w-4 h-4" aria-hidden />
+            Copy all
+          </button>
+        </div>
       </section>
 
       <HostActivityFeed entries={activityEntries} />

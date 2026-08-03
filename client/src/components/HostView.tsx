@@ -185,6 +185,86 @@ import './HostFormControls.css';
 
 const MAX_CUSTOM_PATTERN_NAME_EMIT = 80;
 const SPOTIFY_SKIP_AUTO_CONNECT_KEY = 'spotify_skip_auto_connect';
+const HOST_FEEDBACK_LIMIT = 500;
+
+type PlayerFeedbackEntry = {
+  id: string;
+  playerName: string;
+  message: string;
+  submittedAt: number;
+};
+
+function hostFeedbackStorageKey(roomId: string): string {
+  return `tempo-player-feedback-${roomId}`;
+}
+
+function normalizePlayerFeedbackEntry(raw: any): PlayerFeedbackEntry | null {
+  const message = typeof raw?.message === 'string' ? raw.message.trim() : '';
+  const submittedAt = Number(raw?.submittedAt);
+  if (!message || !Number.isFinite(submittedAt) || submittedAt <= 0) return null;
+  const playerName =
+    typeof raw?.playerName === 'string' && raw.playerName.trim()
+      ? raw.playerName.trim()
+      : 'Player';
+  return {
+    id:
+      typeof raw?.id === 'string' && raw.id
+        ? raw.id
+        : `${submittedAt}-${playerName}-${message}`,
+    playerName,
+    message,
+    submittedAt,
+  };
+}
+
+function mergePlayerFeedback(
+  current: PlayerFeedbackEntry[],
+  incoming: unknown,
+): PlayerFeedbackEntry[] {
+  const next = new Map(current.map((entry) => [entry.id, entry]));
+  if (Array.isArray(incoming)) {
+    incoming.forEach((raw) => {
+      const entry = normalizePlayerFeedbackEntry(raw);
+      if (entry) next.set(entry.id, entry);
+    });
+  } else {
+    const entry = normalizePlayerFeedbackEntry(incoming);
+    if (entry) next.set(entry.id, entry);
+  }
+  return Array.from(next.values())
+    .sort((a, b) => a.submittedAt - b.submittedAt)
+    .slice(-HOST_FEEDBACK_LIMIT);
+}
+
+function readHostFeedback(roomId?: string): PlayerFeedbackEntry[] {
+  if (!roomId) return [];
+  try {
+    return mergePlayerFeedback(
+      [],
+      JSON.parse(localStorage.getItem(hostFeedbackStorageKey(roomId)) || '[]'),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function feedbackExportText(
+  roomId: string | undefined,
+  feedback: PlayerFeedbackEntry[],
+): string {
+  const lines = [
+    'Tempo player feedback',
+    `Room: ${roomId || 'unknown'}`,
+    `Exported: ${new Date().toISOString()}`,
+    `Messages: ${feedback.length}`,
+    '',
+  ];
+  feedback.forEach((entry) => {
+    lines.push(`[${new Date(entry.submittedAt).toISOString()}] ${entry.playerName}`);
+    lines.push(entry.message, '');
+  });
+  return lines.join('\r\n');
+}
 
 function positionsKeyForMatch(arr: readonly string[]): string {
   return [...arr].sort().join(',');
@@ -1472,6 +1552,9 @@ const HostView: React.FC = () => {
     () => !isHostTutorialCompleted() && !isHostTutorialSuggestionDismissed(),
   );
   const [activityLog, setActivityLog] = useState<HostActivityEntry[]>([]);
+  const [playerFeedback, setPlayerFeedback] = useState<PlayerFeedbackEntry[]>(() =>
+    readHostFeedback(roomId),
+  );
   const [youtubeMusicConnected, setYoutubeMusicConnected] = useState(false);
   const [youtubeStatusReady, setYoutubeStatusReady] = useState(false);
   const [appleMusicConnected, setAppleMusicConnected] = useState(false);
@@ -1762,6 +1845,19 @@ const HostView: React.FC = () => {
     else console.log(line);
     setActivityLog((prev) => appendHostActivity(prev, message, level));
   }, []);
+
+  useEffect(() => {
+    setPlayerFeedback(readHostFeedback(roomId));
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!roomId) return;
+    try {
+      localStorage.setItem(hostFeedbackStorageKey(roomId), JSON.stringify(playerFeedback));
+    } catch {
+      /* Keep the in-memory export available when browser storage is unavailable. */
+    }
+  }, [roomId, playerFeedback]);
 
   // Show toast notification to host
   const showToast = (message: string, type: 'info' | 'success' | 'warn' | 'error' = 'info') => {
@@ -3425,16 +3521,15 @@ const HostView: React.FC = () => {
       schedulePlayerCardsRefresh(450);
     });
     newSocket.on('player-feedback', (data: any) => {
-      const playerName =
-        typeof data?.playerName === 'string' && data.playerName.trim()
-          ? data.playerName.trim()
-          : 'Player';
-      const message = typeof data?.message === 'string' ? data.message.trim() : '';
-      if (!message) return;
-      addLog(`Player feedback — ${playerName}: ${message}`, 'info');
+      const feedback = normalizePlayerFeedbackEntry(data);
+      if (!feedback) return;
+      setPlayerFeedback((prev) => mergePlayerFeedback(prev, feedback));
+      addLog(`Player feedback — ${feedback.playerName}: ${feedback.message}`, 'info');
       const toastMessage =
-        message.length > 140 ? `${message.slice(0, 137)}…` : message;
-      showToast(`Feedback from ${playerName}: ${toastMessage}`, 'info');
+        feedback.message.length > 140
+          ? `${feedback.message.slice(0, 137)}…`
+          : feedback.message;
+      showToast(`Feedback from ${feedback.playerName}: ${toastMessage}`, 'info');
     });
     newSocket.on('prequeue-updated', (data: any) => {
       setPreQueueEnabled(!!data?.enabled);
@@ -4106,6 +4201,9 @@ const HostView: React.FC = () => {
       setGameState(merged);
       if (roomId) {
         persistActiveHostRoomFromPayload(roomId, payload);
+      }
+      if (Array.isArray(payload?.playerFeedback)) {
+        setPlayerFeedback((prev) => mergePlayerFeedback(prev, payload.playerFeedback));
       }
       if (merged === 'playing') {
         setHostAwaitingLiveSync(false);
@@ -11811,6 +11909,28 @@ const HostView: React.FC = () => {
     addLog('Exported event recap JSON', 'info');
   }, [roomId, gameState, eventRounds, winners, roundWinners, playedInOrder, currentRoundIndex, addLog]);
 
+  const handleDownloadPlayerFeedback = useCallback(() => {
+    if (playerFeedback.length === 0) return;
+    const blob = new Blob([feedbackExportText(roomId, playerFeedback)], {
+      type: 'text/plain;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tempo-feedback-${roomId || 'room'}-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addLog(`Downloaded ${playerFeedback.length} player feedback message(s)`, 'info');
+  }, [roomId, playerFeedback, addLog]);
+
+  const handleCopyPlayerFeedback = useCallback(() => {
+    if (playerFeedback.length === 0) return;
+    void navigator.clipboard.writeText(feedbackExportText(roomId, playerFeedback)).then(
+      () => showToast(`Copied ${playerFeedback.length} feedback message(s)`, 'success'),
+      () => showToast('Could not copy player feedback', 'error'),
+    );
+  }, [roomId, playerFeedback]);
+
   const handleCopyJoinLink = useCallback(() => {
     const url = `${window.location.origin}/?room=${encodeURIComponent(roomId || '')}`;
     void navigator.clipboard.writeText(url).then(
@@ -12264,6 +12384,9 @@ const HostView: React.FC = () => {
                 roomId={roomId ?? null}
                 activityEntries={activityLog}
                 onExportEventRecap={handleExportEventRecap}
+                playerFeedbackCount={playerFeedback.length}
+                onDownloadPlayerFeedback={handleDownloadPlayerFeedback}
+                onCopyPlayerFeedback={handleCopyPlayerFeedback}
                 hybridInPersonPlusOnline={hybridInPersonPlusOnline}
                 onHybridChange={(v) => {
                   setHybridInPersonPlusOnline(v);
