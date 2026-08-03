@@ -444,6 +444,8 @@ type SavedMixGeometry = '5x15' | '1x75' | 'merged';
 
 interface SavedRoundMixSnapshot {
   savedAt: number;
+  /** Fisher–Yates order locked when Save round succeeds. Live playback and offline call lists use this sequence. */
+  playOrder?: Song[];
   songs: Song[];
   mixGeometry: SavedMixGeometry;
   snippetLength: number;
@@ -467,6 +469,31 @@ function cloneSongForSnapshot(s: Song): Song {
     youtubeRawTitle: s.youtubeRawTitle,
     catalogDisplayVerified: s.catalogDisplayVerified,
   };
+}
+
+function shuffleSongsForLockedPlayOrder(songs: Song[]): Song[] {
+  const shuffled = songs.map(cloneSongForSnapshot);
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+function snapshotHasLockedPlayOrder(
+  snapshot: SavedRoundMixSnapshot | null | undefined,
+): snapshot is SavedRoundMixSnapshot & { playOrder: Song[] } {
+  if (!snapshot?.songs?.length || !Array.isArray(snapshot.playOrder)) return false;
+  if (snapshot.playOrder.length !== snapshot.songs.length) return false;
+  const poolIds = new Set(snapshot.songs.map((song) => String(song.id || '').trim()).filter(Boolean));
+  if (poolIds.size !== snapshot.songs.length) return false;
+  const orderIds = snapshot.playOrder.map((song) => String(song.id || '').trim()).filter(Boolean);
+  return orderIds.length === poolIds.size && new Set(orderIds).size === poolIds.size &&
+    orderIds.every((id) => poolIds.has(id));
+}
+
+function playbackOrderForSnapshot(snapshot: SavedRoundMixSnapshot): Song[] {
+  return snapshotHasLockedPlayOrder(snapshot) ? snapshot.playOrder : snapshot.songs;
 }
 
 /** Normalize title/artist for night-wide leftovers dedup (same song, different Spotify ids). */
@@ -5495,12 +5522,14 @@ const HostView: React.FC = () => {
       try {
         const callSections = saved.map((round) => {
           const meta = roundPrintMetaFor(round);
+          const snap = round.savedMixSnapshot!;
           return {
             roundName: round.name,
             roomLabel: `Room ${roomId}`,
             patternLabel: roundPatternLabelForPrint(meta),
             prize: round.prize,
-            tracks: round.savedMixSnapshot!.songs.map((s) => ({
+            playOrderLocked: snapshotHasLockedPlayOrder(snap),
+            tracks: playbackOrderForSnapshot(snap).map((s) => ({
               name: s.name,
               artist: s.artist,
             })),
@@ -5536,6 +5565,7 @@ const HostView: React.FC = () => {
           });
         }
         const packRounds: OfflineShowPackRound[] = saved.map((round) => {
+          const snap = round.savedMixSnapshot!;
           const playlistIds = playlistIdsForRoundExport(round);
           const playlists = playlistIds.map((id) => {
             const currentIndex = round.playlistIds.indexOf(id);
@@ -5548,9 +5578,10 @@ const HostView: React.FC = () => {
             roundName: round.name,
             patternLabel: roundPatternLabelForPrint(roundPrintMetaFor(round)),
             prize: round.prize,
-            mixGeometry: round.savedMixSnapshot!.mixGeometry,
+            mixGeometry: snap.mixGeometry,
             playlists,
-            tracks: round.savedMixSnapshot!.songs.map((song) => ({
+            playOrderLocked: snapshotHasLockedPlayOrder(snap),
+            tracks: playbackOrderForSnapshot(snap).map((song) => ({
               id: song.id,
               name: song.name,
               artist: song.artist,
@@ -5593,14 +5624,14 @@ const HostView: React.FC = () => {
   const handleDownloadRoundCallSheetPdf = useCallback(
     (round: EventRound | undefined) => {
       if (!round) return;
-      const songs = round.savedMixSnapshot?.songs;
+      const snap = round.savedMixSnapshot;
       if (!eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled)) {
         window.alert(
           'Save this round first so there is a snapshot with enough tracks. The call sheet uses the frozen playback order from Save round.',
         );
         return;
       }
-      if (!songs || songs.length === 0) {
+      if (!snap?.songs?.length) {
         window.alert('No snapshot songs found for this round. Save the round again and retry.');
         return;
       }
@@ -5611,7 +5642,8 @@ const HostView: React.FC = () => {
           roomLabel: `Room ${roomId}`,
           patternLabel: roundPatternLabelForPrint(meta),
           prize: round.prize,
-          tracks: songs.map((s) => ({ name: s.name, artist: s.artist })),
+          playOrderLocked: snapshotHasLockedPlayOrder(snap),
+          tracks: playbackOrderForSnapshot(snap).map((s) => ({ name: s.name, artist: s.artist })),
         });
         const safeSlug = (round.name || 'round').replace(/[^\w\-]+/g, '_').slice(0, 48);
         const url = URL.createObjectURL(blob);
@@ -5667,7 +5699,12 @@ const HostView: React.FC = () => {
         ? roundForStart.freeSpaceEnabled
         : freeSpaceEnabled;
     const needSnapTracks = freeSpaceForStart ? 24 : 25;
-    const snapPool = roundForStart?.savedMixSnapshot?.songs;
+    const savedSnapshot = roundForStart?.savedMixSnapshot;
+    const snapPool = savedSnapshot?.songs;
+    const lockedPlayOrder =
+      savedSnapshot && snapshotHasLockedPlayOrder(savedSnapshot)
+        ? savedSnapshot.playOrder.map(cloneSongForSnapshot)
+        : undefined;
     const useSavedRoundPlayback =
       !!roundForStart && !!snapPool && snapPool.length >= needSnapTracks;
 
@@ -5802,7 +5839,12 @@ const HostView: React.FC = () => {
       }
 
       if (useSavedRoundPlayback) {
-        addLog('Starting game from saved round — server shuffles playback order, then plays 1→N', 'info');
+        addLog(
+          lockedPlayOrder
+            ? 'Starting game from saved round — using the play order locked at Save round'
+            : 'Starting legacy saved round — server shuffles playback order once, then plays 1→N',
+          'info',
+        );
       } else if (mixFinalized) {
         addLog('Starting game — server shuffles playback order from your bingo pool, then plays 1→N', 'info');
       }
@@ -5822,6 +5864,7 @@ const HostView: React.FC = () => {
         snippetLength,
         deviceId: needsHostSpotifyForStart && selectedDevice ? selectedDevice.id : undefined,
         songList: songListForStart,
+        lockedPlayOrder,
         randomStarts,
         pattern: patternForStart,
         customMask: maskForStart,
@@ -8829,6 +8872,7 @@ const HostView: React.FC = () => {
       const snap: SavedRoundMixSnapshot = {
         savedAt: Date.now(),
         songs: filteredSongs,
+        playOrder: shuffleSongsForLockedPlayOrder(filteredSongs),
         mixGeometry:
           poolMode === '5x15' ? '5x15' : poolMode === '1x75' ? '1x75' : deriveMixGeometryForSnapshot(mixRows, filteredSongs.length),
         snippetLength,

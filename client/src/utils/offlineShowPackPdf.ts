@@ -27,6 +27,7 @@ export type OfflineShowPackRound = {
   patternLabel?: string;
   prize?: string;
   mixGeometry?: string;
+  playOrderLocked?: boolean;
   playlists: OfflineShowPackPlaylist[];
   tracks: OfflineShowPackTrack[];
 };
@@ -309,6 +310,14 @@ function drawAudioChecklist(doc: jsPDF, rounds: OfflineShowPackRound[]): void {
     }
 
     y = drawWrapped(doc, 'Track order', y, { size: 10, style: 'bold', indent: 12, gapAfter: 2 });
+    y = drawWrapped(
+      doc,
+      round.playOrderLocked
+        ? 'Locked at Save round - matches the Start Game sequence.'
+        : 'Legacy snapshot - save this round again before the show to lock the Start Game sequence.',
+      y,
+      { size: 8, indent: 12, color: [72, 72, 78], gapAfter: 4 },
+    );
     round.tracks.forEach((track, trackIndex) => {
       y = drawWrapped(
         doc,

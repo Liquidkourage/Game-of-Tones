@@ -13,6 +13,8 @@ function sanitizePdfText(s: string): string {
 export type RoundCallSheetPdfOpts = {
   roundName: string;
   roomLabel: string;
+  /** True when Save round persisted the exact order Start Game will use. */
+  playOrderLocked?: boolean;
   /** Winning pattern for this saved round (shown under the round name). */
   patternLabel?: string;
   /** Optional prize for the round (shown beside the winning pattern). */
@@ -66,10 +68,12 @@ function drawWrapped(
   });
 }
 
-function drawPlaybackHint(state: CallSheetDocState) {
+function drawPlaybackHint(state: CallSheetDocState, playOrderLocked: boolean) {
   const hint = state.doc.splitTextToSize(
     sanitizePdfText(
-      "Playback order from each round's Save round snapshot (same sequence as Start Game when a snapshot exists).",
+      playOrderLocked
+        ? 'Play order locked at Save round - this is the same sequence Start Game uses.'
+        : 'Legacy saved pool order - Start Game may create a different shuffled sequence. Save the round again to lock this call order.',
     ),
     state.maxW,
   );
@@ -151,7 +155,7 @@ export function appendMultiRoundCallSheetsToDoc(
     'TEMPO — Host call sheets',
     `${sections.length} saved round${sections.length !== 1 ? 's' : ''} · ${roomLabel}`,
   );
-  drawPlaybackHint(state);
+  drawPlaybackHint(state, sections.every((section) => section.playOrderLocked === true));
   cursor.pageStarted = true;
 
   sections.forEach((opts, i) => {
@@ -180,7 +184,7 @@ export function buildRoundCallSheetPdfBlob(opts: RoundCallSheetPdfOpts): Blob {
   if (opts.prize?.trim()) titleParts.push(`Prize: ${opts.prize.trim()}`);
   const titleSub = titleParts.join(' · ');
   drawDocumentTitle(state, 'TEMPO — Host call sheet', titleSub);
-  drawPlaybackHint(state);
+  drawPlaybackHint(state, opts.playOrderLocked === true);
   drawTrackList(state, opts.tracks);
   return doc.output('blob');
 }

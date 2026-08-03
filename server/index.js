@@ -7038,7 +7038,7 @@ io.on('connection', (socket) => {
 
   socket.on('start-game', async (data) => {
     routineServerLog('🎮 Start game event received:', data);
-    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, customPatternName: incomingCustomPatternName, freeSpace, savedRoundPlayback, roundName: incomingRoundName, prize: incomingRoundPrize } = data;
+    const { roomId, playlists, snippetLength = 30, deviceId, songList, lockedPlayOrder, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, customPatternName: incomingCustomPatternName, freeSpace, savedRoundPlayback, roundName: incomingRoundName, prize: incomingRoundPrize } = data;
     const room = rooms.get(roomId);
     
     routineServerLog('🔍 Room found:', !!room);
@@ -7145,6 +7145,16 @@ io.on('connection', (socket) => {
         }
         const useSavedRoundPlayback =
           savedRoundPlayback === true && savedRoundSongs.length >= minSnapTracks;
+        const requestedLockedOrder =
+          useSavedRoundPlayback ? normalizeSongSnapshotForPrint(lockedPlayOrder) || [] : [];
+        const useLockedPlayOrder =
+          requestedLockedOrder.length > 0 &&
+          songListsContainSameIds(savedRoundSongs, requestedLockedOrder);
+        if (requestedLockedOrder.length > 0 && !useLockedPlayOrder) {
+          routineServerLog(
+            `⚠️ Ignoring invalid saved-round locked order (${requestedLockedOrder.length}/${savedRoundSongs.length} tracks); shuffling legacy pool once`,
+          );
+        }
 
         const deckSource =
           useSavedRoundPlayback && savedRoundSongs.length > 0
@@ -7155,8 +7165,12 @@ io.on('connection', (socket) => {
                 ? room.finalizedSongs
                 : [];
         const deckSourceIds = deckSource.map((s) => (typeof s === 'string' ? s : s?.id)).filter(Boolean);
-        let showDeck = buildShowPoolDeck(room, deckSource, useSavedRoundPlayback);
-        showDeck = normalizeShowDeckForRoom(room, showDeck, { alignToPool: true });
+        let showDeck = buildShowPoolDeck(
+          room,
+          deckSource,
+          useLockedPlayOrder ? requestedLockedOrder : null,
+        );
+        showDeck = normalizeShowDeckForRoom(room, showDeck);
         if (showDeck.length === 0) {
           socket.emit('error', {
             message:
@@ -7202,7 +7216,7 @@ io.on('connection', (socket) => {
             const useFiveByFifteenSnap = snapshotSupportsFiveByFifteenStartGame(playlists, showDeck);
             if (useFiveByFifteenSnap) {
               routineServerLog(
-                '📋 Saved-round 5×15: partitioning shuffled pool by sourcePlaylistId into host five playlists (display columns)',
+                '📋 Saved-round 5×15: partitioning play-order pool by sourcePlaylistId into host five playlists (display columns)',
               );
               playlistsToUse = playlists;
               songOrderForCards = showDeck;
@@ -7334,7 +7348,7 @@ io.on('connection', (socket) => {
         }
 
         routineServerLog(
-          `🎲 Start-game playback order (${showDeck.length} tracks, shuffled) — play 1→${showDeck.length}${useSavedRoundPlayback ? ' [saved round]' : ''}`,
+          `🎲 Start-game playback order (${showDeck.length} tracks, ${useLockedPlayOrder ? 'locked at Save round' : 'shuffled now'}) — play 1→${showDeck.length}${useSavedRoundPlayback ? ' [saved round]' : ''}`,
         );
 
         persistAllDealtCardsRoundToken(room);
@@ -8666,7 +8680,9 @@ function normalizeShowDeckForRoom(room, showDeck, opts = {}) {
  */
 function applyShowPoolOrderToRoom(room, roomId, showDeck) {
   if (!room || !Array.isArray(showDeck) || showDeck.length === 0) return;
-  const normalized = normalizeShowDeckForRoom(room, showDeck, { alignToPool: true });
+  // The Start Game deck is the round's source of truth. Never reorder it to a stale
+  // finalize/card-layout cache; card generation uses the same track set.
+  const normalized = normalizeShowDeckForRoom(room, showDeck);
   if (normalized.length === 0) return;
   room.finalizedSongOrder = normalized.map((s) => ({ ...s }));
   room.finalizedSongs = normalized.map((s) => ({ ...s }));
@@ -8685,9 +8701,24 @@ function applyShowPoolOrderToRoom(room, roomId, showDeck) {
   emitFinalizedOrderFromRoomState(roomId, room);
 }
 
-/** Start Game: shuffle into playback order (finalize only builds the pool). */
-function buildShowPoolDeck(_room, deckSource, _useSavedRoundPlayback) {
+function songListsContainSameIds(poolSongs, orderedSongs) {
+  const pool = dedupeSongsByIdPreserveOrder(poolSongs);
+  const ordered = dedupeSongsByIdPreserveOrder(orderedSongs);
+  if (pool.length === 0 || ordered.length !== pool.length) return false;
+  const poolIds = new Set(pool.map((song) => String(song.id)));
+  return ordered.every((song) => poolIds.has(String(song.id)));
+}
+
+/** Start Game: preserve a validated saved order, otherwise shuffle the finalized pool once. */
+function buildShowPoolDeck(_room, deckSource, lockedPlayOrder) {
   if (!Array.isArray(deckSource) || deckSource.length === 0) return [];
+  if (
+    Array.isArray(lockedPlayOrder) &&
+    lockedPlayOrder.length > 0 &&
+    songListsContainSameIds(deckSource, lockedPlayOrder)
+  ) {
+    return capShowDeckLength(lockedPlayOrder);
+  }
   return capShowDeckLength(properShuffle(deckSource));
 }
 
