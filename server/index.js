@@ -4642,6 +4642,7 @@ io.on('connection', (socket) => {
         linesRequired: 1,
         customPattern: undefined, // Will be set when custom pattern is chosen
         customPatternName: '',
+        customPatternReverse: false,
         customPatternAllowRotation: false,
         customPatternAllowMirror: false,
         patternComposite: undefined,
@@ -5399,6 +5400,7 @@ io.on('connection', (socket) => {
         customMask,
         patternComposite: incomingComposite,
         linesRequired: lrIn,
+        customMatchReverse,
         customMatchAllowRotation,
         customMatchAllowMirror,
         customPatternName: incomingCustomPatternName,
@@ -5410,6 +5412,7 @@ io.on('connection', (socket) => {
       const allowed = ALLOWED_BINGO_PATTERNS;
       const canonPattern = canonicalHostBingoPattern(pattern);
       room.pattern = allowed.has(canonPattern) ? canonPattern : 'line';
+      room.customPatternReverse = false;
       room.customPatternAllowRotation = false;
       room.customPatternAllowMirror = false;
       room.customPatternName = '';
@@ -5417,6 +5420,7 @@ io.on('connection', (socket) => {
         const mask = Array.isArray(customMask) ? customMask.filter(p => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p)) : [];
         room.customPattern = new Set(mask);
         room.patternComposite = undefined;
+        room.customPatternReverse = readOrientationBoolSrv(customMatchReverse);
         room.customPatternAllowRotation = readOrientationBoolSrv(customMatchAllowRotation);
         room.customPatternAllowMirror = readOrientationBoolSrv(customMatchAllowMirror);
         room.customPatternName = sanitizeCustomPatternNameSrv(incomingCustomPatternName);
@@ -6769,6 +6773,9 @@ io.on('connection', (socket) => {
     room.pattern = 'line';
     room.customPattern = new Set();
     room.customPatternName = '';
+    room.customPatternReverse = false;
+    room.customPatternAllowRotation = false;
+    room.customPatternAllowMirror = false;
     room.patternComposite = undefined;
     const preservedSnippetLength =
       typeof room.snippetLength === 'number' && Number.isFinite(room.snippetLength) && room.snippetLength > 0
@@ -7112,7 +7119,7 @@ io.on('connection', (socket) => {
 
   socket.on('start-game', async (data) => {
     routineServerLog('🎮 Start game event received:', data);
-    const { roomId, playlists, snippetLength = 30, deviceId, songList, lockedPlayOrder, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, customPatternName: incomingCustomPatternName, freeSpace, savedRoundPlayback, roundName: incomingRoundName, prize: incomingRoundPrize } = data;
+    const { roomId, playlists, snippetLength = 30, deviceId, songList, lockedPlayOrder, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchReverse: incomingCustomReverse, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, customPatternName: incomingCustomPatternName, freeSpace, savedRoundPlayback, roundName: incomingRoundName, prize: incomingRoundPrize } = data;
     const room = rooms.get(roomId);
     
     routineServerLog('🔍 Room found:', !!room);
@@ -7203,9 +7210,11 @@ io.on('connection', (socket) => {
             ? normalizeLinesRequiredSrv(incomingLinesRequired != null ? incomingLinesRequired : room.linesRequired)
             : 1;
         if (room.pattern === 'custom') {
+          room.customPatternReverse = readOrientationBoolSrv(incomingCustomReverse);
           room.customPatternAllowRotation = readOrientationBoolSrv(incomingCustomRot);
           room.customPatternAllowMirror = readOrientationBoolSrv(incomingCustomMir);
         } else {
+          room.customPatternReverse = false;
           room.customPatternAllowRotation = false;
           room.customPatternAllowMirror = false;
         }
@@ -7495,6 +7504,7 @@ io.on('connection', (socket) => {
           linesRequired: 1,
           customPattern: undefined, // Will be set when custom pattern is chosen
           customPatternName: '',
+          customPatternReverse: false,
           customPatternAllowRotation: false,
           customPatternAllowMirror: false,
           patternComposite: undefined,
@@ -11489,6 +11499,7 @@ function patternExtrasForClient(room) {
   }
   if (pat === 'custom') {
     return {
+      customMatchReverse: !!room.customPatternReverse,
       customMatchAllowRotation: !!room.customPatternAllowRotation,
       customMatchAllowMirror: !!room.customPatternAllowMirror,
       customPatternName: room.customPatternName || '',
@@ -11672,6 +11683,19 @@ function customPatternOrientationTransformsSrv(room) {
   if (rot) acc.push('rotateCw', 'rotate180', 'rotateCcw');
   if (mir) acc.push('flipH', 'flipV');
   return normalizeCompositeMatchVariants(acc);
+}
+
+function resolveCustomPatternMaskSrv(room) {
+  const base = new Set(Array.from((room && room.customPattern) || []).filter((p) => /^[0-4]-[0-4]$/.test(p)));
+  if (!readOrientationBoolSrv(room && room.customPatternReverse)) return Array.from(base).sort();
+  const out = [];
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col < 5; col++) {
+      const pos = `${row}-${col}`;
+      if (!base.has(pos)) out.push(pos);
+    }
+  }
+  return out;
 }
 
 function patternCompositeForClient(room) {
@@ -11980,7 +12004,15 @@ function validateBingoForPattern(card, room) {
   }
 
   if (pattern === 'custom' && room?.customPattern && room.customPattern.size > 0) {
-    const baseSorted = Array.from(room.customPattern).sort();
+    const baseSorted = resolveCustomPatternMaskSrv(room);
+    if (baseSorted.length === 0) {
+      return {
+        valid: false,
+        reason: 'Custom pattern is empty after applying Reverse.',
+        type: null,
+        customWinningMask: null,
+      };
+    }
     const transforms = customPatternOrientationTransformsSrv(room);
     const variants = expandCompositeShapeVariants(baseSorted, transforms);
     for (const mask of variants) {
@@ -12192,7 +12224,7 @@ function getWinningPatternPositions(card, room, validationResult) {
     return validationResult.customWinningMask;
   }
   if (pattern === 'custom' && room?.customPattern && room.customPattern.size > 0) {
-    return Array.from(room.customPattern);
+    return resolveCustomPatternMaskSrv(room);
   }
 
   if (pattern === 'line' && Array.isArray(validationResult?.lineWinningPositions) && validationResult.lineWinningPositions.length > 0) {

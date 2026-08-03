@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCcw, Save, Trash2 } from 'lucide-react';
-import { saveCustomPattern, validatePatternPositions } from '../patternDefinitions';
+import { Save, Trash2 } from 'lucide-react';
+import { resolveCustomPatternMask, saveCustomPattern, validatePatternPositions } from '../patternDefinitions';
 import HostSubmodalPortal from './HostSubmodalPortal';
 import './CustomPatternModal.css';
 
 export interface CustomPatternSavePayload {
   name: string;
   positions: string[];
+  matchReverse?: boolean;
   matchAllowRotation?: boolean;
   matchAllowMirror?: boolean;
 }
@@ -26,6 +27,7 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
 }) => {
   const [patternName, setPatternName] = useState('');
   const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
+  const [matchReverse, setMatchReverse] = useState(false);
   const [matchAllowRotation, setMatchAllowRotation] = useState(false);
   const [matchAllowMirror, setMatchAllowMirror] = useState(false);
   const [isValid, setIsValid] = useState(false);
@@ -35,11 +37,13 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
       if (initialPattern) {
         setPatternName(initialPattern.name);
         setSelectedPositions(initialPattern.positions);
+        setMatchReverse(initialPattern.matchReverse === true);
         setMatchAllowRotation(initialPattern.matchAllowRotation === true);
         setMatchAllowMirror(initialPattern.matchAllowMirror === true);
       } else {
         setPatternName('');
         setSelectedPositions([]);
+        setMatchReverse(false);
         setMatchAllowRotation(false);
         setMatchAllowMirror(false);
       }
@@ -47,8 +51,14 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
   }, [isOpen, initialPattern]);
 
   useEffect(() => {
-    setIsValid(patternName.trim().length > 0 && selectedPositions.length > 0 && validatePatternPositions(selectedPositions));
-  }, [patternName, selectedPositions]);
+    const effectivePositions = resolveCustomPatternMask(selectedPositions, matchReverse);
+    setIsValid(
+      patternName.trim().length > 0 &&
+        selectedPositions.length > 0 &&
+        effectivePositions.length > 0 &&
+        validatePatternPositions(selectedPositions),
+    );
+  }, [patternName, selectedPositions, matchReverse]);
 
   const togglePosition = (row: number, col: number) => {
     const position = `${row}-${col}`;
@@ -62,6 +72,7 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
       onSave({
         name: patternName.trim(),
         positions: selectedPositions,
+        ...(matchReverse ? { matchReverse: true as const } : {}),
         ...(matchAllowRotation ? { matchAllowRotation: true as const } : {}),
         ...(matchAllowMirror ? { matchAllowMirror: true as const } : {}),
       });
@@ -73,18 +84,10 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
     setSelectedPositions([]);
   };
 
-  const handleReverse = () => {
-    const selected = new Set(selectedPositions);
-    setSelectedPositions(
-      Array.from({ length: 25 }, (_, index) => `${Math.floor(index / 5)}-${index % 5}`).filter(
-        (position) => !selected.has(position),
-      ),
-    );
-  };
-
   if (!isOpen) return null;
 
   const modalTitle = initialPattern ? 'Edit custom pattern' : 'Create custom pattern';
+  const displayedPositions = resolveCustomPatternMask(selectedPositions, matchReverse);
 
   return (
     <HostSubmodalPortal
@@ -113,10 +116,6 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
           <div className="host-custom-pattern__grid-header">
             <span className="host-custom-pattern__field-label">Select pattern squares</span>
             <div className="host-custom-pattern__grid-actions">
-              <button type="button" className="btn-secondary host-btn--sm" onClick={handleReverse}>
-                <RefreshCcw className="w-3.5 h-3.5" aria-hidden />
-                Reverse
-              </button>
               <button type="button" className="btn-danger-outline host-btn--sm" onClick={handleClear}>
                 <Trash2 className="w-3.5 h-3.5" aria-hidden />
                 Clear grid
@@ -125,6 +124,17 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
           </div>
 
           <div className="host-custom-pattern__variants">
+            <label className="host-check-row">
+              <input
+                type="checkbox"
+                className="host-control-checkbox"
+                checked={matchReverse}
+                onChange={(e) => setMatchReverse(e.target.checked)}
+              />
+              <span>
+                <strong>Reverse</strong> (use the unpainted squares)
+              </span>
+            </label>
             <label className="host-check-row">
               <input
                 type="checkbox"
@@ -154,7 +164,7 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
               const row = Math.floor(index / 5);
               const col = index % 5;
               const position = `${row}-${col}`;
-              const isSelected = selectedPositions.includes(position);
+              const isSelected = displayedPositions.includes(position);
 
               return (
                 <button
@@ -170,7 +180,7 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
             })}
           </div>
 
-          <p className="host-custom-pattern__count">{selectedPositions.length} squares selected</p>
+          <p className="host-custom-pattern__count">{displayedPositions.length} squares in winning pattern</p>
         </div>
 
         <div className="host-footer-actions">

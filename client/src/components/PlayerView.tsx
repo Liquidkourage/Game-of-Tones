@@ -75,6 +75,7 @@ interface GameState {
   /** When pattern === 'line': distinct complete lines required (1–12). */
   linesRequired?: number;
   /** Custom pattern orientation (server / host). */
+  customMatchReverse?: boolean;
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
 }
@@ -764,8 +765,8 @@ const PlayerView: React.FC = () => {
         data?.pattern === 'line' && data?.linesRequired != null ? normalizeLinesRequired(data.linesRequired) : undefined;
       const cre =
         data?.pattern === 'custom'
-          ? { rot: !!data.customMatchAllowRotation, mir: !!data.customMatchAllowMirror }
-          : { rot: false, mir: false };
+          ? { rev: !!data.customMatchReverse, rot: !!data.customMatchAllowRotation, mir: !!data.customMatchAllowMirror }
+          : { rev: false, rot: false, mir: false };
       setGameState((prev) => ({
         ...prev,
         isPlaying: true,
@@ -782,10 +783,12 @@ const PlayerView: React.FC = () => {
         ...(lr !== undefined ? { linesRequired: lr } : {}),
         ...(data?.pattern === 'custom'
           ? {
+              customMatchReverse: cre.rev,
               customMatchAllowRotation: cre.rot,
               customMatchAllowMirror: cre.mir,
             }
           : {
+              customMatchReverse: false,
               customMatchAllowRotation: false,
               customMatchAllowMirror: false,
             }),
@@ -881,10 +884,12 @@ const PlayerView: React.FC = () => {
               ...(lr !== undefined ? { linesRequired: lr } : {}),
               ...(effectivePat === 'custom'
                 ? {
+                    customMatchReverse: !!payload.customMatchReverse,
                     customMatchAllowRotation: !!payload.customMatchAllowRotation,
                     customMatchAllowMirror: !!payload.customMatchAllowMirror,
                   }
                 : {
+                    customMatchReverse: false,
                     customMatchAllowRotation: false,
                     customMatchAllowMirror: false,
                   }),
@@ -1069,10 +1074,12 @@ const PlayerView: React.FC = () => {
           ...(lr !== undefined ? { linesRequired: lr } : {}),
           ...(nextPat === 'custom'
             ? {
+                customMatchReverse: !!data.customMatchReverse,
                 customMatchAllowRotation: !!data.customMatchAllowRotation,
                 customMatchAllowMirror: !!data.customMatchAllowMirror,
               }
             : {
+                customMatchReverse: false,
                 customMatchAllowRotation: false,
                 customMatchAllowMirror: false,
               }),
@@ -1938,6 +1945,7 @@ const PlayerView: React.FC = () => {
     gameState.customPattern,
     gameState.patternComposite,
     gameState.linesRequired,
+    gameState.customMatchReverse,
     gameState.customMatchAllowRotation,
     gameState.customMatchAllowMirror,
   ]);
@@ -2034,9 +2042,10 @@ const PlayerView: React.FC = () => {
       return countCompletedLinesVisual(card) >= need;
     }
 
-    // Custom pattern — optional rotations / mirrors when matching
+    // Custom pattern — optional reverse / rotations / mirrors when matching
     if (pattern === 'custom' && gameState.customPattern?.length) {
       return evaluateCustomPatternVisual(card, gameState.customPattern, {
+        matchReverse: gameState.customMatchReverse,
         matchAllowRotation: gameState.customMatchAllowRotation,
         matchAllowMirror: gameState.customMatchAllowMirror,
       });
@@ -2143,9 +2152,10 @@ const PlayerView: React.FC = () => {
       return countCompletedLinesStrict(card, playedSongIds) >= need;
     }
 
-    // Custom pattern with optional rotations / mirrors
+    // Custom pattern with optional reverse / rotations / mirrors
     if (pattern === 'custom' && gameState.customPattern?.length) {
       return evaluateCustomPatternStrict(card, gameState.customPattern, playedSongIds, {
+        matchReverse: gameState.customMatchReverse,
         matchAllowRotation: gameState.customMatchAllowRotation,
         matchAllowMirror: gameState.customMatchAllowMirror,
       });
@@ -2171,6 +2181,7 @@ const PlayerView: React.FC = () => {
 
     if (pattern === 'custom' && gameState.customPattern?.length) {
       return customMaskHighlightPositions(gameState.customPattern, {
+        matchReverse: gameState.customMatchReverse,
         matchAllowRotation: gameState.customMatchAllowRotation,
         matchAllowMirror: gameState.customMatchAllowMirror,
       }).includes(position);

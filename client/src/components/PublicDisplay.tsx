@@ -57,6 +57,7 @@ import {
   LINE_PATTERN_MAX_LINES,
   expandMaskOrientations,
   hostOrientationTransforms,
+  resolveCustomPatternMask,
   clauseHighlightPositions,
   describeCompositeClauseBrief,
   describeCompositeClauseAudience,
@@ -1597,6 +1598,7 @@ const PublicDisplay: React.FC = () => {
   const [revealToast, setRevealToast] = useState<string | null>(null);
   const [customMask, setCustomMask] = useState<Set<string>>(new Set());
   const [customPatternName, setCustomPatternName] = useState('');
+  const [customMatchReverse, setCustomMatchReverse] = useState(false);
   const [customMatchAllowRotation, setCustomMatchAllowRotation] = useState(false);
   const [customMatchAllowMirror, setCustomMatchAllowMirror] = useState(false);
   const [linesRequired, setLinesRequired] = useState(1);
@@ -1607,13 +1609,13 @@ const PublicDisplay: React.FC = () => {
 
   const customPatternDemoFrames = useMemo(() => {
     if (pattern !== 'custom' || !customMask || customMask.size === 0) return [];
-    const base = Array.from(customMask).sort();
+    const base = resolveCustomPatternMask(Array.from(customMask), customMatchReverse);
     const transforms = hostOrientationTransforms({
       matchAllowRotation: customMatchAllowRotation,
       matchAllowMirror: customMatchAllowMirror,
     });
     return expandMaskOrientations(base, transforms);
-  }, [pattern, customMask, customMatchAllowRotation, customMatchAllowMirror]);
+  }, [pattern, customMask, customMatchReverse, customMatchAllowRotation, customMatchAllowMirror]);
 
   /** Combined-pattern projector demos — line/full clauses expand into concrete examples; dedupe shared shapes. */
   const compositeDemoSequences = useMemo(() => {
@@ -2051,6 +2053,7 @@ const PublicDisplay: React.FC = () => {
               setLinesRequired(normalizeLinesRequired(payload.linesRequired));
             }
             if (payload.pattern === 'custom') {
+              setCustomMatchReverse(!!payload.customMatchReverse);
               setCustomMatchAllowRotation(!!payload.customMatchAllowRotation);
               setCustomMatchAllowMirror(!!payload.customMatchAllowMirror);
               if (typeof payload.customPatternName === 'string') {
@@ -2058,6 +2061,7 @@ const PublicDisplay: React.FC = () => {
               }
             }
             if (payload.pattern !== 'custom') {
+              setCustomMatchReverse(false);
               setCustomMatchAllowRotation(false);
               setCustomMatchAllowMirror(false);
               setCustomPatternName('');
@@ -2543,6 +2547,7 @@ const PublicDisplay: React.FC = () => {
             setLinesRequired(normalizeLinesRequired(data.linesRequired));
           }
           if (p === 'custom') {
+            setCustomMatchReverse(!!data.customMatchReverse);
             setCustomMatchAllowRotation(!!data.customMatchAllowRotation);
             setCustomMatchAllowMirror(!!data.customMatchAllowMirror);
             if (typeof data.customPatternName === 'string') {
@@ -2550,6 +2555,7 @@ const PublicDisplay: React.FC = () => {
             }
           }
           if (p && p !== 'custom') {
+            setCustomMatchReverse(false);
             setCustomMatchAllowRotation(false);
             setCustomMatchAllowMirror(false);
             setCustomPatternName('');
@@ -2822,12 +2828,14 @@ const PublicDisplay: React.FC = () => {
             setPatternComposite(null);
           }
           if (data.pattern === 'custom') {
+            setCustomMatchReverse(!!data.customMatchReverse);
             setCustomMatchAllowRotation(!!data.customMatchAllowRotation);
             setCustomMatchAllowMirror(!!data.customMatchAllowMirror);
             if (typeof data.customPatternName === 'string') {
               setCustomPatternName(data.customPatternName.trim().slice(0, 80));
             }
           } else {
+            setCustomMatchReverse(false);
             setCustomMatchAllowRotation(false);
             setCustomMatchAllowMirror(false);
             setCustomPatternName('');
@@ -4263,6 +4271,7 @@ const PublicDisplay: React.FC = () => {
         return customPatternDemoFrames[idx].includes(`${row}-${col}`);
       }
       const hi = customMaskHighlightPositions(Array.from(customMask), {
+        matchReverse: customMatchReverse,
         matchAllowRotation: customMatchAllowRotation,
         matchAllowMirror: customMatchAllowMirror,
       });
@@ -4328,7 +4337,7 @@ const PublicDisplay: React.FC = () => {
 
   useEffect(() => {
     setCustomPatternDemoIndex(0);
-  }, [pattern, customMask, customMatchAllowRotation, customMatchAllowMirror]);
+  }, [pattern, customMask, customMatchReverse, customMatchAllowRotation, customMatchAllowMirror]);
 
   useEffect(() => {
     if (customDemoIntervalRef.current) {

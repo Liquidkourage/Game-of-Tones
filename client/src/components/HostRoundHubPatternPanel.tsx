@@ -26,10 +26,12 @@ export interface HostRoundHubPatternPanelProps {
   onSelectSavedCustom: (p: SavedCustomPattern) => void;
   onNewCustomPattern: () => void;
   customMask: string[];
+  customMatchReverse: boolean;
   customMatchAllowRotation: boolean;
   customMatchAllowMirror: boolean;
   onCustomMatchRotationChange: (v: boolean) => void;
   onCustomMatchMirrorChange: (v: boolean) => void;
+  onCustomMatchReverseChange: (v: boolean) => void;
   getPatternDisplayName: (p: BingoPattern) => string;
 }
 
@@ -48,10 +50,12 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
   onSelectSavedCustom,
   onNewCustomPattern,
   customMask,
+  customMatchReverse,
   customMatchAllowRotation,
   customMatchAllowMirror,
   onCustomMatchRotationChange,
   onCustomMatchMirrorChange,
+  onCustomMatchReverseChange,
   getPatternDisplayName,
 }) => (
   <div className="host-round-hub-pattern">
@@ -155,6 +159,14 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
 
     {pattern === 'custom' && customMask.length > 0 ? (
       <div className="host-round-hub-pattern__custom-rules">
+        <label>
+          <input
+            type="checkbox"
+            checked={customMatchReverse}
+            onChange={(e) => onCustomMatchReverseChange(e.target.checked)}
+          />
+          Reverse
+        </label>
         <label>
           <input
             type="checkbox"

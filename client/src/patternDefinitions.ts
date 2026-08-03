@@ -75,6 +75,8 @@ export interface SavedCustomPattern {
   id: string;
   name: string;
   positions: string[];
+  /** When set, the logical inverse of the painted shape is the winning mask. */
+  matchReverse?: boolean;
   /** When set, any 90° rotation of the painted shape counts as a win (same as combined-pattern masks). */
   matchAllowRotation?: boolean;
   /** When set, horizontal and/or vertical mirror of the painted shape counts as a win. */
@@ -163,6 +165,16 @@ export function isCoverAllWinPattern(pattern: BingoPattern): boolean {
 
 /** All 25 cell keys for a standard 5×5 card (same set as `full_card`). */
 export const STANDARD_BINGO_POSITIONS: readonly string[] = BINGO_PATTERNS.full_card.positions;
+
+/** Resolve a custom pattern's non-destructive Reverse option against its stored base mask. */
+export function resolveCustomPatternMask(
+  positions: readonly string[],
+  matchReverse?: boolean,
+): string[] {
+  const valid = new Set(positions.filter((pos) => POS_RE.test(pos)));
+  if (!matchReverse) return Array.from(valid).sort();
+  return STANDARD_BINGO_POSITIONS.filter((pos) => !valid.has(pos));
+}
 
 /**
  * True only if the card has exactly 25 squares, unique `row-col` keys (0–4), covering the full grid.
@@ -291,11 +303,13 @@ export function unionMaskVariantsPositions(
 /** Highlight cells for a custom saved pattern including optional orientation allowances. */
 export function customMaskHighlightPositions(
   positions: readonly string[] | undefined,
-  opts?: { matchAllowRotation?: boolean; matchAllowMirror?: boolean },
+  opts?: { matchReverse?: boolean; matchAllowRotation?: boolean; matchAllowMirror?: boolean },
 ): string[] {
-  if (!positions?.length) return [];
+  if (!positions) return [];
+  const effective = resolveCustomPatternMask(positions, opts?.matchReverse);
+  if (!effective.length) return [];
   const t = hostOrientationTransforms(opts || {});
-  return unionMaskVariantsPositions(positions, t);
+  return unionMaskVariantsPositions(effective, t);
 }
 
 type CardSqLite = { position: string; marked?: boolean; songId?: string; isFreeSpace?: boolean };
@@ -322,11 +336,13 @@ function everyStrict(
 export function evaluateCustomPatternVisual(
   card: { squares: CardSqLite[] } | null | undefined,
   basePositions: readonly string[] | null | undefined,
-  opts?: { matchAllowRotation?: boolean; matchAllowMirror?: boolean },
+  opts?: { matchReverse?: boolean; matchAllowRotation?: boolean; matchAllowMirror?: boolean },
 ): boolean {
-  if (!card?.squares?.length || !basePositions?.length) return false;
+  if (!card?.squares?.length || !basePositions) return false;
+  const effective = resolveCustomPatternMask(basePositions, opts?.matchReverse);
+  if (!effective.length) return false;
   const transforms = hostOrientationTransforms(opts || {});
-  const variants = expandMaskOrientations(basePositions, transforms);
+  const variants = expandMaskOrientations(effective, transforms);
   return variants.some((m) => everyMarked(card, m));
 }
 
@@ -335,16 +351,18 @@ export function evaluateCustomPatternStrict(
   card: { squares: CardSqLite[] } | null | undefined,
   basePositions: readonly string[] | null | undefined,
   playedSongIds: readonly string[],
-  opts?: { matchAllowRotation?: boolean; matchAllowMirror?: boolean },
+  opts?: { matchReverse?: boolean; matchAllowRotation?: boolean; matchAllowMirror?: boolean },
 ): boolean {
-  if (!card?.squares?.length || !basePositions?.length) return false;
+  if (!card?.squares?.length || !basePositions) return false;
+  const effective = resolveCustomPatternMask(basePositions, opts?.matchReverse);
+  if (!effective.length) return false;
   const cur = playedSongIds;
   const isValid = (sq: CardSqLite) => {
     const free = !!(sq.isFreeSpace || sq.songId === '__FREE_SPACE__');
     return !!(sq.marked && (free || cur.includes(sq.songId || '')));
   };
   const transforms = hostOrientationTransforms(opts || {});
-  const variants = expandMaskOrientations(basePositions, transforms);
+  const variants = expandMaskOrientations(effective, transforms);
   return variants.some((m) => everyStrict(card, m, isValid));
 }
 
@@ -774,6 +792,7 @@ export function compositeLegitProgressPct(
 export type HostPatternProgressOpts = {
   linesRequired?: number;
   customMask?: readonly string[];
+  customMatchReverse?: boolean;
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
   patternComposite?: PatternCompositeSpec | null;
@@ -858,11 +877,12 @@ export function hostPatternLegitProgress(
   }
 
   if (canonical === 'custom' && opts.customMask?.length) {
+    const effective = resolveCustomPatternMask(opts.customMask, opts.customMatchReverse);
     const transforms = hostOrientationTransforms({
       matchAllowRotation: opts.customMatchAllowRotation,
       matchAllowMirror: opts.customMatchAllowMirror,
     });
-    const { hit, total, pct } = maskLegitRatioBest(card, opts.customMask, transforms, legit);
+    const { hit, total, pct } = maskLegitRatioBest(card, effective, transforms, legit);
     return { hit, total, pct, winComplete: pct >= 100 };
   }
 

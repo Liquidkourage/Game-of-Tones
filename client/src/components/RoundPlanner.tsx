@@ -70,6 +70,7 @@ export interface RoundPlannerRound {
   customPatternMask?: string[];
   patternComposite?: PatternCompositeSpec;
   freeSpaceEnabled?: boolean;
+  customMatchReverse?: boolean;
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
   linesRequired?: number;

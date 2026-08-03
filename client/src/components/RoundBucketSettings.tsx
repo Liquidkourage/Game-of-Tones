@@ -18,6 +18,7 @@ export interface RoundBucketSettingsRound {
   customPatternMask?: string[];
   linesRequired?: number;
   freeSpaceEnabled?: boolean;
+  customMatchReverse?: boolean;
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
   savedMixSnapshot?: { songs: { length: number }; mixGeometry: string; savedAt: number };
@@ -31,6 +32,7 @@ export interface RoundBucketBingoPatch {
   patternComposite?: import('../patternDefinitions').PatternCompositeSpec;
   freeSpaceEnabled?: boolean;
   linesRequired?: number;
+  customMatchReverse?: boolean;
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
   prize?: string;
@@ -119,7 +121,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
       ...(v !== 'custom' ? { customPatternMask: undefined } : {}),
       ...(v !== 'composite' ? { patternComposite: undefined } : {}),
       ...(v !== 'custom'
-        ? { customMatchAllowRotation: undefined, customMatchAllowMirror: undefined }
+        ? { customMatchReverse: undefined, customMatchAllowRotation: undefined, customMatchAllowMirror: undefined }
         : {}),
     });
     if (v === 'composite') {
@@ -258,6 +260,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
                   onUpdateBingo(roundIndex, {
                     bingoPattern: 'custom',
                     customPatternMask: [...sp.positions],
+                    customMatchReverse: sp.matchReverse === true,
                     customMatchAllowRotation: sp.matchAllowRotation === true,
                     customMatchAllowMirror: sp.matchAllowMirror === true,
                   });
@@ -285,6 +288,21 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
               New custom
             </button>
           ) : null}
+          <label className="round-bucket-settings__field round-bucket-settings__field--check">
+            <input
+              type="checkbox"
+              className="host-control-checkbox"
+              checked={round.customMatchReverse === true}
+              onChange={(e) =>
+                onUpdateBingo(roundIndex, {
+                  bingoPattern: 'custom',
+                  customPatternMask: round.customPatternMask,
+                  customMatchReverse: e.target.checked,
+                })
+              }
+            />
+            <span className="round-bucket-settings__label">Reverse</span>
+          </label>
           <label className="round-bucket-settings__field round-bucket-settings__field--check">
             <input
               type="checkbox"
