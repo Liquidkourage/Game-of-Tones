@@ -106,11 +106,14 @@ import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
 import { youtubeTrackDisplayFields, youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import {
-  buildCombinedPreShowPdfBlob,
   buildPrintableBingoPdfBlob,
   type PrintableCard,
   type PrintablePdfSection,
 } from '../utils/printableBingoPdf';
+import {
+  buildOfflineShowPackPdfBlob,
+  type OfflineShowPackRound,
+} from '../utils/offlineShowPackPdf';
 import { roundPatternLabelForPrint, roundPrintablePdfSubtitle, printablePlaylistLabelsFromNames } from '../utils/roundPrintLabels';
 import { buildRoundCallSheetPdfBlob } from '../utils/printRoundCallSheetPdf';
 import {
@@ -5472,8 +5475,8 @@ const HostView: React.FC = () => {
     [requestPrintablePdfDownload, freeSpaceEnabled, roundPrintMetaFor],
   );
 
-  /** One PDF: host call lists for all saved rounds, then printable bingo cards. */
-  const handlePrintAllPreShowPdf = useCallback(() => {
+  /** One PDF for zero-Wi-Fi play: guide, cues, audio checklist, call sheets, and cards. */
+  const handleSaveOfflineShowPack = useCallback(() => {
     if (!socket || !roomId) {
       window.alert('Connect to the room first.');
       return;
@@ -5482,7 +5485,7 @@ const HostView: React.FC = () => {
       eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled),
     );
     if (saved.length === 0) {
-      window.alert('No saved rounds yet. Use Save round on each bucket you want in the export.');
+      window.alert('No saved rounds yet. Use Save round on each bucket you want in the offline pack.');
       return;
     }
 
@@ -5496,6 +5499,7 @@ const HostView: React.FC = () => {
             roundName: round.name,
             roomLabel: `Room ${roomId}`,
             patternLabel: roundPatternLabelForPrint(meta),
+            prize: round.prize,
             tracks: round.savedMixSnapshot!.songs.map((s) => ({
               name: s.name,
               artist: s.artist,
@@ -5531,18 +5535,47 @@ const HostView: React.FC = () => {
             },
           });
         }
-        const blob = await buildCombinedPreShowPdfBlob(callSections, cardSections);
+        const packRounds: OfflineShowPackRound[] = saved.map((round) => {
+          const playlistIds = playlistIdsForRoundExport(round);
+          const playlists = playlistIds.map((id) => {
+            const currentIndex = round.playlistIds.indexOf(id);
+            return {
+              id,
+              name: currentIndex >= 0 ? round.playlistNames[currentIndex] || id : id,
+            };
+          });
+          return {
+            roundName: round.name,
+            patternLabel: roundPatternLabelForPrint(roundPrintMetaFor(round)),
+            prize: round.prize,
+            playlists,
+            tracks: round.savedMixSnapshot!.songs.map((song) => ({
+              id: song.id,
+              name: song.name,
+              artist: song.artist,
+              youtubeMusic: song.youtubeMusic,
+              appleMusic: song.appleMusic,
+            })),
+          };
+        });
+        const blob = await buildOfflineShowPackPdfBlob({
+          roomLabel: `Room ${roomId}`,
+          rounds: packRounds,
+          callSections,
+          cardSections,
+        });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `tempo-pre-show-all-rounds-${roomId}-${Date.now()}.pdf`;
+        const date = new Date().toISOString().slice(0, 10);
+        a.download = `tempo-offline-pack-${roomId}-${date}.pdf`;
         document.body.appendChild(a);
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
       } catch (e) {
         console.error(e);
-        window.alert(e instanceof Error ? e.message : 'Could not build pre-show PDF.');
+        window.alert(e instanceof Error ? e.message : 'Could not build offline show pack.');
       } finally {
         setPrintablePdfLoading(false);
       }
@@ -5576,6 +5609,7 @@ const HostView: React.FC = () => {
           roundName: round.name,
           roomLabel: `Room ${roomId}`,
           patternLabel: roundPatternLabelForPrint(meta),
+          prize: round.prize,
           tracks: songs.map((s) => ({ name: s.name, artist: s.artist })),
         });
         const safeSlug = (round.name || 'round').replace(/[^\w\-]+/g, '_').slice(0, 48);
@@ -10324,7 +10358,7 @@ const HostView: React.FC = () => {
         saveRoundBusy={saveRoundBusy}
         snapshotMeetsSave={(r) => eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled)}
         onPrintPdf={(idx) => handleDownloadRoundPrintablePdf(eventRoundsRef.current[idx])}
-        onPrintAllPreShow={handlePrintAllPreShowPdf}
+        onPrintAllPreShow={handleSaveOfflineShowPack}
         onPreviewPrint={handlePreviewPrintPdf}
         savedRoundCount={eventRounds.filter((r) =>
           eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled),
@@ -10368,7 +10402,7 @@ const HostView: React.FC = () => {
       handleUpdateRoundBingoFields,
       saveRoundBusy,
       handleDownloadRoundPrintablePdf,
-      handlePrintAllPreShowPdf,
+      handleSaveOfflineShowPack,
       handlePreviewPrintPdf,
       handleDownloadRoundCallSheetPdf,
       openCompositeForRound,

@@ -15,6 +15,8 @@ export type RoundCallSheetPdfOpts = {
   roomLabel: string;
   /** Winning pattern for this saved round (shown under the round name). */
   patternLabel?: string;
+  /** Optional prize for the round (shown beside the winning pattern). */
+  prize?: string;
   tracks: CallSheetTrack[];
 };
 
@@ -111,6 +113,7 @@ function drawRoundHeading(
   roundName: string,
   roomLabel: string,
   patternLabel?: string,
+  prize?: string,
 ) {
   state.doc.setFont('helvetica', 'bold');
   state.doc.setFontSize(ROUND_PT);
@@ -121,6 +124,7 @@ function drawRoundHeading(
 
   const subParts = [roomLabel];
   if (patternLabel?.trim()) subParts.push(`Pattern: ${patternLabel.trim()}`);
+  if (prize?.trim()) subParts.push(`Prize: ${prize.trim()}`);
   const subLines = state.doc.splitTextToSize(sanitizePdfText(subParts.join(' · ')), state.maxW);
   drawWrapped(state, subLines, 'helvetica', 'normal', SUB_PT, [72, 72, 76]);
   state.y += 6;
@@ -157,7 +161,7 @@ export function appendMultiRoundCallSheetsToDoc(
     } else {
       state.y += 4;
     }
-    drawRoundHeading(state, opts.roundName, opts.roomLabel, opts.patternLabel);
+    drawRoundHeading(state, opts.roundName, opts.roomLabel, opts.patternLabel, opts.prize);
     drawTrackList(state, opts.tracks);
     if (i < sections.length - 1) {
       state.y += 8;
@@ -171,9 +175,10 @@ export function appendMultiRoundCallSheetsToDoc(
 export function buildRoundCallSheetPdfBlob(opts: RoundCallSheetPdfOpts): Blob {
   const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
   const state = createCallSheetDocState(doc);
-  const titleSub = opts.patternLabel?.trim()
-    ? `${opts.roundName} · ${opts.roomLabel} · Pattern: ${opts.patternLabel.trim()}`
-    : `${opts.roundName} · ${opts.roomLabel}`;
+  const titleParts = [opts.roundName, opts.roomLabel];
+  if (opts.patternLabel?.trim()) titleParts.push(`Pattern: ${opts.patternLabel.trim()}`);
+  if (opts.prize?.trim()) titleParts.push(`Prize: ${opts.prize.trim()}`);
+  const titleSub = titleParts.join(' · ');
   drawDocumentTitle(state, 'TEMPO — Host call sheet', titleSub);
   drawPlaybackHint(state);
   drawTrackList(state, opts.tracks);

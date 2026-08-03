@@ -99,7 +99,7 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   saveRoundBusy?: boolean;
   snapshotMeetsSave: (round: TRound) => boolean;
   onPrintPdf?: (roundIndex: number) => void;
-  /** One PDF: call lists + printable cards for every saved round. */
+  /** One zero-Wi-Fi PDF pack for every saved round. */
   onPrintAllPreShow?: () => void;
   /** Free watermarked 1-card preview (no credit). */
   onPreviewPrint?: () => void;
@@ -622,13 +622,13 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
             disabled={printablePdfLoading || savedRoundCount < 1}
             title={
               savedRoundCount < 1
-                ? 'Save at least one round to export'
-                : 'One PDF: host call lists for each saved round, then printable bingo cards'
+                ? 'Save at least one round to create an offline show pack'
+                : 'One PDF: offline guide, projector cues, audio links, call sheets, and bingo cards'
             }
             onClick={onPrintAllPreShow}
           >
             <Printer className="w-3 h-3" aria-hidden />
-            {printablePdfLoading ? 'Printing…' : `Print all pre-show (${savedRoundCount})`}
+            {printablePdfLoading ? 'Saving offline pack…' : `Save for offline play (${savedRoundCount})`}
           </button>
         ) : null}
       </div>
