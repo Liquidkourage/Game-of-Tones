@@ -1478,7 +1478,8 @@ code {
 }
 
 .bingo-card-display.public-pattern-panel .bingo-card-header {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  flex-shrink: 0;
   flex-direction: column;
   flex-wrap: nowrap;
   align-items: center;
@@ -1487,8 +1488,8 @@ code {
   max-height: none;
   overflow: visible;
   width: 100%;
-  margin-bottom: 4px;
-  padding-bottom: 6px;
+  margin: 0 0 4px;
+  padding: 2px 4px 6px;
   gap: 0.25em;
 }
 
@@ -1631,18 +1632,19 @@ code {
 
 .bingo-card-display.public-pattern-panel .bingo-card-header h2.pattern-title-text {
   font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
-  /* Match reveal-toast readability on the projector */
-  font-size: clamp(1.35rem, 3.4vmin, 2.5rem);
+  /* Slightly tighter so Round + Prize fit without pushing into the viewport edge. */
+  font-size: clamp(1.2rem, 3vmin, 2.2rem);
   font-weight: 800;
   letter-spacing: 0.05em;
-  line-height: 1.15;
+  line-height: 1.2;
   text-align: center;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   width: 100%;
   min-width: 0;
   max-width: 100%;
   margin: 0;
+  padding: 0;
   word-break: break-word;
   overflow-wrap: anywhere;
   text-transform: uppercase;

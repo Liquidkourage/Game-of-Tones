@@ -345,9 +345,33 @@ body {
    so these rules reliably win over any legacy duplicates in index.css. */
 
 .App .public-display { padding-top: 0; height: 100vh; display: flex; flex-direction: column; }
-.App .display-content { height: 100%; min-height: 0; }
+.App .display-content {
+  height: 100%;
+  min-height: 0;
+  /* Keep pattern title / prize below the viewport edge (and absolute TEMPO lockup). */
+  padding: max(14px, env(safe-area-inset-top, 0px)) 12px 12px;
+  box-sizing: border-box;
+}
 .App .bottom-row { height: 100%; min-height: 0; }
 .App .call-col, .App .left-col { height: 100%; min-height: 0; }
+.App .left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+.App .left-col .bingo-card-display.public-pattern-panel {
+  flex: 1 1 auto;
+  height: auto;
+  max-height: 100%;
+  min-height: 0;
+  padding-top: 12px;
+}
+.App .left-col .info-grid {
+  flex: 0 1 auto;
+  max-height: 40vh;
+  min-height: 0;
+}
 
 .App .call-list-display { position: relative; height: 100%; width: 100%; min-width: 0; }
 /* Column guide lines — five equal columns (matches 1×75 carousel and 5×15 layout). */
