@@ -1624,6 +1624,12 @@ code {
   flex: 1;
 }
 
+.bingo-card-display.public-pattern-panel .bingo-card-header {
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2em;
+}
+
 .bingo-card-display.public-pattern-panel .bingo-card-header h2.pattern-title-text {
   font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
   /* Match reveal-toast readability on the projector */
@@ -1635,8 +1641,38 @@ code {
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85);
   flex: 1 1 100%;
   min-width: 0;
+  max-width: 100%;
   word-break: break-word;
+  overflow-wrap: anywhere;
   text-transform: uppercase;
+}
+
+.bingo-card-display.public-pattern-panel .public-round-eyebrow {
+  font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
+  font-size: clamp(0.95rem, 2.2vmin, 1.45rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.72);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.75);
+  max-width: 100%;
+  word-break: break-word;
+}
+
+.bingo-card-display.public-pattern-panel .public-round-prize-line {
+  margin-top: 0.15em;
+  font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
+  font-size: clamp(0.9rem, 2vmin, 1.45rem);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: rgba(245, 208, 97, 0.95);
+  text-align: center;
+  line-height: 1.25;
+  max-width: 100%;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 /* Public display: room / players / songs — scales with panel width (QR unchanged elsewhere). */

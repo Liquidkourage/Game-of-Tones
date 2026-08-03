@@ -61,6 +61,7 @@ import {
   describeCompositeClauseAudience,
   describeCompositePatternAudienceSentence,
   describeLinePatternLabel,
+  getPatternDisplayName,
 } from '../patternDefinitions';
 
 /** Public-facing domain shown on the projector splash ("Go to …"). Display copy only — the QR code still encodes this deployment's real /player/:roomId URL. */
@@ -4154,31 +4155,50 @@ const PublicDisplay: React.FC = () => {
     );
   };
 
-  // Short pattern label for the call-list header (no "Pattern:" prefix — that wraps badly with Round N).
+  /**
+   * Audience pattern label for the call-list header (never prefixed with "Pattern:").
+   * Covers line / shapes / custom name / combined — chips below expand combined clauses.
+   */
   const getPatternShortName = () => {
     switch (pattern) {
+      case 'line':
+        return describeLinePatternLabel(linesRequired);
       case 'full_card':
-        return 'Full Card';
       case 'blackout':
-        return 'Blackout';
+        return 'Full Card';
       case 'four_corners':
         return 'Four Corners';
       case 'x':
         return 'X';
+      case 't':
+        return 'T';
+      case 'l':
+        return 'L';
+      case 'u':
+        return 'U';
+      case 'plus':
+        return 'Plus';
       case 'custom':
         return (customPatternName || '').trim() || 'Custom';
       case 'composite':
         return patternComposite
           ? `Combined (${patternComposite.op.toUpperCase()})`
           : 'Combined';
-      case 'line':
       default:
-        return describeLinePatternLabel(linesRequired);
+        return getPatternDisplayName(pattern) || 'Pattern';
     }
   };
 
-  // Function to get the overall pattern name (legacy "Pattern: …" form for non-header uses)
+  // Legacy "Pattern: …" form for any remaining non-header uses
   const getPatternName = () => `Pattern: ${getPatternShortName()}`;
+
+  const patternHeaderLabel = getPatternShortName();
+  const roundHeaderLabel = (currentRoundName || '').trim();
+  // Short presets / short custom share a line with Round N; combined + long names stack.
+  const inlineRoundWithPattern =
+    !!roundHeaderLabel &&
+    pattern !== 'composite' &&
+    patternHeaderLabel.length <= 18;
 
   const patternLabelForWinnerModal = (p: string) => {
     switch (p) {
@@ -6219,28 +6239,17 @@ const PublicDisplay: React.FC = () => {
               transition={{ duration: 0.6, delay: 0.2 }}
             >
               <div className="bingo-card-header center" style={{ justifyContent: 'center' }}>
+                {roundHeaderLabel && !inlineRoundWithPattern ? (
+                  <div className="public-round-eyebrow">{roundHeaderLabel}</div>
+                ) : null}
                 <h2 className="pattern-title-text">
-                  {currentRoundName
-                    ? `${currentRoundName} - ${getPatternShortName()}`
-                    : getPatternShortName()}
+                  {inlineRoundWithPattern
+                    ? `${roundHeaderLabel} - ${patternHeaderLabel}`
+                    : patternHeaderLabel}
                 </h2>
                 {currentRoundPrize ? (
-                  <div
-                    className="public-round-prize-line"
-                    style={{
-                      marginTop: '0.3em',
-                      fontSize: 'clamp(0.9rem, 2vmin, 1.45rem)',
-                      fontWeight: 800,
-                      letterSpacing: '0.03em',
-                      textTransform: 'uppercase',
-                      color: 'rgba(245, 208, 97, 0.95)',
-                      textAlign: 'center',
-                      lineHeight: 1.25,
-                      maxWidth: '100%',
-                      wordBreak: 'break-word',
-                    }}
-                  >
-                    {currentRoundPrize}
+                  <div className="public-round-prize-line">
+                    Prize: {currentRoundPrize}
                   </div>
                 ) : null}
                 {pattern === 'composite' && patternComposite && patternComposite.clauses.length > 0 && (
