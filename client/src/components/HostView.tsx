@@ -8839,20 +8839,20 @@ const HostView: React.FC = () => {
     applyRoundPlaylistsToMixSelection,
   ]);
 
-  const handleSaveRoundAtIndex = async (roundIndex: number) => {
+  const handleSaveRoundAtIndex = async (roundIndex: number): Promise<boolean> => {
     if (!socket || !roomId) {
       window.alert('Connect to the room first.');
-      return;
+      return false;
     }
     const round0 = eventRoundsRef.current[roundIndex];
     if (!round0 || !(round0.playlistIds || []).length) {
       window.alert('Assign at least one playlist to this round before saving.');
-      return;
+      return false;
     }
     const savePlaylistCount = (round0.playlistIds || []).length;
     if (!isValidRoundPlaylistCount(savePlaylistCount)) {
       window.alert(roundPlaylistCountError(savePlaylistCount));
-      return;
+      return false;
     }
 
     const mixRows = resolveMixPlaylistRowsForRound(round0);
@@ -8860,7 +8860,7 @@ const HostView: React.FC = () => {
       window.alert(
         'No playlists from this round matched your library. Use Connection to refresh, or re-drag playlists from the library into this bucket.',
       );
-      return;
+      return false;
     }
 
     /** Live show: snapshot to local prep only — never finalize-mix (would replace cards + projector mid-round). */
@@ -8931,15 +8931,15 @@ const HostView: React.FC = () => {
             'No songs could be loaded from this round\'s playlists. Check Spotify / YouTube under Connection, then try Save round again.',
           );
           addLog('Save round: no tracks loaded (live/local path).', 'warn');
-          return;
+          return false;
         }
-        if (!blockIfFivePlaylistsTooShort(listToSend)) return;
+        if (!blockIfFivePlaylistsTooShort(listToSend)) return false;
         pool = listToSend.map(cloneSongForSnapshot);
       } else {
         const ok = await finalizeMix({ playlists: mixRows });
         if (!ok) {
           addLog('Save round: finalize did not complete.', 'warn');
-          return;
+          return false;
         }
 
         const saveMixKey = selectionPlaylistKey(mixRows);
@@ -8950,13 +8950,13 @@ const HostView: React.FC = () => {
             'The server did not send the finalized playback order in time. Wait until you see “Finalized order received” in the activity log, or tap Finalize mix again, then Save round. Saved rounds must match projector/host playback order, not the longer prep list.',
           );
           addLog('Save round: no finalized playback order after replay request.', 'warn');
-          return;
+          return false;
         }
         pool = fo.map(cloneSongForSnapshot);
       }
 
       const r = eventRoundsRef.current[roundIndex];
-      if (!r) return;
+      if (!r) return false;
 
       const roundScoped = songsForRoundFromFinalizedPool(r, pool).map(cloneSongForSnapshot);
       const { songs: filtered, mode: poolMode } = effectiveBingoPoolSongsForMix(
@@ -8982,7 +8982,7 @@ const HostView: React.FC = () => {
         window.alert(
           `Only ${filteredSongs.length} of ${need} card-ready tracks loaded for this round. Spotify-listed playlist totals only count once tracks are loaded and deduped.${stalePoolHint}${transientHint} Add playlists or save again after tracks finish loading.`,
         );
-        return;
+        return false;
       }
 
       const snap: SavedRoundMixSnapshot = {
@@ -9021,6 +9021,7 @@ const HostView: React.FC = () => {
         `Round snapshot saved: ${r.name}, ${filteredSongs.length} tracks${isLiveRound ? ' (local only, live room untouched)' : ''}`,
         'info',
       );
+      return true;
     } finally {
       if (isLiveRound) {
         restoreLiveHostMix?.();
@@ -9074,10 +9075,8 @@ const HostView: React.FC = () => {
       for (const idx of eligible) {
         const name = eventRoundsRef.current[idx]?.name || `Round ${idx + 1}`;
         setSaveAllRoundsProgress(`Saving ${name}…`);
-        await handleSaveRoundAtIndex(idx);
-        // Let React commit the snapshot write so eventRoundsRef reflects the save.
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        if (!isSnapshotCurrent(eventRoundsRef.current[idx])) failed.push(name);
+        const saved = await handleSaveRoundAtIndex(idx);
+        if (!saved) failed.push(name);
       }
     } finally {
       setSaveAllRoundsBusy(false);
