@@ -5203,7 +5203,7 @@ const PublicDisplay: React.FC = () => {
                       wordBreak: 'break-word',
                     }}
                   >
-                    {winnerCardModal.prize}
+                    Prize: {winnerCardModal.prize}
                   </div>
                 ) : null}
                 <div
@@ -5528,6 +5528,23 @@ const PublicDisplay: React.FC = () => {
               }}
             >
               Tonight&apos;s board
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(5rem, 1.1fr) minmax(5rem, 1.4fr) minmax(5rem, 1.2fr)',
+                gap: 'clamp(8px, 1.5vmin, 18px)',
+                padding: '0 clamp(12px, 1.6vmin, 18px) clamp(8px, 1.2vmin, 12px)',
+                fontSize: 'clamp(0.75rem, 1.4vmin, 1rem)',
+                fontWeight: 800,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: 'rgba(255,255,255,0.55)',
+              }}
+            >
+              <span>Round</span>
+              <span>Prize</span>
+              <span style={{ textAlign: 'right' }}>Winner</span>
             </div>
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'clamp(8px, 1.2vmin, 14px)' }}>
               {roundWinnersBoard.map((w, idx) => (
@@ -6219,7 +6236,12 @@ const PublicDisplay: React.FC = () => {
                       wordBreak: 'break-word',
                     }}
                   >
-                    {[currentRoundName, currentRoundPrize].filter(Boolean).join(' · ')}
+                    {[
+                      currentRoundName,
+                      currentRoundPrize ? `Prize: ${currentRoundPrize}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </div>
                 )}
                 {pattern === 'composite' && patternComposite && patternComposite.clauses.length > 0 && (
