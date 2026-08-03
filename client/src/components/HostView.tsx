@@ -8155,8 +8155,10 @@ const HostView: React.FC = () => {
         if (!r) return prev;
         let updated: EventRound = { ...r, ...patch };
         if (Object.prototype.hasOwnProperty.call(patch, 'prize')) {
-          const trimmed = typeof patch.prize === 'string' ? patch.prize.replace(/\s+/g, ' ').trim().slice(0, 120) : '';
-          updated = { ...updated, prize: trimmed || undefined };
+          // Don't trim while typing — trailing spaces are needed to enter the next word.
+          const nextPrize =
+            typeof patch.prize === 'string' ? patch.prize.slice(0, 120) : '';
+          updated = { ...updated, prize: nextPrize || undefined };
         }
         if (patch.bingoPattern != null && patch.bingoPattern !== 'custom' && patch.bingoPattern !== 'composite') {
           updated = { ...updated, customPatternMask: undefined, patternComposite: undefined };
