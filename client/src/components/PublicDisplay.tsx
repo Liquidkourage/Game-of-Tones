@@ -4155,30 +4155,31 @@ const PublicDisplay: React.FC = () => {
     );
   };
 
-  // Function to get the overall pattern name
-  const getPatternName = () => {
+  // Short pattern label for the call-list header (no "Pattern:" prefix — that wraps badly with Round N).
+  const getPatternShortName = () => {
     switch (pattern) {
       case 'full_card':
-        return 'Pattern: Full Card';
+        return 'Full Card';
       case 'blackout':
-        return 'Pattern: Blackout';
+        return 'Blackout';
       case 'four_corners':
-        return 'Pattern: Four Corners';
+        return 'Four Corners';
       case 'x':
-        return 'Pattern: X';
+        return 'X';
       case 'custom':
-        return (customPatternName || '').trim()
-          ? `Pattern: ${(customPatternName || '').trim()}`
-          : 'Pattern: Custom';
+        return (customPatternName || '').trim() || 'Custom';
       case 'composite':
         return patternComposite
-          ? `Pattern: Combined (${patternComposite.op.toUpperCase()})`
-          : 'Pattern: Combined';
+          ? `Combined (${patternComposite.op.toUpperCase()})`
+          : 'Combined';
       case 'line':
       default:
-        return `Pattern: ${describeLinePatternLabel(linesRequired)}`;
+        return describeLinePatternLabel(linesRequired);
     }
   };
+
+  // Function to get the overall pattern name (legacy "Pattern: …" form for non-header uses)
+  const getPatternName = () => `Pattern: ${getPatternShortName()}`;
 
   const patternLabelForWinnerModal = (p: string) => {
     switch (p) {
@@ -6221,8 +6222,8 @@ const PublicDisplay: React.FC = () => {
               <div className="bingo-card-header center" style={{ justifyContent: 'center' }}>
                 <h2 className="pattern-title-text">
                   {currentRoundName
-                    ? `${currentRoundName} - ${getPatternName()}`
-                    : getPatternName()}
+                    ? `${currentRoundName} - ${getPatternShortName()}`
+                    : getPatternShortName()}
                 </h2>
                 {currentRoundPrize ? (
                   <div
