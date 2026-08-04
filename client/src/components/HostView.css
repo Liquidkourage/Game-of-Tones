@@ -737,7 +737,8 @@
   flex-wrap: wrap;
 }
 
-.host-round-hub-event__cards-label input {
+.host-round-hub-event__cards-label input,
+.host-round-hub-event__cards-label select {
   width: 72px;
   padding: 6px 8px;
   border-radius: 8px;

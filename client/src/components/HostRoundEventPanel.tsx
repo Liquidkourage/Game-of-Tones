@@ -31,6 +31,8 @@ export interface HostRoundEventPanelProps {
   statusSummary: { completed: number; active: number; planned: number; unplanned: number };
   printableCardCount: number;
   onPrintableCardCountChange: (n: number) => void;
+  printableCardsPerPage: number;
+  onPrintableCardsPerPageChange: (n: number) => void;
   printablePdfLoading: boolean;
   saveRoundBusy: boolean;
   mixGameActionsBlocked: boolean;
@@ -55,6 +57,8 @@ const HostRoundEventPanel: React.FC<HostRoundEventPanelProps> = ({
   statusSummary,
   printableCardCount,
   onPrintableCardCountChange,
+  printableCardsPerPage,
+  onPrintableCardsPerPageChange,
   printablePdfLoading,
   saveRoundBusy,
   mixGameActionsBlocked,
@@ -155,6 +159,21 @@ const HostRoundEventPanel: React.FC<HostRoundEventPanelProps> = ({
           aria-label="Number of bingo cards per printable PDF export"
         />
         <span>1–200</span>
+      </label>
+      <label className="host-round-hub-event__cards-label">
+        Cards per page
+        <select
+          value={printableCardsPerPage}
+          onChange={(e) => onPrintableCardsPerPageChange(Number(e.target.value))}
+          disabled={printablePdfLoading}
+          aria-label="Number of bingo cards per printed page"
+        >
+          <option value={1}>1</option>
+          <option value={2}>2</option>
+          <option value={4}>4</option>
+          <option value={6}>6</option>
+          <option value={8}>8</option>
+        </select>
       </label>
     </div>
 

@@ -108,6 +108,7 @@ import { cleanSongTitle } from '../utils/songTitleCleaner';
 import { youtubeTrackDisplayFields, youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import {
   buildPrintableBingoPdfBlob,
+  normalizeCardsPerPage,
   type PrintableCard,
   type PrintablePdfSection,
 } from '../utils/printableBingoPdf';
@@ -1433,6 +1434,8 @@ const HostView: React.FC = () => {
   const [mixFinalized, setMixFinalized] = useState(false);
   /** Printable PDF export (physical daubers) — count capped server-side at 200. */
   const [printableCardCount, setPrintableCardCount] = useState(30);
+  /** How many bingo cards to tile on each Letter page (1 / 2 / 4 / 6 / 8). */
+  const [printableCardsPerPage, setPrintableCardsPerPage] = useState(1);
   const [saveRoundBusy, setSaveRoundBusy] = useState(false);
   const [saveAllRoundsBusy, setSaveAllRoundsBusy] = useState(false);
   const [saveAllRoundsProgress, setSaveAllRoundsProgress] = useState<string | null>(null);
@@ -5683,6 +5686,7 @@ const HostView: React.FC = () => {
           previewWatermark: true,
           subtitle: 'Preview — watermarked sample',
           columnLetters: normalizeBingoColumnLetters(bingoColumnLetters) ?? undefined,
+          cardsPerPage: normalizeCardsPerPage(printableCardsPerPage),
         });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -5698,7 +5702,15 @@ const HostView: React.FC = () => {
         setPrintablePdfLoading(false);
       }
     })();
-  }, [socket, roomId, mixFinalized, finalizeMix, fetchPrintableCardsFromServer, bingoColumnLetters]);
+  }, [
+    socket,
+    roomId,
+    mixFinalized,
+    finalizeMix,
+    fetchPrintableCardsFromServer,
+    bingoColumnLetters,
+    printableCardsPerPage,
+  ]);
 
   const requestPrintablePdfDownload = useCallback(
     (opts: {
@@ -5753,6 +5765,7 @@ const HostView: React.FC = () => {
             singlePlaylistTitle: opts.singlePlaylistTitle,
             logoUrl,
             columnLetters: normalizeBingoColumnLetters(bingoColumnLetters) ?? undefined,
+            cardsPerPage: normalizeCardsPerPage(printableCardsPerPage),
           });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
@@ -5776,6 +5789,7 @@ const HostView: React.FC = () => {
       roomId,
       mixFinalized,
       printableCardCount,
+      printableCardsPerPage,
       finalizeMix,
       fetchPrintableCardsFromServer,
       bingoColumnLetters,
@@ -5887,6 +5901,8 @@ const HostView: React.FC = () => {
               roomLabel: meta.roomLabel,
               ...playlistStemPrintLabelsForRound(round),
               logoUrl,
+              columnLetters: normalizeBingoColumnLetters(bingoColumnLetters) ?? undefined,
+              cardsPerPage: normalizeCardsPerPage(printableCardsPerPage),
             },
           });
         }
@@ -5943,8 +5959,10 @@ const HostView: React.FC = () => {
     roomId,
     freeSpaceEnabled,
     printableCardCount,
+    printableCardsPerPage,
     fetchPrintableCardsFromServer,
     roundPrintMetaFor,
+    bingoColumnLetters,
   ]);
 
   const handleDownloadRoundCallSheetPdf = useCallback(
@@ -11000,6 +11018,8 @@ const HostView: React.FC = () => {
         printablePdfLoading={printablePdfLoading}
         printableCardCount={printableCardCount}
         onPrintableCardCountChange={setPrintableCardCount}
+        printableCardsPerPage={printableCardsPerPage}
+        onPrintableCardsPerPageChange={setPrintableCardsPerPage}
         snippetLength={snippetLength}
         onSnippetLengthChange={handleSnippetLengthChange}
         randomStarts={randomStarts}
@@ -11042,6 +11062,7 @@ const HostView: React.FC = () => {
       handleNewCustomPattern,
       printablePdfLoading,
       printableCardCount,
+      printableCardsPerPage,
       snippetLength,
       handleSnippetLengthChange,
       randomStarts,

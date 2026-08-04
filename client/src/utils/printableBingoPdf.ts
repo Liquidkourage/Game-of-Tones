@@ -60,6 +60,31 @@ const PLAYLIST_LINE_FACTOR = 1.1;
 /** Watermark strength for venue logo on the bingo grid (baked in canvas for reliable PDF output). */
 const GRID_LOGO_OPACITY = 0.1;
 
+/** How many bingo cards to tile on one US Letter page. */
+export const CARDS_PER_PAGE_OPTIONS = [1, 2, 4, 6, 8] as const;
+export type CardsPerPage = (typeof CARDS_PER_PAGE_OPTIONS)[number];
+
+export function normalizeCardsPerPage(n: unknown): CardsPerPage {
+  const v = Math.floor(Number(n));
+  if (v === 2 || v === 4 || v === 6 || v === 8) return v;
+  return 1;
+}
+
+function nUpGrid(cardsPerPage: CardsPerPage): { cols: number; rows: number } {
+  switch (cardsPerPage) {
+    case 1:
+      return { cols: 1, rows: 1 };
+    case 2:
+      return { cols: 1, rows: 2 };
+    case 4:
+      return { cols: 2, rows: 2 };
+    case 6:
+      return { cols: 2, rows: 3 };
+    case 8:
+      return { cols: 2, rows: 4 };
+  }
+}
+
 export type PrintablePdfOpts = {
   freeSpace?: boolean;
   /** Legacy single-line subtitle; also shown when roundName omitted. */
@@ -77,6 +102,8 @@ export type PrintablePdfOpts = {
   logoUrl?: string | null;
   /** Diagonal PREVIEW watermark (free sample card). */
   previewWatermark?: boolean;
+  /** Cards tiled per Letter page (1, 2, 4, 6, or 8). Default 1. */
+  cardsPerPage?: CardsPerPage | number;
 };
 
 export type PrintablePdfSection = {
@@ -285,11 +312,18 @@ async function loadLogoPngDataUrlForGrid(
 
 const BINGO_LETTERS = ['B', 'I', 'N', 'G', 'O'] as const;
 
-type PageLayout = {
-  pageW: number;
-  pageH: number;
-  margin: number;
-  marginBottom: number;
+/** Layout for one bingo card inside a page slot (full page or n-up cell). */
+type CardLayout = {
+  originX: number;
+  originY: number;
+  slotW: number;
+  slotH: number;
+  pad: number;
+  titleFontPt: number;
+  metaFontPt: number;
+  bingoFontPt: number;
+  columnLabelPt: number;
+  titleBaseline: number;
   gridTop: number;
   cell: number;
   gridW: number;
@@ -300,26 +334,8 @@ type PageLayout = {
 const COLUMN_LABEL_PT = 7;
 const COLUMN_LABEL_MAX_LINES = 2;
 const COLUMN_LABEL_RESERVE_PT = 22;
-
-function computePageLayout(doc: jsPDF, opts: PrintablePdfOpts): PageLayout {
-  const pageW = doc.internal.pageSize.getWidth();
-  const pageH = doc.internal.pageSize.getHeight();
-  const margin = 40;
-  const marginBottom = 40;
-  const metaFontPt = 10;
-  const titleBaseline = margin + 20;
-  const metaBlockH = headerMetaLines(opts).length * (metaFontPt * 1.35);
-  const bingoBaseline = titleBaseline + metaBlockH + 28;
-  const hasColumnLabels = opts.columnLabels?.length === 5;
-  const columnLabelReserve = hasColumnLabels ? COLUMN_LABEL_RESERVE_PT : 0;
-  const gridTop = bingoBaseline + 16 + columnLabelReserve;
-  const availW = pageW - margin * 2;
-  const availH = pageH - gridTop - marginBottom;
-  const cell = Math.min(availW / 5, availH / 5);
-  const gridW = cell * 5;
-  const gridX = margin + (availW - gridW) / 2;
-  return { pageW, pageH, margin, marginBottom, gridTop, cell, gridW, gridX, bingoBaseline };
-}
+/** Reference content width for a full-page card (Letter − 40pt margins). */
+const FULL_PAGE_CONTENT_W = 532;
 
 function headerMetaLines(opts: PrintablePdfOpts): string[] {
   const lines: string[] = [];
@@ -333,6 +349,55 @@ function headerMetaLines(opts: PrintablePdfOpts): string[] {
     lines.push(opts.roomLabel.trim());
   }
   return lines;
+}
+
+function computeCardLayoutInSlot(
+  originX: number,
+  originY: number,
+  slotW: number,
+  slotH: number,
+  opts: PrintablePdfOpts,
+): CardLayout {
+  const pad = Math.max(3, Math.min(14, Math.min(slotW, slotH) * 0.035));
+  const contentW = Math.max(40, slotW - pad * 2);
+  const wScale = contentW / FULL_PAGE_CONTENT_W;
+
+  const titleFontPt = Math.max(6, Math.min(17, 17 * wScale));
+  const metaFontPt = Math.max(4.5, Math.min(10, 10 * wScale));
+  const bingoFontPt = Math.max(5, Math.min(13, 13 * wScale));
+  const columnLabelPt = Math.max(4, Math.min(COLUMN_LABEL_PT, COLUMN_LABEL_PT * wScale));
+
+  const titleBaseline = originY + pad + titleFontPt;
+  const metaBlockH = headerMetaLines(opts).length * (metaFontPt * 1.35);
+  const bingoBaseline = titleBaseline + metaBlockH + Math.max(6, 28 * wScale);
+  const hasColumnLabels = opts.columnLabels?.length === 5;
+  const columnLabelReserve = hasColumnLabels
+    ? Math.max(8, COLUMN_LABEL_RESERVE_PT * wScale)
+    : 0;
+  const gridTop = bingoBaseline + Math.max(3, 16 * wScale) + columnLabelReserve;
+  const availW = contentW;
+  const availH = originY + slotH - pad - gridTop;
+  const cell = Math.min(availW / 5, Math.max(6, availH) / 5);
+  const gridW = cell * 5;
+  const gridX = originX + pad + (availW - gridW) / 2;
+
+  return {
+    originX,
+    originY,
+    slotW,
+    slotH,
+    pad,
+    titleFontPt,
+    metaFontPt,
+    bingoFontPt,
+    columnLabelPt,
+    titleBaseline,
+    gridTop,
+    cell,
+    gridW,
+    gridX,
+    bingoBaseline,
+  };
 }
 
 function fitColumnLabel(
@@ -356,32 +421,40 @@ function fitColumnLabel(
   return lines;
 }
 
-function drawPageHeader(doc: jsPDF, layout: PageLayout, opts: PrintablePdfOpts): void {
-  const { pageW, bingoBaseline } = layout;
-  const margin = layout.margin;
-  const titleFontPt = 17;
-  const metaFontPt = 10;
-  const titleBaseline = margin + 20;
+function drawCardHeader(doc: jsPDF, layout: CardLayout, opts: PrintablePdfOpts): void {
+  const {
+    originX,
+    slotW,
+    pad,
+    titleFontPt,
+    metaFontPt,
+    bingoFontPt,
+    columnLabelPt,
+    titleBaseline,
+    bingoBaseline,
+    gridX,
+    cell,
+  } = layout;
+  const centerX = originX + slotW / 2;
 
   doc.setTextColor(INK.r, INK.g, INK.b);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(titleFontPt);
-  doc.text('TEMPO', pageW / 2, titleBaseline, { align: 'center' });
+  doc.text('TEMPO', centerX, titleBaseline, { align: 'center' });
 
   const meta = headerMetaLines(opts);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(metaFontPt);
   doc.setTextColor(INK_MUTED.r, INK_MUTED.g, INK_MUTED.b);
-  let y = titleBaseline + 18;
+  let y = titleBaseline + titleFontPt * 1.05;
   for (const line of meta) {
-    doc.text(line, pageW / 2, y, { align: 'center', maxWidth: pageW - margin * 2 });
+    doc.text(line, centerX, y, { align: 'center', maxWidth: slotW - pad * 2 });
     y += metaFontPt * 1.35;
   }
 
   doc.setTextColor(INK.r, INK.g, INK.b);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  const { gridX, cell } = layout;
+  doc.setFontSize(bingoFontPt);
   const letters =
     typeof opts.columnLetters === 'string' && opts.columnLetters.length === 5
       ? opts.columnLetters.toUpperCase().split('')
@@ -393,38 +466,36 @@ function drawPageHeader(doc: jsPDF, layout: PageLayout, opts: PrintablePdfOpts):
 
   const colLabels = opts.columnLabels;
   if (colLabels?.length === 5) {
-    const labelLh = COLUMN_LABEL_PT * 1.12;
-    const textW = Math.max(8, cell - 6);
+    const labelLh = columnLabelPt * 1.12;
+    const textW = Math.max(6, cell - 4);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(COLUMN_LABEL_PT);
+    doc.setFontSize(columnLabelPt);
     doc.setTextColor(INK_MUTED.r, INK_MUTED.g, INK_MUTED.b);
-    let labelY = bingoBaseline + 6;
+    const labelY = bingoBaseline + Math.max(3, 6 * (columnLabelPt / COLUMN_LABEL_PT));
     for (let c = 0; c < 5; c++) {
       const cx = gridX + c * cell + cell / 2;
-      const lines = fitColumnLabel(doc, colLabels[c] || '', textW, COLUMN_LABEL_MAX_LINES, COLUMN_LABEL_PT);
-      let y = labelY + COLUMN_LABEL_PT * 0.85;
+      const lines = fitColumnLabel(doc, colLabels[c] || '', textW, COLUMN_LABEL_MAX_LINES, columnLabelPt);
+      let ly = labelY + columnLabelPt * 0.85;
       for (const line of lines) {
-        doc.text(line, cx, y, { align: 'center' });
-        y += labelLh;
+        doc.text(line, cx, ly, { align: 'center' });
+        ly += labelLh;
       }
     }
   }
 }
 
-function drawBingoCardPage(
+function drawBingoCardInSlot(
   doc: jsPDF,
   card: PrintableCard,
-  layout: PageLayout,
+  layout: CardLayout,
   logoForGrid: { dataUrl: string; drawW: number; drawH: number } | null,
   opts: PrintablePdfOpts,
 ): void {
-  const { pageW, pageH, gridTop, cell, gridW, gridX } = layout;
+  const { originX, originY, slotW, slotH, gridTop, cell, gridW, gridX } = layout;
   const grid = gridFromSquares(card.squares || []);
   const drawLogoUnderCells = logoForGrid != null;
 
-  doc.setFillColor(PAGE.r, PAGE.g, PAGE.b);
-  doc.rect(0, 0, pageW, pageH, 'F');
-  drawPageHeader(doc, layout, opts);
+  drawCardHeader(doc, layout, opts);
 
   if (drawLogoUnderCells && logoForGrid) {
     const ix = gridX + (gridW - logoForGrid.drawW) / 2;
@@ -437,7 +508,7 @@ function drawBingoCardPage(
   }
 
   doc.setDrawColor(BORDER.r, BORDER.g, BORDER.b);
-  doc.setLineWidth(0.4);
+  doc.setLineWidth(Math.max(0.25, Math.min(0.4, cell * 0.01)));
 
   for (let r = 0; r < 5; r++) {
     for (let c = 0; c < 5; c++) {
@@ -453,7 +524,7 @@ function drawBingoCardPage(
         }
         doc.setTextColor(INK.r, INK.g, INK.b);
         doc.setFont('helvetica', 'bold');
-        const freePt = Math.min(16, cell * 0.15);
+        const freePt = Math.max(4, Math.min(16, cell * 0.22));
         doc.setFontSize(freePt);
         doc.text('FREE', x + cell / 2, y + cell / 2 + freePt * 0.28, { align: 'center' });
       } else {
@@ -469,11 +540,22 @@ function drawBingoCardPage(
     }
   }
 
+  // Light cut guide when multiple cards share a page.
+  if (slotW < doc.internal.pageSize.getWidth() - 1 || slotH < doc.internal.pageSize.getHeight() - 1) {
+    doc.setDrawColor(200, 200, 205);
+    doc.setLineWidth(0.3);
+    doc.rect(originX + 1, originY + 1, slotW - 2, slotH - 2, 'S');
+  }
+
   if (opts.previewWatermark) {
     doc.setTextColor(190, 190, 190);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(42);
-    doc.text('PREVIEW', pageW / 2, pageH * 0.52, { align: 'center', angle: 35 });
+    const wmPt = Math.max(14, Math.min(42, layout.cell * 0.9));
+    doc.setFontSize(wmPt);
+    doc.text('PREVIEW', originX + slotW / 2, originY + slotH * 0.55, {
+      align: 'center',
+      angle: 35,
+    });
   }
 }
 
@@ -486,26 +568,67 @@ async function prepareLogoForGrid(
   return loadLogoPngDataUrlForGrid(logoUrl, gridW, gridW);
 }
 
+function fillPageWhite(doc: jsPDF): void {
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  doc.setFillColor(PAGE.r, PAGE.g, PAGE.b);
+  doc.rect(0, 0, pageW, pageH, 'F');
+}
+
+export type PdfPageCursor = { pageStarted: boolean };
+
+/** Append a list of cards into `doc`, tiling `cardsPerPage` per Letter page. */
+async function appendCardsToDoc(
+  doc: jsPDF,
+  cards: PrintableCard[],
+  opts: PrintablePdfOpts,
+  cursor: PdfPageCursor,
+): Promise<void> {
+  if (!cards.length) return;
+
+  const cpp = normalizeCardsPerPage(opts.cardsPerPage);
+  const { cols, rows } = nUpGrid(cpp);
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const pageMargin = cpp === 1 ? 40 : 16;
+  const gutter = cpp === 1 ? 0 : 8;
+  const slotW = (pageW - pageMargin * 2 - gutter * (cols - 1)) / cols;
+  const slotH = (pageH - pageMargin * 2 - gutter * (rows - 1)) / rows;
+
+  const sampleLayout = computeCardLayoutInSlot(0, 0, slotW, slotH, opts);
+  const logoForGrid = await prepareLogoForGrid(opts, sampleLayout.gridW);
+
+  let slotOnPage = 0;
+  for (const card of cards) {
+    if (slotOnPage === 0) {
+      if (cursor.pageStarted) doc.addPage();
+      fillPageWhite(doc);
+      cursor.pageStarted = true;
+    }
+
+    const col = slotOnPage % cols;
+    const row = Math.floor(slotOnPage / cols);
+    const ox = pageMargin + col * (slotW + gutter);
+    const oy = pageMargin + row * (slotH + gutter);
+    const layout = computeCardLayoutInSlot(ox, oy, slotW, slotH, opts);
+    drawBingoCardInSlot(doc, card, layout, logoForGrid, opts);
+
+    slotOnPage = (slotOnPage + 1) % cpp;
+  }
+}
+
 /**
- * Multi-page US Letter PDF — one music bingo card per page, print-ready (light / ink-conscious).
+ * Multi-page US Letter PDF — music bingo cards tiled by `opts.cardsPerPage` (default 1).
  */
 export async function buildPrintableBingoPdfBlob(
   cards: PrintableCard[],
   opts: PrintablePdfOpts = {},
 ): Promise<Blob> {
   const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
-  const layout = computePageLayout(doc, opts);
-  const logoForGrid = await prepareLogoForGrid(opts, layout.gridW);
-
-  for (let i = 0; i < cards.length; i++) {
-    if (i > 0) doc.addPage();
-    drawBingoCardPage(doc, cards[i], layout, logoForGrid, opts);
-  }
-
+  const cursor: PdfPageCursor = { pageStarted: false };
+  await appendCardsToDoc(doc, cards, opts, cursor);
   return doc.output('blob');
 }
-
-export type PdfPageCursor = { pageStarted: boolean };
 
 /** Append printable bingo cards into an existing PDF (or start a new doc). */
 export async function appendMultiRoundPrintableCardsToDoc(
@@ -515,14 +638,8 @@ export async function appendMultiRoundPrintableCardsToDoc(
 ): Promise<void> {
   for (const section of sections) {
     if (!section.cards.length) continue;
-    const layout = computePageLayout(doc, section.opts);
-    const logoForGrid = await prepareLogoForGrid(section.opts, layout.gridW);
-
-    for (const card of section.cards) {
-      if (cursor.pageStarted) doc.addPage();
-      cursor.pageStarted = true;
-      drawBingoCardPage(doc, card, layout, logoForGrid, section.opts);
-    }
+    // Start each round on a fresh page so rounds never share a sheet.
+    await appendCardsToDoc(doc, section.cards, section.opts, cursor);
   }
 }
 

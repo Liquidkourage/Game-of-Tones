@@ -114,6 +114,9 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   printablePdfLoading?: boolean;
   printableCardCount: number;
   onPrintableCardCountChange: (n: number) => void;
+  /** Bingo cards tiled per Letter page in PDF exports (1 / 2 / 4 / 6 / 8). */
+  printableCardsPerPage: number;
+  onPrintableCardsPerPageChange: (n: number) => void;
   snippetLength: number;
   onSnippetLengthChange: (seconds: number) => void;
   randomStarts: 'none' | 'early' | 'random';
@@ -180,6 +183,8 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   printablePdfLoading,
   printableCardCount,
   onPrintableCardCountChange,
+  printableCardsPerPage,
+  onPrintableCardsPerPageChange,
   snippetLength,
   onSnippetLengthChange,
   randomStarts,
@@ -637,6 +642,21 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
             disabled={printablePdfLoading}
             onChange={(e) => onPrintableCardCountChange(Number(e.target.value))}
           />
+        </label>
+        <label className="round-planner__cards-pdf">
+          Cards per page
+          <select
+            value={printableCardsPerPage}
+            disabled={printablePdfLoading}
+            onChange={(e) => onPrintableCardsPerPageChange(Number(e.target.value))}
+            aria-label="Number of bingo cards per printed page"
+          >
+            <option value={1}>1</option>
+            <option value={2}>2</option>
+            <option value={4}>4</option>
+            <option value={6}>6</option>
+            <option value={8}>8</option>
+          </select>
         </label>
         {onPreviewPrint ? (
           <button
