@@ -6265,6 +6265,22 @@ const PublicDisplay: React.FC = () => {
                     ? `${roundHeaderLabel} - ${patternHeaderLabel}`
                     : patternHeaderLabel}
                 </h2>
+                {pattern === 'custom' &&
+                (customMatchReverse || customMatchAllowRotation || customMatchAllowMirror) ? (
+                  <div className="composite-pattern-header-block" aria-label="Custom pattern modifiers">
+                    <div className="composite-pattern-chips">
+                      {customMatchReverse ? (
+                        <span className="composite-pattern-chip composite-pattern-chip--c0">REVERSE</span>
+                      ) : null}
+                      {customMatchAllowRotation ? (
+                        <span className="composite-pattern-chip composite-pattern-chip--c1">ROTATIONS</span>
+                      ) : null}
+                      {customMatchAllowMirror ? (
+                        <span className="composite-pattern-chip composite-pattern-chip--c2">MIRRORS</span>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
                 {currentRoundPrize ? (
                   <div className="public-round-prize-line" title={currentRoundPrize}>
                     {`Prize: ${currentRoundPrize}`}
