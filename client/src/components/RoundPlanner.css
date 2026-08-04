@@ -1135,6 +1135,12 @@
   cursor: pointer;
 }
 
+.round-planner__cards-pdf-warn {
+  font-size: 0.68rem;
+  color: #fbbf24;
+  flex-shrink: 0;
+}
+
 .round-planner-btn--danger {
   border-color: rgba(248, 113, 113, 0.45);
   color: #fca5a5;

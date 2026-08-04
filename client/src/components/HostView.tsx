@@ -108,6 +108,8 @@ import { cleanSongTitle } from '../utils/songTitleCleaner';
 import { youtubeTrackDisplayFields, youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import {
   buildPrintableBingoPdfBlob,
+  clampPrintableCardCount,
+  confirmLargePrintableExport,
   normalizeCardsPerPage,
   type PrintableCard,
   type PrintablePdfSection,
@@ -1432,7 +1434,7 @@ const HostView: React.FC = () => {
   const bingoVerificationModalRef = useRef<HTMLDivElement | null>(null);
   const [gamePaused, setGamePaused] = useState(false);
   const [mixFinalized, setMixFinalized] = useState(false);
-  /** Printable PDF export (physical daubers) — count capped server-side at 200. */
+  /** Printable PDF export (physical daubers) — soft-warn at 200, hard max 1000. */
   const [printableCardCount, setPrintableCardCount] = useState(30);
   /** How many bingo cards to tile on each Letter page (1 / 2 / 4 / 6 / 8). */
   const [printableCardsPerPage, setPrintableCardsPerPage] = useState(1);
@@ -5739,7 +5741,8 @@ const HostView: React.FC = () => {
           if (!finalizedOk) return;
         }
 
-        const count = Math.min(200, Math.max(1, Math.floor(Number(printableCardCount)) || 30));
+        const count = clampPrintableCardCount(printableCardCount);
+        if (!confirmLargePrintableExport(count)) return;
         setPrintablePdfLoading(true);
         try {
           const { cards, freeSpace, logoUrl } = await fetchPrintableCardsFromServer(count, {
@@ -5857,7 +5860,8 @@ const HostView: React.FC = () => {
     }
 
     void (async () => {
-      const count = Math.min(200, Math.max(1, Math.floor(Number(printableCardCount)) || 30));
+      const count = clampPrintableCardCount(printableCardCount);
+      if (!confirmLargePrintableExport(count)) return;
       setPrintablePdfLoading(true);
       try {
         const callSections = saved.map((round) => {
@@ -11017,7 +11021,7 @@ const HostView: React.FC = () => {
         onNewCustomPattern={handleNewCustomPattern}
         printablePdfLoading={printablePdfLoading}
         printableCardCount={printableCardCount}
-        onPrintableCardCountChange={setPrintableCardCount}
+        onPrintableCardCountChange={(n) => setPrintableCardCount(clampPrintableCardCount(n))}
         printableCardsPerPage={printableCardsPerPage}
         onPrintableCardsPerPageChange={setPrintableCardsPerPage}
         snippetLength={snippetLength}

@@ -152,13 +152,13 @@ const HostRoundEventPanel: React.FC<HostRoundEventPanelProps> = ({
         <input
           type="number"
           min={1}
-          max={200}
+          max={1000}
           value={printableCardCount}
           onChange={(e) => onPrintableCardCountChange(Number(e.target.value))}
           disabled={printablePdfLoading}
           aria-label="Number of bingo cards per printable PDF export"
         />
-        <span>1–200</span>
+        <span>1–1000{printableCardCount > 200 ? ' · large exports may be slow' : ''}</span>
       </label>
       <label className="host-round-hub-event__cards-label">
         Cards per page

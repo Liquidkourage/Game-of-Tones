@@ -70,6 +70,25 @@ export function normalizeCardsPerPage(n: unknown): CardsPerPage {
   return 1;
 }
 
+/** Soft UX threshold — warn, but still allow the export. */
+export const PRINTABLE_CARDS_SOFT_WARN = 200;
+/** Absolute safety ceiling (must stay aligned with server PRINTABLE_CARDS_MAX default). */
+export const PRINTABLE_CARDS_HARD_MAX = 1000;
+
+export function clampPrintableCardCount(n: unknown): number {
+  const raw = Math.floor(Number(n));
+  if (!Number.isFinite(raw)) return 30;
+  return Math.min(PRINTABLE_CARDS_HARD_MAX, Math.max(1, raw));
+}
+
+/** Confirm before large exports; returns false if the host cancels. */
+export function confirmLargePrintableExport(count: number): boolean {
+  if (count <= PRINTABLE_CARDS_SOFT_WARN) return true;
+  return window.confirm(
+    `Generate ${count} cards?\n\nExports over ${PRINTABLE_CARDS_SOFT_WARN} can take a while and create a large PDF. You can cancel and print in smaller batches instead.`,
+  );
+}
+
 function nUpGrid(cardsPerPage: CardsPerPage): { cols: number; rows: number } {
   switch (cardsPerPage) {
     case 1:

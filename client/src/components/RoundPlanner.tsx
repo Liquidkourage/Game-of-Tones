@@ -637,12 +637,17 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           <input
             type="number"
             min={1}
-            max={200}
+            max={1000}
             value={printableCardCount}
             disabled={printablePdfLoading}
             onChange={(e) => onPrintableCardCountChange(Number(e.target.value))}
           />
         </label>
+        {printableCardCount > 200 ? (
+          <span className="round-planner__cards-pdf-warn" title="Large PDFs can be slow to build">
+            Large export — may be slow
+          </span>
+        ) : null}
         <label className="round-planner__cards-pdf">
           Cards per page
           <select

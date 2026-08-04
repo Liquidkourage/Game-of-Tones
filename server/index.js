@@ -182,6 +182,11 @@ const app = express();
 // Logging verbosity
 const VERBOSE = process.env.VERBOSE_LOGS === '1' || process.env.DEBUG === '1';
 const QUIET_MODE = process.env.QUIET_MODE === '1'; // Reduce logging for production
+/** Absolute ceiling for printable card exports (client soft-warns at 200). Override with PRINTABLE_CARDS_MAX. */
+const PRINTABLE_CARDS_HARD_MAX = (() => {
+  const n = Number(process.env.PRINTABLE_CARDS_MAX);
+  return Number.isFinite(n) && n >= 1 ? Math.min(5000, Math.floor(n)) : 1000;
+})();
 const server = http.createServer(app);
 const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
 const hasClientBuild = fs.existsSync(clientBuildPath);
@@ -5458,7 +5463,9 @@ io.on('connection', (socket) => {
       try {
         const roomId = data.roomId;
         const raw = Number(data.count);
-        const count = Number.isFinite(raw) ? Math.min(200, Math.max(1, Math.floor(raw))) : 30;
+        const count = Number.isFinite(raw)
+          ? Math.min(PRINTABLE_CARDS_HARD_MAX, Math.max(1, Math.floor(raw)))
+          : 30;
         const isPreviewOnly = data.previewOnly === true && count === 1;
         const room = rooms.get(roomId);
         if (!room) {
