@@ -5044,6 +5044,126 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Audience song requests for the room-level Requests meta-round.
+  socket.on('song-request', (data = {}, acknowledge) => {
+    const reply = (payload) => {
+      if (typeof acknowledge === 'function') acknowledge(payload);
+    };
+    try {
+      const roomId = typeof data.roomId === 'string' ? data.roomId : '';
+      const room = rooms.get(roomId);
+      const player = room?.players?.get(socket.id);
+      const title =
+        typeof data.title === 'string' ? data.title.replace(/\s+/g, ' ').trim().slice(0, 120) : '';
+      const artist =
+        typeof data.artist === 'string' ? data.artist.replace(/\s+/g, ' ').trim().slice(0, 120) : '';
+      if (!room || !player || player.isHost || isDisplayConnectionPlayer(player) || !title) {
+        reply({ ok: false });
+        return;
+      }
+      const now = Date.now();
+      if (socket.lastSongRequestAt && now - socket.lastSongRequestAt < 3000) {
+        reply({ ok: false });
+        return;
+      }
+      socket.lastSongRequestAt = now;
+      const request = {
+        id: `${now}-${socket.id}`,
+        playerName: player.name || 'Player',
+        title,
+        artist,
+        submittedAt: now,
+        status: 'pending',
+      };
+      room.songRequests = [
+        ...(Array.isArray(room.songRequests) ? room.songRequests : []),
+        request,
+      ].slice(-500);
+      for (const [playerId, roomPlayer] of room.players) {
+        if (playerId === room.host || roomPlayer?.isHost) {
+          io.to(playerId).emit('song-request-updated', request);
+        }
+      }
+      reply({ ok: true });
+    } catch (error) {
+      console.error('song-request failed:', error?.message || error);
+      reply({ ok: false });
+    }
+  });
+
+  socket.on('moderate-song-request', (data = {}, acknowledge) => {
+    const reply = (payload) => {
+      if (typeof acknowledge === 'function') acknowledge(payload);
+    };
+    try {
+      const roomId = typeof data.roomId === 'string' ? data.roomId : '';
+      const room = rooms.get(roomId);
+      const player = room?.players?.get(socket.id);
+      const isHost = !!room && (socket.id === room.host || player?.isHost);
+      const status = data.status === 'approved' ? 'approved' : data.status === 'rejected' ? 'rejected' : '';
+      if (!room || !isHost || !status || typeof data.requestId !== 'string') {
+        reply({ ok: false });
+        return;
+      }
+      const requests = Array.isArray(room.songRequests) ? room.songRequests : [];
+      const index = requests.findIndex((entry) => entry?.id === data.requestId);
+      if (index < 0) {
+        reply({ ok: false });
+        return;
+      }
+      let resolvedSong;
+      if (status === 'approved') {
+        const raw = data.resolvedSong;
+        const id = typeof raw?.id === 'string' ? raw.id.trim() : '';
+        const name = typeof raw?.name === 'string' ? raw.name.trim().slice(0, 200) : '';
+        const artist = typeof raw?.artist === 'string' ? raw.artist.trim().slice(0, 200) : '';
+        if (!id || !name || !artist) {
+          reply({ ok: false });
+          return;
+        }
+        resolvedSong = {
+          id,
+          name,
+          artist,
+          duration:
+            Number.isFinite(Number(raw.duration)) && Number(raw.duration) > 0
+              ? Number(raw.duration)
+              : undefined,
+          explicit: raw.explicit === true,
+        };
+      }
+      const updated = {
+        ...requests[index],
+        status,
+        moderatedAt: Date.now(),
+        ...(resolvedSong ? { resolvedSong } : {}),
+      };
+      room.songRequests = requests.map((entry, i) => (i === index ? updated : entry));
+      for (const [playerId, roomPlayer] of room.players) {
+        if (playerId === room.host || roomPlayer?.isHost) {
+          io.to(playerId).emit('song-request-updated', updated);
+        }
+      }
+      reply({ ok: true, request: updated });
+    } catch (error) {
+      console.error('moderate-song-request failed:', error?.message || error);
+      reply({ ok: false });
+    }
+  });
+
+  socket.on('clear-song-requests', (data = {}) => {
+    const roomId = typeof data.roomId === 'string' ? data.roomId : '';
+    const room = rooms.get(roomId);
+    const player = room?.players?.get(socket.id);
+    if (!room || (socket.id !== room.host && !player?.isHost)) return;
+    room.songRequests = [];
+    for (const [playerId, roomPlayer] of room.players) {
+      if (playerId === room.host || roomPlayer?.isHost) {
+        io.to(playerId).emit('song-requests-cleared');
+      }
+    }
+  });
+
   // Start game
   socket.on('finalize-mix', async (data) => {
     const { roomId, playlists, songList, freeSpace } = data;
@@ -6969,6 +7089,7 @@ io.on('connection', (socket) => {
       const syncingPlayer = room.players.get(socket.id);
       if (socket.id === room.host || syncingPlayer?.isHost) {
         payload.playerFeedback = Array.isArray(room.playerFeedback) ? room.playerFeedback : [];
+        payload.songRequests = Array.isArray(room.songRequests) ? room.songRequests : [];
       }
       
       Object.assign(payload, publicDisplayRoomStateExtras(room));

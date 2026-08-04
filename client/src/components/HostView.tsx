@@ -199,6 +199,62 @@ type PlayerFeedbackEntry = {
   submittedAt: number;
 };
 
+type SongRequestEntry = {
+  id: string;
+  playerName: string;
+  title: string;
+  artist: string;
+  submittedAt: number;
+  status: 'pending' | 'approved' | 'rejected';
+  moderatedAt?: number;
+  resolvedSong?: Song;
+};
+
+function normalizeSongRequestEntry(raw: any): SongRequestEntry | null {
+  const id = typeof raw?.id === 'string' ? raw.id : '';
+  const title = typeof raw?.title === 'string' ? raw.title.trim() : '';
+  const submittedAt = Number(raw?.submittedAt);
+  const status =
+    raw?.status === 'approved' || raw?.status === 'rejected' ? raw.status : 'pending';
+  if (!id || !title || !Number.isFinite(submittedAt)) return null;
+  const resolved = raw?.resolvedSong;
+  const resolvedSong =
+    typeof resolved?.id === 'string' &&
+    typeof resolved?.name === 'string' &&
+    typeof resolved?.artist === 'string'
+      ? {
+          id: resolved.id,
+          name: resolved.name,
+          artist: resolved.artist,
+          duration: Number.isFinite(Number(resolved.duration)) ? Number(resolved.duration) : undefined,
+          explicit: resolved.explicit === true,
+        }
+      : undefined;
+  return {
+    id,
+    playerName:
+      typeof raw?.playerName === 'string' && raw.playerName.trim() ? raw.playerName.trim() : 'Player',
+    title,
+    artist: typeof raw?.artist === 'string' ? raw.artist.trim() : '',
+    submittedAt,
+    status,
+    moderatedAt: Number.isFinite(Number(raw?.moderatedAt)) ? Number(raw.moderatedAt) : undefined,
+    ...(resolvedSong ? { resolvedSong } : {}),
+  };
+}
+
+function mergeSongRequests(current: SongRequestEntry[], incoming: unknown): SongRequestEntry[] {
+  const next = new Map(current.map((entry) => [entry.id, entry]));
+  const rows = Array.isArray(incoming) ? incoming : [incoming];
+  rows.forEach((raw) => {
+    const entry = normalizeSongRequestEntry(raw);
+    if (entry) next.set(entry.id, entry);
+  });
+  return Array.from(next.values())
+    .sort((a, b) => a.submittedAt - b.submittedAt)
+    .slice(-500);
+}
+
 function hostFeedbackStorageKey(roomId: string): string {
   return `tempo-player-feedback-${roomId}`;
 }
@@ -426,7 +482,20 @@ function normalizeWebApiQuarantine(raw: unknown): WebApiQuarantineState {
 const MAX_EVENT_ROUNDS = 12;
 
 function ensureEventRoundNames(rounds: EventRound[]): EventRound[] {
-  return rounds.map((round, index) => ({ ...round, name: `Round ${index + 1}` }));
+  let standardIndex = 0;
+  return rounds.map((round) => {
+    const kind =
+      round.kind === 'leftovers' || round.playlistIds?.includes(LEFTOVERS_PLAYLIST_ID)
+        ? 'leftovers'
+        : round.kind === 'requests' || round.playlistIds?.includes(REQUESTS_PLAYLIST_ID)
+          ? 'requests'
+          : 'standard';
+    if (kind !== 'standard') {
+      return { ...round, kind, name: kind === 'leftovers' ? 'Leftovers' : 'Requests' };
+    }
+    standardIndex += 1;
+    return { ...round, kind: round.kind === 'standard' ? 'standard' : undefined, name: `Round ${standardIndex}` };
+  });
 }
 
 interface Song {
@@ -453,6 +522,7 @@ interface Song {
 interface EventRound {
   id: string;
   name: string;
+  kind?: 'standard' | 'leftovers' | 'requests';
   playlistIds: string[];
   playlistNames: string[];
   songCount: number;
@@ -493,9 +563,19 @@ interface RoundPlayRecap {
  *  (`__x__` ids) already skips Spotify fetches for it; tracks are sent embedded / via songList. */
 const LEFTOVERS_PLAYLIST_ID = '__leftovers__';
 const LEFTOVERS_PLAYLIST_NAME = 'Leftovers — unplayed tonight';
+const REQUESTS_PLAYLIST_ID = '__requests__';
+const REQUESTS_PLAYLIST_NAME = 'Requests — audience picks';
 
 function isLeftoversPlaylistId(id: unknown): boolean {
   return String(id ?? '').trim() === LEFTOVERS_PLAYLIST_ID;
+}
+
+function isRequestsPlaylistId(id: unknown): boolean {
+  return String(id ?? '').trim() === REQUESTS_PLAYLIST_ID;
+}
+
+function isMetaPlaylistId(id: unknown): boolean {
+  return isLeftoversPlaylistId(id) || isRequestsPlaylistId(id);
 }
 
 /** Tempo round rule: a round uses exactly 1 playlist (Round Mix — one playlist supplies the whole
@@ -1563,6 +1643,8 @@ const HostView: React.FC = () => {
   const [playerFeedback, setPlayerFeedback] = useState<PlayerFeedbackEntry[]>(() =>
     readHostFeedback(roomId),
   );
+  const [songRequests, setSongRequests] = useState<SongRequestEntry[]>([]);
+  const [requestModerationBusyId, setRequestModerationBusyId] = useState<string | null>(null);
   const [youtubeMusicConnected, setYoutubeMusicConnected] = useState(false);
   const [youtubeStatusReady, setYoutubeStatusReady] = useState(false);
   const [appleMusicConnected, setAppleMusicConnected] = useState(false);
@@ -3539,6 +3621,18 @@ const HostView: React.FC = () => {
           : feedback.message;
       showToast(`Feedback from ${feedback.playerName}: ${toastMessage}`, 'info');
     });
+    newSocket.on('song-request-updated', (data: any) => {
+      const request = normalizeSongRequestEntry(data);
+      if (!request) return;
+      setSongRequests((prev) => mergeSongRequests(prev, request));
+      if (request.status === 'pending') {
+        showToast(
+          `Song request from ${request.playerName}: ${request.title}${request.artist ? ` — ${request.artist}` : ''}`,
+          'info',
+        );
+      }
+    });
+    newSocket.on('song-requests-cleared', () => setSongRequests([]));
     newSocket.on('prequeue-updated', (data: any) => {
       setPreQueueEnabled(!!data?.enabled);
       if (typeof data?.window === 'number') setPreQueueWindow(data.window);
@@ -4215,6 +4309,9 @@ const HostView: React.FC = () => {
       if (Array.isArray(payload?.playerFeedback)) {
         setPlayerFeedback((prev) => mergePlayerFeedback(prev, payload.playerFeedback));
       }
+      if (Array.isArray(payload?.songRequests)) {
+        setSongRequests((prev) => mergeSongRequests(prev, payload.songRequests));
+      }
       if (merged === 'playing') {
         setHostAwaitingLiveSync(false);
         // Server broadcasts room-state after every song start — only snap to the Game tab when
@@ -4353,8 +4450,8 @@ const HostView: React.FC = () => {
         setPlaylists((prev) => {
           const merged = new Map(prev.map((playlist) => [normalizeSpotifyPlaylistId(playlist.id), playlist]));
           syncedPlaylists.forEach((playlist: Playlist) => {
-            // Virtual rows (Leftovers) render via their own pinned library row — never the Spotify list.
-            if (isLeftoversPlaylistId(playlist.id)) return;
+            // Virtual meta-round rows render via their own pinned library row — never the Spotify list.
+            if (isMetaPlaylistId(playlist.id)) return;
             const id = normalizeSpotifyPlaylistId(playlist.id);
             const existing = merged.get(id);
             merged.set(id, existing ? { ...existing, ...playlist } : playlist);
@@ -5378,11 +5475,15 @@ const HostView: React.FC = () => {
           // Internal (virtual) playlists carry their tracks embedded — the server skips Spotify
           // for `__x__` ids and reads `songs` instead (see isInternalPlaylistId paths).
           const playlistsForServer = playlists.map((p) =>
-            isLeftoversPlaylistId(p.id)
+            isMetaPlaylistId(p.id)
               ? {
                   ...p,
                   songs: listToSend
-                    .filter((s) => isLeftoversPlaylistId(s.sourcePlaylistId))
+                    .filter(
+                      (s) =>
+                        canonicalPlaylistIdForMatch(String(s.sourcePlaylistId || '')) ===
+                        canonicalPlaylistIdForMatch(p.id),
+                    )
                     .map(cloneSongForSnapshot),
                 }
               : p,
@@ -6693,6 +6794,7 @@ const HostView: React.FC = () => {
           '• Ends the game if playing\n' +
           '• Clears mix selection & finalized pool in this tab\n' +
           '• Clears Leftovers (night-wide unplayed recap)\n' +
+          '• Clears audience song requests\n' +
           '• Rounds with a valid Save round snapshot keep playlists + snapshot\n' +
           '• All other rounds: buckets emptied (draft prep discarded)\n' +
           '• Every round returns to unplanned\n\n' +
@@ -6712,7 +6814,7 @@ const HostView: React.FC = () => {
               id: String(id),
               name: String(round.playlistNames?.[i] ?? ''),
             }))
-            .filter((p) => !isLeftoversPlaylistId(p.id));
+            .filter((p) => !isMetaPlaylistId(p.id));
           const { playRecap: _dropRecap, ...withoutRecap } = round;
           return {
             ...withoutRecap,
@@ -6744,6 +6846,8 @@ const HostView: React.FC = () => {
       setPlayedInOrder([]);
       setRoundWinners([]);
       setRoundComplete(null);
+      setSongRequests([]);
+      socket?.emit('clear-song-requests', { roomId });
 
       // Save to localStorage
       if (roomId) {
@@ -6758,7 +6862,7 @@ const HostView: React.FC = () => {
       invalidateSetlistBuildCache();
       setGameState('waiting');
 
-      addLog('Event reset — leftovers cleared; saved-round snapshots kept; unsaved buckets cleared', 'info');
+      addLog('Event reset — leftovers and requests cleared; saved-round snapshots kept; unsaved buckets cleared', 'info');
     }
   };
 
@@ -7359,6 +7463,124 @@ const HostView: React.FC = () => {
     };
   }, [leftoverPoolSongs]);
 
+  /** Approved requests resolve to playable Spotify tracks and form the Requests virtual playlist. */
+  const requestPoolSongs = useMemo<Song[]>(() => {
+    const seen = new Set<string>();
+    const songs: Song[] = [];
+    for (const request of songRequests) {
+      if (request.status !== 'approved' || !request.resolvedSong?.id) continue;
+      if (seen.has(request.resolvedSong.id)) continue;
+      seen.add(request.resolvedSong.id);
+      songs.push({
+        ...request.resolvedSong,
+        sourcePlaylistId: REQUESTS_PLAYLIST_ID,
+        sourcePlaylistName: REQUESTS_PLAYLIST_NAME,
+      });
+    }
+    return songs;
+  }, [songRequests]);
+  const requestPoolSongsRef = useRef(requestPoolSongs);
+  requestPoolSongsRef.current = requestPoolSongs;
+
+  const requestsVirtualPlaylist = useMemo<Playlist>(
+    () => ({
+      id: REQUESTS_PLAYLIST_ID,
+      name: REQUESTS_PLAYLIST_NAME,
+      tracks: requestPoolSongs.length,
+      description:
+        'Virtual playlist — audience requests approved by the host and matched to Spotify tracks.',
+    }),
+    [requestPoolSongs.length],
+  );
+
+  useEffect(() => {
+    setEventRounds((current) => {
+      let changed = false;
+      const next = current.map((round) => {
+        if (!round.playlistIds?.includes(REQUESTS_PLAYLIST_ID) || round.savedMixSnapshot?.songs?.length) {
+          return round;
+        }
+        const playlistIndex = round.playlistIds.indexOf(REQUESTS_PLAYLIST_ID);
+        const names = [...round.playlistNames];
+        if (names[playlistIndex] !== REQUESTS_PLAYLIST_NAME) {
+          names[playlistIndex] = REQUESTS_PLAYLIST_NAME;
+          changed = true;
+        }
+        if (round.songCount !== requestPoolSongs.length) changed = true;
+        return {
+          ...round,
+          kind: 'requests' as const,
+          name: 'Requests',
+          playlistNames: names,
+          songCount: requestPoolSongs.length,
+        };
+      });
+      if (!changed) return current;
+      try {
+        localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
+      } catch {
+        /* keep room state in memory */
+      }
+      return next;
+    });
+  }, [requestPoolSongs.length, roomId]);
+
+  const moderateSongRequest = useCallback(
+    async (request: SongRequestEntry, status: 'approved' | 'rejected') => {
+      if (!socket || !roomId || requestModerationBusyId) return;
+      setRequestModerationBusyId(request.id);
+      try {
+        let resolvedSong: Song | undefined;
+        if (status === 'approved') {
+          if (!isSpotifyConnected) {
+            showToast('Connect Spotify before approving a request so it can be played.', 'warn');
+            return;
+          }
+          const query = [request.title, request.artist].filter(Boolean).join(' ');
+          const response = await hostFetch(
+            `${API_BASE || ''}/api/spotify/search-tracks?q=${encodeURIComponent(query)}&limit=1`,
+            { cache: 'no-store' },
+          );
+          const data = await response.json();
+          const match = Array.isArray(data?.tracks) ? data.tracks[0] : null;
+          if (!response.ok || !match?.id || !match?.name || !match?.artist) {
+            showToast(`No Spotify match found for “${request.title}”.`, 'warn');
+            return;
+          }
+          resolvedSong = {
+            id: match.id,
+            name: match.name,
+            artist: match.artist,
+            duration: Number.isFinite(Number(match.duration_ms))
+              ? Math.round(Number(match.duration_ms) / 1000)
+              : undefined,
+            explicit: match.explicit === true,
+          };
+        }
+        await new Promise<void>((resolve, reject) => {
+          socket.emit(
+            'moderate-song-request',
+            { roomId, requestId: request.id, status, resolvedSong },
+            (result: { ok?: boolean } | undefined) =>
+              result?.ok ? resolve() : reject(new Error('Request moderation failed')),
+          );
+        });
+        showToast(
+          status === 'approved'
+            ? `Approved “${resolvedSong?.name}” for Requests.`
+            : `Rejected “${request.title}”.`,
+          status === 'approved' ? 'success' : 'info',
+        );
+      } catch (error) {
+        console.error('Song request moderation failed:', error);
+        showToast('Could not update that request. Try again.', 'error');
+      } finally {
+        setRequestModerationBusyId(null);
+      }
+    },
+    [socket, roomId, requestModerationBusyId, isSpotifyConnected, showToast],
+  );
+
   const generateSongList = useCallback(
     async (opts?: {
       force?: boolean;
@@ -7406,7 +7628,7 @@ const HostView: React.FC = () => {
             (s) =>
               s.sourcePlaylistId &&
               selectedIds.has(s.sourcePlaylistId) &&
-              !isLeftoversPlaylistId(s.sourcePlaylistId)
+              !isMetaPlaylistId(s.sourcePlaylistId)
           );
 
       let toFetch = rows.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
@@ -7463,7 +7685,7 @@ const HostView: React.FC = () => {
         let allSongs: Song[] = [...kept];
 
         const needsHostSpotifyApi = toFetch.some(
-          (p) => !p.youtubeMusic && !p.appleMusic && p.catalog !== true && !isLeftoversPlaylistId(p.id),
+          (p) => !p.youtubeMusic && !p.appleMusic && p.catalog !== true && !isMetaPlaylistId(p.id),
         );
         if (needsHostSpotifyApi && !readHostSpotifyWebEnabled()) {
           setSongList([]);
@@ -7497,6 +7719,10 @@ const HostView: React.FC = () => {
           // Leftovers virtual playlist: tracks come from completed-round recaps in memory — no API call.
           if (isLeftoversPlaylistId(playlist.id)) {
             allSongs.push(...leftoverPoolSongsRef.current.map((s) => ({ ...s })));
+            continue;
+          }
+          if (isRequestsPlaylistId(playlist.id)) {
+            allSongs.push(...requestPoolSongsRef.current.map((s) => ({ ...s })));
             continue;
           }
           // Recent Spotify 5xx for this playlist: skip auto-rehydration until the cooldown
@@ -7654,6 +7880,15 @@ const HostView: React.FC = () => {
         .join('|'),
     [mixPlaylistSelection]
   );
+
+  useEffect(() => {
+    if (gameStateRef.current === 'playing') return;
+    if (!mixPlaylistSelection.some((playlist) => isRequestsPlaylistId(playlist.id))) return;
+    void generateSongListRef.current({
+      reason: 'selection',
+      playlists: mixPlaylistSelection,
+    });
+  }, [requestPoolSongs.length, playlistSelectionKey]);
 
   // Advanced playback functions
   const [volumeTimeout, setVolumeTimeout] = useState<NodeJS.Timeout | null>(null);
@@ -8520,12 +8755,15 @@ const HostView: React.FC = () => {
     (round: EventRound): Playlist[] | null => {
       const idSet = new Set((round.playlistIds || []).map((id) => String(id)));
       const hasLeftovers = idSet.has(LEFTOVERS_PLAYLIST_ID);
+      const hasRequests = idSet.has(REQUESTS_PLAYLIST_ID);
       const fromLibrary = playlistsForRoundPlanner.filter((p) => idSet.has(String(p.id)));
       const libraryIdSet = new Set(fromLibrary.map((p) => String(p.id)));
       const fromCatalog = catalogPackOptions.filter(
         (p) => idSet.has(String(p.id)) && !libraryIdSet.has(String(p.id)),
       );
-      if (fromLibrary.length === 0 && fromCatalog.length === 0 && !hasLeftovers) return null;
+      if (fromLibrary.length === 0 && fromCatalog.length === 0 && !hasLeftovers && !hasRequests) {
+        return null;
+      }
       const merged: Playlist[] = [...fromLibrary];
       const ids = new Set(fromLibrary.map((p) => p.id));
       for (const c of fromCatalog) {
@@ -8543,6 +8781,9 @@ const HostView: React.FC = () => {
           },
         );
       }
+      if (hasRequests && !ids.has(REQUESTS_PLAYLIST_ID)) {
+        merged.push(requestsVirtualPlaylist);
+      }
       /** Return rows in the round's stored order (host-set / B–O column order), not library
        *  order — in 5-playlist column mode the mix order sent at finalize maps to card columns. */
       const orderIndex = new Map((round.playlistIds || []).map((id, i) => [String(id), i]));
@@ -8553,7 +8794,7 @@ const HostView: React.FC = () => {
       );
       return merged;
     },
-    [playlistsForRoundPlanner, catalogPackOptions, leftoversVirtualPlaylist],
+    [playlistsForRoundPlanner, catalogPackOptions, leftoversVirtualPlaylist, requestsVirtualPlaylist],
   );
 
   /** Load a round's playlists into the host mix selection (finalize / Save round use this list). Does not change round status. */
@@ -8597,6 +8838,9 @@ const HostView: React.FC = () => {
           }
         );
       }
+      if (isRequestsPlaylistId(playlistId)) {
+        return requestsVirtualPlaylist;
+      }
       const canon = canonicalPlaylistIdForMatch(String(playlistId));
       const fromLibrary = playlistsForRoundPlanner.find(
         (p) => canonicalPlaylistIdForMatch(String(p.id)) === canon,
@@ -8607,7 +8851,7 @@ const HostView: React.FC = () => {
       );
       return fromCatalog ? { ...fromCatalog, catalog: true } : undefined;
     },
-    [playlistsForRoundPlanner, catalogPackOptions, leftoversVirtualPlaylist],
+    [playlistsForRoundPlanner, catalogPackOptions, leftoversVirtualPlaylist, requestsVirtualPlaylist],
   );
 
   /** During live play, only the round currently being played is locked — all other rounds stay fully editable. */
@@ -8630,6 +8874,22 @@ const HostView: React.FC = () => {
       const round = prev[roundIndex];
       const newPid = canonicalPlaylistIdForMatch(playlist.id);
       if (round.playlistIds.some((id) => canonicalPlaylistIdForMatch(id) === newPid)) return;
+      if (isRequestsPlaylistId(playlist.id)) {
+        const existingRequestsRound = prev.findIndex(
+          (candidate, index) =>
+            index !== roundIndex &&
+            (candidate.kind === 'requests' ||
+              candidate.playlistIds?.includes(REQUESTS_PLAYLIST_ID)),
+        );
+        if (existingRequestsRound >= 0) {
+          showToast('Requests is already assigned to another round.', 'info');
+          return;
+        }
+        if (round.playlistIds.length > 0) {
+          showToast('Requests is a dedicated meta-round. Add it to an empty round.', 'info');
+          return;
+        }
+      }
       // Tempo round rule: max 5 playlists (column mode). Never silently take a 6th.
       if ((round.playlistIds?.length ?? 0) >= 5) {
         showToast('This round already has 5 playlists. Remove one before adding another.', 'info');
@@ -8639,6 +8899,11 @@ const HostView: React.FC = () => {
       const tracks = Math.max(0, Number(playlist.tracks) || 0);
       let updated: EventRound = {
         ...round,
+        ...(isLeftoversPlaylistId(playlist.id)
+          ? { kind: 'leftovers' as const, name: 'Leftovers' }
+          : isRequestsPlaylistId(playlist.id)
+            ? { kind: 'requests' as const, name: 'Requests' }
+            : {}),
         playlistIds: [...round.playlistIds, playlist.id],
         playlistNames: [...round.playlistNames, playlist.name],
         songCount: round.songCount + tracks,
@@ -8651,12 +8916,13 @@ const HostView: React.FC = () => {
         if (roundIndex < 0 || roundIndex >= cur.length) return cur;
         const newRounds = [...cur];
         newRounds[roundIndex] = updated;
+        const normalized = ensureEventRoundNames(newRounds);
         try {
-          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(newRounds));
+          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(normalized));
         } catch (error) {
           console.warn('Failed to save rounds to localStorage:', error);
         }
-        return newRounds;
+        return normalized;
       });
       syncMixFromRound(roundIndex, updated);
       // Fresh room: currentRoundIndex starts at -1, and setup readiness (Next on Build
@@ -8695,18 +8961,22 @@ const HostView: React.FC = () => {
         songCount: Math.max(0, round.songCount - playlistTracks),
         status: round.playlistIds.length === 1 ? 'unplanned' : round.status,
       };
+      if (isMetaPlaylistId(playlistId)) {
+        updated.kind = undefined;
+      }
       updated = clearSnapshotIfPlaylistsChanged(updated, round);
 
       setEventRounds((cur) => {
         if (roundIndex < 0 || roundIndex >= cur.length) return cur;
         const newRounds = [...cur];
         newRounds[roundIndex] = updated;
+        const normalized = ensureEventRoundNames(newRounds);
         try {
-          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(newRounds));
+          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(normalized));
         } catch (error) {
           console.warn('Failed to save rounds to localStorage:', error);
         }
-        return newRounds;
+        return normalized;
       });
       if (updated.playlistIds.length > 0) {
         syncMixFromRound(roundIndex, updated);
@@ -8776,7 +9046,7 @@ const HostView: React.FC = () => {
         id: String(id),
         name: stripTitleFlagPrefix(String(names[i] ?? id), titleFlagStripList),
         trackCount: (() => {
-          const playlist = playlistsForRoundPlanner.find((p) => p.id === String(id));
+          const playlist = resolvePlaylistForRoundAssign(String(id));
           if (!playlist) return undefined;
           return playlist.tracksLoaded != null && playlist.tracksLoaded > 0
             ? playlist.tracksLoaded
@@ -8790,6 +9060,7 @@ const HostView: React.FC = () => {
     currentRoundIndex,
     titleFlagStripList,
     playlistsForRoundPlanner,
+    resolvePlaylistForRoundAssign,
   ]);
 
   /** Pick a round for advance prep: sync mix + pattern/snippet UI without marking rounds active/completed or leaving Manager. */
@@ -10561,7 +10832,11 @@ const HostView: React.FC = () => {
       <RoundPlanner<EventRound>
         rounds={eventRounds}
         onUpdateRounds={handleUpdateRounds}
-        playlists={playlistsForRoundPlanner}
+        playlists={[
+          ...playlistsForRoundPlanner,
+          requestsVirtualPlaylist,
+          ...(leftoversVirtualPlaylist ? [leftoversVirtualPlaylist] : []),
+        ]}
         currentRound={currentRoundIndex}
         onStartRound={handleStartRound}
         onSelectRoundForPrep={handleSelectRoundForPrep}
@@ -10609,6 +10884,8 @@ const HostView: React.FC = () => {
       eventRounds,
       handleUpdateRounds,
       playlistsForRoundPlanner,
+      requestsVirtualPlaylist,
+      leftoversVirtualPlaylist,
       currentRoundIndex,
       handleStartRound,
       handleSelectRoundForPrep,
@@ -11274,6 +11551,135 @@ const HostView: React.FC = () => {
                       ) : null}
                       </div>
                       <div className="host-playlist-library-table__rows">
+                      <div
+                        className="host-playlist-library-row host-playlist-library-row--virtual"
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', REQUESTS_PLAYLIST_ID);
+                          e.dataTransfer.effectAllowed = 'copy';
+                          setLibraryPlaylistDragActive(true);
+                        }}
+                        onDragEnd={() => setLibraryPlaylistDragActive(false)}
+                        onDoubleClick={(e) => handleLibraryPlaylistDoubleClick(e, REQUESTS_PLAYLIST_ID)}
+                        style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}
+                      >
+                        <span
+                          className={
+                            (playlistAssignedRoundCounts.get(REQUESTS_PLAYLIST_ID) || 0) > 0
+                              ? 'host-playlist-assigned-chip host-playlist-assigned-chip--on'
+                              : 'host-playlist-assigned-chip host-playlist-assigned-chip--off'
+                          }
+                          aria-hidden
+                        >
+                          {(playlistAssignedRoundCounts.get(REQUESTS_PLAYLIST_ID) || 0) > 0 ? (
+                            <Check aria-hidden />
+                          ) : null}
+                        </span>
+                        <span style={{ flex: '1 1 260px', minWidth: 0 }}>
+                          <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                            {REQUESTS_PLAYLIST_NAME}
+                            <span className="host-playlist-virtual-badge">Virtual</span>
+                          </span>
+                          <span className="host-playlist-desc">
+                            Player submissions matched to Spotify after host approval.
+                          </span>
+                        </span>
+                        <span style={{ fontSize: '0.8rem', color: '#c9a6ff', paddingTop: 3 }}>
+                          {requestPoolSongs.length} approved ·{' '}
+                          {songRequests.filter((request) => request.status === 'pending').length} pending
+                        </span>
+                        {libraryQuickAssignRound ? (
+                          <button
+                            type="button"
+                            className={
+                              libraryQuickAssignRound.canonicalIds.includes(REQUESTS_PLAYLIST_ID)
+                                ? 'host-playlist-quick-add host-playlist-quick-add--added'
+                                : 'host-playlist-quick-add'
+                            }
+                            onClick={() =>
+                              libraryQuickAssignRound.canonicalIds.includes(REQUESTS_PLAYLIST_ID)
+                                ? removePlaylistFromRoundBucket(
+                                    libraryQuickAssignRound.index,
+                                    REQUESTS_PLAYLIST_ID,
+                                  )
+                                : addPlaylistToRoundBucket(
+                                    libraryQuickAssignRound.index,
+                                    REQUESTS_PLAYLIST_ID,
+                                  )
+                            }
+                          >
+                            {libraryQuickAssignRound.canonicalIds.includes(REQUESTS_PLAYLIST_ID)
+                              ? 'Added'
+                              : `Add to ${libraryQuickAssignRound.name}`}
+                          </button>
+                        ) : null}
+                        <div
+                          style={{
+                            flex: '1 0 100%',
+                            display: 'grid',
+                            gap: 6,
+                            paddingLeft: 34,
+                            marginTop: 4,
+                          }}
+                        >
+                          {songRequests.length === 0 ? (
+                            <span className="host-playlist-desc">
+                              No requests yet. Players submit from their card menu.
+                            </span>
+                          ) : (
+                            songRequests
+                              .slice()
+                              .reverse()
+                              .slice(0, 12)
+                              .map((request) => (
+                                <span
+                                  key={request.id}
+                                  style={{
+                                    display: 'flex',
+                                    gap: 8,
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    fontSize: '0.78rem',
+                                  }}
+                                >
+                                  <strong>{request.title}</strong>
+                                  {request.artist ? <span>— {request.artist}</span> : null}
+                                  <span style={{ opacity: 0.65 }}>from {request.playerName}</span>
+                                  {request.status === 'pending' ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="host-playlist-quick-add"
+                                        disabled={requestModerationBusyId === request.id}
+                                        onClick={() => void moderateSongRequest(request, 'approved')}
+                                      >
+                                        Approve
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="host-playlist-quick-add"
+                                        disabled={requestModerationBusyId === request.id}
+                                        onClick={() => void moderateSongRequest(request, 'rejected')}
+                                      >
+                                        Reject
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <span
+                                      style={{
+                                        color: request.status === 'approved' ? '#00ff88' : '#ff9a9a',
+                                      }}
+                                    >
+                                      {request.status === 'approved'
+                                        ? `Approved${request.resolvedSong ? ` as ${request.resolvedSong.name}` : ''}`
+                                        : 'Rejected'}
+                                    </span>
+                                  )}
+                                </span>
+                              ))
+                          )}
+                        </div>
+                      </div>
                       {leftoversVirtualPlaylist ? (() => {
                         const assignedRoundCount =
                           playlistAssignedRoundCounts.get(LEFTOVERS_PLAYLIST_ID) || 0;
@@ -11976,6 +12382,52 @@ const HostView: React.FC = () => {
     addLog(`Added ${newRound.name}`, 'info');
   }, [eventRounds, gameState, handleUpdateRounds, addLog]);
 
+  const handleAddMetaRound = useCallback(
+    (kind: 'leftovers' | 'requests') => {
+      if (eventRounds.length >= MAX_EVENT_ROUNDS) return;
+      const playlistId = kind === 'leftovers' ? LEFTOVERS_PLAYLIST_ID : REQUESTS_PLAYLIST_ID;
+      const playlistName = kind === 'leftovers' ? LEFTOVERS_PLAYLIST_NAME : REQUESTS_PLAYLIST_NAME;
+      const existingIndex = eventRounds.findIndex(
+        (round) => round.kind === kind || round.playlistIds?.includes(playlistId),
+      );
+      if (existingIndex >= 0) {
+        setRoundBuilderFocusIndex(existingIndex);
+        if (gameState !== 'playing') setCurrentRoundIndex(existingIndex);
+        showToast(`${kind === 'leftovers' ? 'Leftovers' : 'Requests'} is already on the timeline.`, 'info');
+        return;
+      }
+      const songCount =
+        kind === 'leftovers' ? leftoverPoolSongs.length : requestPoolSongs.length;
+      const newRound: EventRound = {
+        id: `${kind}-${Date.now()}`,
+        kind,
+        name: kind === 'leftovers' ? 'Leftovers' : 'Requests',
+        playlistIds: [playlistId],
+        playlistNames: [playlistName],
+        songCount,
+        status: 'planned',
+        bingoPattern: 'line',
+      };
+      const updated = ensureEventRoundNames([...eventRounds, newRound]);
+      handleUpdateRounds(updated);
+      const newIndex = updated.length - 1;
+      if (gameState !== 'playing') setCurrentRoundIndex(newIndex);
+      setRoundBuilderFocusIndex(newIndex);
+      syncMixFromRound(newIndex, updated[newIndex]);
+      addLog(`Added ${newRound.name} meta-round`, 'info');
+    },
+    [
+      eventRounds,
+      gameState,
+      leftoverPoolSongs.length,
+      requestPoolSongs.length,
+      handleUpdateRounds,
+      syncMixFromRound,
+      addLog,
+      showToast,
+    ],
+  );
+
   const handleRemoveRound = useCallback(
     (roundIndex: number) => {
       if (gameState === 'playing' && roundIndex === currentRoundIndex) {
@@ -12549,6 +13001,25 @@ const HostView: React.FC = () => {
                     onSelectRound={handleFocusRoundForLibrary}
                     onAddRound={handleAddRound}
                     canAddRound={eventRounds.length < MAX_EVENT_ROUNDS}
+                    onAddLeftoversRound={() => handleAddMetaRound('leftovers')}
+                    canAddLeftoversRound={
+                      eventRounds.length < MAX_EVENT_ROUNDS &&
+                      leftoverPoolSongs.length > 0 &&
+                      !eventRounds.some(
+                        (round) =>
+                          round.kind === 'leftovers' ||
+                          round.playlistIds?.includes(LEFTOVERS_PLAYLIST_ID),
+                      )
+                    }
+                    onAddRequestsRound={() => handleAddMetaRound('requests')}
+                    canAddRequestsRound={
+                      eventRounds.length < MAX_EVENT_ROUNDS &&
+                      !eventRounds.some(
+                        (round) =>
+                          round.kind === 'requests' ||
+                          round.playlistIds?.includes(REQUESTS_PLAYLIST_ID),
+                      )
+                    }
                     onRemoveRound={handleRemoveRound}
                     canRemoveRound={eventRounds.length > 1}
                     onDropPlaylist={addPlaylistToRoundBucket}

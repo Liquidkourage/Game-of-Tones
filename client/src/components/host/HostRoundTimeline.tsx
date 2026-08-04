@@ -21,6 +21,10 @@ type HostRoundTimelineProps = {
   onSelectRound: (index: number) => void;
   onAddRound?: () => void;
   canAddRound?: boolean;
+  onAddLeftoversRound?: () => void;
+  canAddLeftoversRound?: boolean;
+  onAddRequestsRound?: () => void;
+  canAddRequestsRound?: boolean;
   onRemoveRound?: (index: number) => void;
   canRemoveRound?: boolean;
   onDropPlaylist?: (roundIndex: number, playlistId: string) => void;
@@ -64,6 +68,10 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
   onSelectRound,
   onAddRound,
   canAddRound = true,
+  onAddLeftoversRound,
+  canAddLeftoversRound = true,
+  onAddRequestsRound,
+  canAddRequestsRound = true,
   onRemoveRound,
   canRemoveRound = true,
   onDropPlaylist,
@@ -82,7 +90,9 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
 
   // Read-only timeline (Game tab / setup cockpit) with nothing prepped: an empty
   // draft chip has nothing to do, so say so instead of showing it.
-  const interactive = Boolean(onAddRound || onRemoveRound || onDropPlaylist);
+  const interactive = Boolean(
+    onAddRound || onAddLeftoversRound || onAddRequestsRound || onRemoveRound || onDropPlaylist,
+  );
   const nothingPrepped = rounds.every(
     (r) => r.status === 'unplanned' && r.playlistCount === 0 && !r.saved,
   );
@@ -132,6 +142,38 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
             >
               <Plus className="w-4 h-4" aria-hidden />
               Add round
+            </button>
+          ) : null}
+          {onAddLeftoversRound ? (
+            <button
+              type="button"
+              className="btn-secondary host-round-timeline__add"
+              onClick={onAddLeftoversRound}
+              disabled={!canAddLeftoversRound}
+              title={
+                canAddLeftoversRound
+                  ? 'Add the unplayed-songs meta-round'
+                  : 'Leftovers is already on the timeline or has no songs yet'
+              }
+            >
+              <Plus className="w-4 h-4" aria-hidden />
+              Leftovers
+            </button>
+          ) : null}
+          {onAddRequestsRound ? (
+            <button
+              type="button"
+              className="btn-secondary host-round-timeline__add"
+              onClick={onAddRequestsRound}
+              disabled={!canAddRequestsRound}
+              title={
+                canAddRequestsRound
+                  ? 'Add the audience Requests meta-round'
+                  : 'Requests is already on the timeline'
+              }
+            >
+              <Plus className="w-4 h-4" aria-hidden />
+              Requests
             </button>
           ) : null}
           {onOpenRounds ? (

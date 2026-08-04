@@ -211,6 +211,10 @@ const PlayerView: React.FC = () => {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackStatus, setFeedbackStatus] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle');
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [requestTitle, setRequestTitle] = useState('');
+  const [requestArtist, setRequestArtist] = useState('');
+  const [requestStatus, setRequestStatus] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle');
   const [hybridPrizeInPersonOnly, setHybridPrizeInPersonOnly] = useState(false);
   const previousPlayedSongIdsRef = useRef<string[]>([]); // Track previous state for missed songs calculation
   const wasReconnectingRef = useRef<boolean>(false); // Track if we're in a reconnection state
@@ -648,6 +652,39 @@ const PlayerView: React.FC = () => {
           setFeedbackStatus('sent');
         } else {
           setFeedbackStatus('error');
+        }
+      },
+    );
+  };
+
+  const submitSongRequest = () => {
+    const title = requestTitle.trim();
+    const artist = requestArtist.trim();
+    if (!title || requestStatus === 'submitting') return;
+    if (!socket?.connected) {
+      setRequestStatus('error');
+      return;
+    }
+    setRequestStatus('submitting');
+    let settled = false;
+    const timeoutId = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      setRequestStatus('error');
+    }, 5000);
+    socket.emit(
+      'song-request',
+      { roomId, title, artist },
+      (result: { ok?: boolean } | undefined) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        if (result?.ok) {
+          setRequestTitle('');
+          setRequestArtist('');
+          setRequestStatus('sent');
+        } else {
+          setRequestStatus('error');
         }
       },
     );
@@ -2784,6 +2821,73 @@ const PlayerView: React.FC = () => {
                         : ''}
                     </div>
                   </div>
+                </div>
+
+                <div className={`player-v2-sheet-row${requestOpen ? ' player-v2-sheet-row--stacked' : ''}`}>
+                  <div className="player-v2-sheet-copy">
+                    <div className="player-v2-sheet-label">Song request</div>
+                    <div className="player-v2-sheet-note">Suggest a song for the Requests round.</div>
+                  </div>
+                  {!requestOpen ? (
+                    <button
+                      type="button"
+                      className="player-v2-inline-button player-v2-feedback-open"
+                      onClick={() => {
+                        setRequestOpen(true);
+                        setRequestStatus('idle');
+                      }}
+                    >
+                      Request
+                    </button>
+                  ) : (
+                    <div className="player-v2-feedback-form">
+                      <input
+                        className="player-v2-feedback-input"
+                        style={{ minHeight: 44, resize: 'none' }}
+                        value={requestTitle}
+                        maxLength={120}
+                        placeholder="Song title"
+                        aria-label="Requested song title"
+                        onChange={(event) => {
+                          setRequestTitle(event.target.value);
+                          if (requestStatus !== 'submitting') setRequestStatus('idle');
+                        }}
+                      />
+                      <input
+                        className="player-v2-feedback-input"
+                        style={{ minHeight: 44, resize: 'none' }}
+                        value={requestArtist}
+                        maxLength={120}
+                        placeholder="Artist (optional)"
+                        aria-label="Requested song artist"
+                        onChange={(event) => {
+                          setRequestArtist(event.target.value);
+                          if (requestStatus !== 'submitting') setRequestStatus('idle');
+                        }}
+                      />
+                      <div className="player-v2-feedback-actions">
+                        <span
+                          className={`player-v2-feedback-status player-v2-feedback-status--${requestStatus}`}
+                          role="status"
+                          aria-live="polite"
+                        >
+                          {requestStatus === 'sent'
+                            ? 'Sent to host'
+                            : requestStatus === 'error'
+                              ? 'Could not send. Check your connection.'
+                              : 'Host approval required'}
+                        </span>
+                        <button
+                          type="button"
+                          className="player-v2-inline-button player-v2-feedback-submit"
+                          disabled={!requestTitle.trim() || requestStatus === 'submitting'}
+                          onClick={submitSongRequest}
+                        >
+                          {requestStatus === 'submitting' ? 'Sending…' : 'Submit'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className={`player-v2-sheet-row${feedbackOpen ? ' player-v2-sheet-row--stacked' : ''}`}>

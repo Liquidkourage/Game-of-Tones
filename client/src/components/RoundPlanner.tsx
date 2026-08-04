@@ -60,6 +60,8 @@ interface Playlist {
 export interface RoundPlannerRound {
   id: string;
   name: string;
+  /** Virtual event-night rounds keep their identity/name when ordinary rounds are reordered. */
+  kind?: 'standard' | 'leftovers' | 'requests';
   playlistIds: string[];
   playlistNames: string[];
   songCount: number;
@@ -139,6 +141,18 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
 }
 
 const MAX_ROUND_BUCKETS = 12;
+const LEFTOVERS_PLAYLIST_ID = '__leftovers__';
+const REQUESTS_PLAYLIST_ID = '__requests__';
+
+function roundMetaKind(round: RoundPlannerRound): 'leftovers' | 'requests' | null {
+  if (round.kind === 'leftovers' || round.playlistIds?.includes(LEFTOVERS_PLAYLIST_ID)) {
+    return 'leftovers';
+  }
+  if (round.kind === 'requests' || round.playlistIds?.includes(REQUESTS_PLAYLIST_ID)) {
+    return 'requests';
+  }
+  return null;
+}
 
 function RoundPlanner<TRound extends RoundPlannerRound>({
   rounds,
@@ -244,16 +258,30 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
     setFocusedIndex((i) => Math.min(i, Math.max(0, rounds.length - 1)));
   }, [rounds.length]);
 
-  const ensureSequentialNumbering = (roundsToNumber: TRound[]) =>
-    roundsToNumber.map((round, index) => ({
-      ...round,
-      name: `Round ${index + 1}`,
-    }));
+  const ensureSequentialNumbering = (roundsToNumber: TRound[]) => {
+    let standardIndex = 0;
+    return roundsToNumber.map((round) => {
+      const metaKind = roundMetaKind(round);
+      if (metaKind) {
+        return {
+          ...round,
+          kind: metaKind,
+          name: metaKind === 'leftovers' ? 'Leftovers' : 'Requests',
+        };
+      }
+      standardIndex += 1;
+      return { ...round, kind: round.kind === 'standard' ? 'standard' : undefined, name: `Round ${standardIndex}` };
+    }) as TRound[];
+  };
 
   useEffect(() => {
-    const hasInconsistentNumbering = rounds.some((round, index) => round.name !== `Round ${index + 1}`);
+    const normalized = ensureSequentialNumbering(rounds);
+    const hasInconsistentNumbering = rounds.some(
+      (round, index) =>
+        round.name !== normalized[index]?.name || round.kind !== normalized[index]?.kind,
+    );
     if (hasInconsistentNumbering) {
-      onUpdateRounds(ensureSequentialNumbering(rounds));
+      onUpdateRounds(normalized);
     }
   }, [rounds, onUpdateRounds]);
 
@@ -497,7 +525,11 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
               onClick={() => selectRound(i)}
               title={isPrepMix ? `${round.name} — synced to host mix` : round.name}
             >
-              {i + 1}
+              {roundMetaKind(round) === 'leftovers'
+                ? 'L'
+                : roundMetaKind(round) === 'requests'
+                  ? 'R'
+                  : round.name.replace(/^Round\s+/i, '')}
             </button>
           );
         })}
