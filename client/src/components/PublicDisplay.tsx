@@ -6255,9 +6255,11 @@ const PublicDisplay: React.FC = () => {
                   ) : null}
                   <span className="public-pattern-title__pattern">{patternHeaderLabel}</span>
                 </h2>
-                {pattern === 'custom' &&
-                (customMatchReverse || customMatchAllowRotation || customMatchAllowMirror) ? (
-                  <div className="composite-pattern-header-block" aria-label="Custom pattern modifiers">
+                {pattern === 'custom' ? (
+                  <div
+                    className="composite-pattern-header-block public-custom-pattern-modifiers"
+                    aria-label="Custom pattern modifiers"
+                  >
                     <div className="composite-pattern-chips">
                       {customMatchReverse ? (
                         <span className="composite-pattern-chip composite-pattern-chip--c0">REVERSE</span>
