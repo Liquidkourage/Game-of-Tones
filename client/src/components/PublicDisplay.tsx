@@ -4208,13 +4208,6 @@ const PublicDisplay: React.FC = () => {
 
   const patternHeaderLabel = getPatternShortName();
   const roundHeaderLabel = (currentRoundName || '').trim();
-  const combinedRoundPatternLabel = `${roundHeaderLabel} - ${patternHeaderLabel}`;
-  // Keep genuinely short labels inline; stack when the complete rendered title
-  // would crowd the narrow left rail (for example, "Round 3 - CHECKERBOARD").
-  const inlineRoundWithPattern =
-    !!roundHeaderLabel &&
-    pattern !== 'composite' &&
-    combinedRoundPatternLabel.length <= 20;
 
   const patternLabelForWinnerModal = (p: string) => {
     switch (p) {
@@ -6256,13 +6249,11 @@ const PublicDisplay: React.FC = () => {
               transition={{ duration: 0.6, delay: 0.2 }}
             >
               <div className="bingo-card-header center public-pattern-header">
-                {roundHeaderLabel && !inlineRoundWithPattern ? (
-                  <div className="public-round-eyebrow">{roundHeaderLabel}</div>
-                ) : null}
                 <h2 className="pattern-title-text">
-                  {inlineRoundWithPattern
-                    ? combinedRoundPatternLabel
-                    : patternHeaderLabel}
+                  {roundHeaderLabel ? (
+                    <span className="public-pattern-title__round">{`${roundHeaderLabel} -`}</span>
+                  ) : null}
+                  <span className="public-pattern-title__pattern">{patternHeaderLabel}</span>
                 </h2>
                 {pattern === 'custom' &&
                 (customMatchReverse || customMatchAllowRotation || customMatchAllowMirror) ? (

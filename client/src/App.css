@@ -365,18 +365,40 @@ body {
   height: auto;
   max-height: 100%;
   min-height: 0;
-  padding: 16px 12px 12px;
+  padding: max(18px, calc(env(safe-area-inset-top, 0px) + 8px)) 12px 12px;
 }
-.App .left-col .public-pattern-header {
+.App .left-col .public-pattern-header.center {
   overflow: visible;
-  padding-top: max(6px, 0.2em);
+  justify-content: flex-start;
+  margin-top: 0;
+  padding-top: 8px;
+  transform: none;
+}
+.App .left-col .public-pattern-header > .composite-pattern-header-block,
+.App .left-col .public-pattern-header > .composite-pattern-spotlight-row,
+.App .left-col .public-pattern-header > .public-round-prize-line {
+  flex-basis: auto;
 }
 .App .left-col .public-pattern-header h2.pattern-title-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  column-gap: 0.28em;
+  row-gap: 0;
   line-height: 1.2;
   padding-block: 0.08em 0.04em;
   word-break: normal;
   overflow-wrap: break-word;
   text-wrap: balance;
+}
+.App .left-col .public-pattern-title__round {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.App .left-col .public-pattern-title__pattern {
+  min-width: 0;
+  max-width: 100%;
 }
 .App .left-col .public-round-eyebrow,
 .App .left-col .public-round-prize-line {
