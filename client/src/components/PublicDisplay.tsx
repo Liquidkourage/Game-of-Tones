@@ -4208,11 +4208,13 @@ const PublicDisplay: React.FC = () => {
 
   const patternHeaderLabel = getPatternShortName();
   const roundHeaderLabel = (currentRoundName || '').trim();
-  // Short presets / short custom share a line with Round N; combined + long names stack.
+  const combinedRoundPatternLabel = `${roundHeaderLabel} - ${patternHeaderLabel}`;
+  // Keep genuinely short labels inline; stack when the complete rendered title
+  // would crowd the narrow left rail (for example, "Round 3 - CHECKERBOARD").
   const inlineRoundWithPattern =
     !!roundHeaderLabel &&
     pattern !== 'composite' &&
-    patternHeaderLabel.length <= 18;
+    combinedRoundPatternLabel.length <= 20;
 
   const patternLabelForWinnerModal = (p: string) => {
     switch (p) {
@@ -6259,7 +6261,7 @@ const PublicDisplay: React.FC = () => {
                 ) : null}
                 <h2 className="pattern-title-text">
                   {inlineRoundWithPattern
-                    ? `${roundHeaderLabel} - ${patternHeaderLabel}`
+                    ? combinedRoundPatternLabel
                     : patternHeaderLabel}
                 </h2>
                 {pattern === 'custom' &&
