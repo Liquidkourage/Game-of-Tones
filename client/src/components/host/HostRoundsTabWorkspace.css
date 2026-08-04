@@ -147,6 +147,39 @@
   scrollbar-width: thin;
 }
 
+.host-requests-queue {
+  flex: 1 0 100%;
+  display: grid;
+  gap: 6px;
+  max-height: clamp(180px, 28vh, 360px);
+  margin-top: 4px;
+  padding: 2px 6px 2px 34px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.host-requests-queue--moderation-locked {
+  border-left: 2px solid rgba(255, 196, 92, 0.45);
+}
+
+.host-requests-queue__locked-reason {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: rgba(38, 27, 9, 0.96);
+  color: #ffd58a;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.host-requests-queue--moderation-locked .host-playlist-quick-add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .host-playlist-library-inline .host-tempo-library {
   max-height: clamp(260px, calc(100vh - 430px), 680px);
   overflow-y: auto;

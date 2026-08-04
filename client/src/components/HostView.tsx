@@ -7495,6 +7495,7 @@ const HostView: React.FC = () => {
     }),
     [requestPoolSongs.length],
   );
+  const requestsModerationLocked = gameState === 'playing';
 
   useEffect(() => {
     setEventRounds((current) => {
@@ -7531,6 +7532,10 @@ const HostView: React.FC = () => {
   const moderateSongRequest = useCallback(
     async (request: SongRequestEntry, status: 'approved' | 'rejected') => {
       if (!socket || !roomId || requestModerationBusyId) return;
+      if (requestsModerationLocked) {
+        showToast('Finish the current round to approve or reject requests.', 'warn');
+        return;
+      }
       setRequestModerationBusyId(request.id);
       try {
         let resolvedSong: Song | undefined;
@@ -7581,7 +7586,14 @@ const HostView: React.FC = () => {
         setRequestModerationBusyId(null);
       }
     },
-    [socket, roomId, requestModerationBusyId, isSpotifyConnected, showToast],
+    [
+      socket,
+      roomId,
+      requestModerationBusyId,
+      requestsModerationLocked,
+      isSpotifyConnected,
+      showToast,
+    ],
   );
 
   const generateSongList = useCallback(
@@ -11617,14 +11629,21 @@ const HostView: React.FC = () => {
                           </button>
                         ) : null}
                         <div
-                          style={{
-                            flex: '1 0 100%',
-                            display: 'grid',
-                            gap: 6,
-                            paddingLeft: 34,
-                            marginTop: 4,
-                          }}
+                          className={`host-requests-queue${
+                            requestsModerationLocked
+                              ? ' host-requests-queue--moderation-locked'
+                              : ''
+                          }`}
                         >
+                          {requestsModerationLocked ? (
+                            <span
+                              id="host-requests-moderation-locked-reason"
+                              className="host-requests-queue__locked-reason"
+                              role="status"
+                            >
+                              Finish the current round to approve requests.
+                            </span>
+                          ) : null}
                           {songRequests.length === 0 ? (
                             <span className="host-playlist-desc">
                               No requests yet. Players submit from their card menu.
@@ -11633,7 +11652,6 @@ const HostView: React.FC = () => {
                             songRequests
                               .slice()
                               .reverse()
-                              .slice(0, 12)
                               .map((request) => (
                                 <span
                                   key={request.id}
@@ -11653,7 +11671,15 @@ const HostView: React.FC = () => {
                                       <button
                                         type="button"
                                         className="host-playlist-quick-add"
-                                        disabled={requestModerationBusyId === request.id}
+                                        disabled={
+                                          requestsModerationLocked ||
+                                          requestModerationBusyId === request.id
+                                        }
+                                        aria-describedby={
+                                          requestsModerationLocked
+                                            ? 'host-requests-moderation-locked-reason'
+                                            : undefined
+                                        }
                                         onClick={() => void moderateSongRequest(request, 'approved')}
                                       >
                                         Approve
@@ -11661,7 +11687,15 @@ const HostView: React.FC = () => {
                                       <button
                                         type="button"
                                         className="host-playlist-quick-add"
-                                        disabled={requestModerationBusyId === request.id}
+                                        disabled={
+                                          requestsModerationLocked ||
+                                          requestModerationBusyId === request.id
+                                        }
+                                        aria-describedby={
+                                          requestsModerationLocked
+                                            ? 'host-requests-moderation-locked-reason'
+                                            : undefined
+                                        }
                                         onClick={() => void moderateSongRequest(request, 'rejected')}
                                       >
                                         Reject
