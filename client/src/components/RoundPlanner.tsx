@@ -117,6 +117,9 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   /** Bingo cards tiled per Letter page in PDF exports (1 / 2 / 4 / 6 / 8). */
   printableCardsPerPage: number;
   onPrintableCardsPerPageChange: (n: number) => void;
+  /** Offline pack: by-round or one sheet per player across all rounds. */
+  printableCardPacking: 'by-round' | 'by-player';
+  onPrintableCardPackingChange: (mode: 'by-round' | 'by-player') => void;
   snippetLength: number;
   onSnippetLengthChange: (seconds: number) => void;
   randomStarts: 'none' | 'early' | 'random';
@@ -185,6 +188,8 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   onPrintableCardCountChange,
   printableCardsPerPage,
   onPrintableCardsPerPageChange,
+  printableCardPacking,
+  onPrintableCardPackingChange,
   snippetLength,
   onSnippetLengthChange,
   randomStarts,
@@ -649,20 +654,43 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           </span>
         ) : null}
         <label className="round-planner__cards-pdf">
-          Cards per page
+          Pack cards
           <select
-            value={printableCardsPerPage}
+            value={printableCardPacking}
             disabled={printablePdfLoading}
-            onChange={(e) => onPrintableCardsPerPageChange(Number(e.target.value))}
-            aria-label="Number of bingo cards per printed page"
+            onChange={(e) =>
+              onPrintableCardPackingChange(
+                e.target.value === 'by-player' ? 'by-player' : 'by-round',
+              )
+            }
+            aria-label="How to pack bingo cards in the offline show pack"
+            title="By player puts one player's card from every round on the same sheet"
           >
-            <option value={1}>1</option>
-            <option value={2}>2</option>
-            <option value={4}>4</option>
-            <option value={6}>6</option>
-            <option value={8}>8</option>
+            <option value="by-round">By round</option>
+            <option value="by-player">By player (all rounds)</option>
           </select>
         </label>
+        {printableCardPacking === 'by-round' ? (
+          <label className="round-planner__cards-pdf">
+            Cards per page
+            <select
+              value={printableCardsPerPage}
+              disabled={printablePdfLoading}
+              onChange={(e) => onPrintableCardsPerPageChange(Number(e.target.value))}
+              aria-label="Number of bingo cards per printed page"
+            >
+              <option value={1}>1</option>
+              <option value={2}>2</option>
+              <option value={4}>4</option>
+              <option value={6}>6</option>
+              <option value={8}>8</option>
+            </select>
+          </label>
+        ) : (
+          <span className="round-planner__cards-pdf-hint">
+            One sheet per player; grid auto-fits round count.
+          </span>
+        )}
         {onPreviewPrint ? (
           <button
             type="button"

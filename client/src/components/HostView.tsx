@@ -111,7 +111,9 @@ import {
   clampPrintableCardCount,
   confirmLargePrintableExport,
   normalizeCardsPerPage,
+  normalizePrintableCardPacking,
   type PrintableCard,
+  type PrintableCardPacking,
   type PrintablePdfSection,
 } from '../utils/printableBingoPdf';
 import {
@@ -1438,6 +1440,9 @@ const HostView: React.FC = () => {
   const [printableCardCount, setPrintableCardCount] = useState(30);
   /** How many bingo cards to tile on each Letter page (1 / 2 / 4 / 6 / 8). */
   const [printableCardsPerPage, setPrintableCardsPerPage] = useState(1);
+  /** Offline pack: pack cards by round (default) or one sheet per player across rounds. */
+  const [printableCardPacking, setPrintableCardPacking] =
+    useState<PrintableCardPacking>('by-round');
   const [saveRoundBusy, setSaveRoundBusy] = useState(false);
   const [saveAllRoundsBusy, setSaveAllRoundsBusy] = useState(false);
   const [saveAllRoundsProgress, setSaveAllRoundsProgress] = useState<string | null>(null);
@@ -5941,6 +5946,7 @@ const HostView: React.FC = () => {
           rounds: packRounds,
           callSections,
           cardSections,
+          cardPacking: normalizePrintableCardPacking(printableCardPacking),
         });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -5964,6 +5970,7 @@ const HostView: React.FC = () => {
     freeSpaceEnabled,
     printableCardCount,
     printableCardsPerPage,
+    printableCardPacking,
     fetchPrintableCardsFromServer,
     roundPrintMetaFor,
     bingoColumnLetters,
@@ -11024,6 +11031,8 @@ const HostView: React.FC = () => {
         onPrintableCardCountChange={(n) => setPrintableCardCount(clampPrintableCardCount(n))}
         printableCardsPerPage={printableCardsPerPage}
         onPrintableCardsPerPageChange={setPrintableCardsPerPage}
+        printableCardPacking={printableCardPacking}
+        onPrintableCardPackingChange={setPrintableCardPacking}
         snippetLength={snippetLength}
         onSnippetLengthChange={handleSnippetLengthChange}
         randomStarts={randomStarts}
@@ -11067,6 +11076,7 @@ const HostView: React.FC = () => {
       printablePdfLoading,
       printableCardCount,
       printableCardsPerPage,
+      printableCardPacking,
       snippetLength,
       handleSnippetLengthChange,
       randomStarts,

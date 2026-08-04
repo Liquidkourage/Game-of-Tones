@@ -33,6 +33,8 @@ export interface HostRoundEventPanelProps {
   onPrintableCardCountChange: (n: number) => void;
   printableCardsPerPage: number;
   onPrintableCardsPerPageChange: (n: number) => void;
+  printableCardPacking: 'by-round' | 'by-player';
+  onPrintableCardPackingChange: (mode: 'by-round' | 'by-player') => void;
   printablePdfLoading: boolean;
   saveRoundBusy: boolean;
   mixGameActionsBlocked: boolean;
@@ -59,6 +61,8 @@ const HostRoundEventPanel: React.FC<HostRoundEventPanelProps> = ({
   onPrintableCardCountChange,
   printableCardsPerPage,
   onPrintableCardsPerPageChange,
+  printableCardPacking,
+  onPrintableCardPackingChange,
   printablePdfLoading,
   saveRoundBusy,
   mixGameActionsBlocked,
@@ -161,20 +165,42 @@ const HostRoundEventPanel: React.FC<HostRoundEventPanelProps> = ({
         <span>1–1000{printableCardCount > 200 ? ' · large exports may be slow' : ''}</span>
       </label>
       <label className="host-round-hub-event__cards-label">
-        Cards per page
+        Pack cards
         <select
-          value={printableCardsPerPage}
-          onChange={(e) => onPrintableCardsPerPageChange(Number(e.target.value))}
+          value={printableCardPacking}
+          onChange={(e) =>
+            onPrintableCardPackingChange(
+              e.target.value === 'by-player' ? 'by-player' : 'by-round',
+            )
+          }
           disabled={printablePdfLoading}
-          aria-label="Number of bingo cards per printed page"
+          aria-label="How to pack bingo cards in the offline show pack"
         >
-          <option value={1}>1</option>
-          <option value={2}>2</option>
-          <option value={4}>4</option>
-          <option value={6}>6</option>
-          <option value={8}>8</option>
+          <option value="by-round">By round</option>
+          <option value="by-player">By player (all rounds)</option>
         </select>
       </label>
+      {printableCardPacking === 'by-round' ? (
+        <label className="host-round-hub-event__cards-label">
+          Cards per page
+          <select
+            value={printableCardsPerPage}
+            onChange={(e) => onPrintableCardsPerPageChange(Number(e.target.value))}
+            disabled={printablePdfLoading}
+            aria-label="Number of bingo cards per printed page"
+          >
+            <option value={1}>1</option>
+            <option value={2}>2</option>
+            <option value={4}>4</option>
+            <option value={6}>6</option>
+            <option value={8}>8</option>
+          </select>
+        </label>
+      ) : (
+        <span className="host-round-hub-event__cards-label">
+          One sheet per player; grid auto-fits round count.
+        </span>
+      )}
     </div>
 
     <div className="host-round-hub-event__rounds-section">

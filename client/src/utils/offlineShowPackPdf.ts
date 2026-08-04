@@ -5,7 +5,10 @@ import {
 } from './printRoundCallSheetPdf';
 import {
   appendMultiRoundPrintableCardsToDoc,
+  appendPlayerPackPrintableCardsToDoc,
+  normalizePrintableCardPacking,
   type PdfPageCursor,
+  type PrintableCardPacking,
   type PrintablePdfSection,
 } from './printableBingoPdf';
 
@@ -37,6 +40,8 @@ export type OfflineShowPackPdfOpts = {
   rounds: OfflineShowPackRound[];
   callSections: RoundCallSheetPdfOpts[];
   cardSections: PrintablePdfSection[];
+  /** by-round (default) or by-player (one sheet per player across all rounds). */
+  cardPacking?: PrintableCardPacking;
 };
 
 const MARGIN = 48;
@@ -355,7 +360,12 @@ export async function buildOfflineShowPackPdfBlob(opts: OfflineShowPackPdfOpts):
   drawRunOfShow(doc, opts.rounds);
   drawAudioChecklist(doc, opts.rounds);
   appendMultiRoundCallSheetsToDoc(doc, opts.callSections, cursor);
-  await appendMultiRoundPrintableCardsToDoc(doc, opts.cardSections, cursor);
+  const packing = normalizePrintableCardPacking(opts.cardPacking);
+  if (packing === 'by-player') {
+    await appendPlayerPackPrintableCardsToDoc(doc, opts.cardSections, cursor);
+  } else {
+    await appendMultiRoundPrintableCardsToDoc(doc, opts.cardSections, cursor);
+  }
   drawProjectorCues(doc, opts.rounds);
   return doc.output('blob');
 }

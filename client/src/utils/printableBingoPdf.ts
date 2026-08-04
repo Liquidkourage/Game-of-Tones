@@ -89,6 +89,26 @@ export function confirmLargePrintableExport(count: number): boolean {
   );
 }
 
+/** How multi-round printable cards are packed into the offline show pack. */
+export type PrintableCardPacking = 'by-round' | 'by-player';
+
+export function normalizePrintableCardPacking(v: unknown): PrintableCardPacking {
+  return v === 'by-player' ? 'by-player' : 'by-round';
+}
+
+/**
+ * Auto-fit n-up grid for player packs so one player's rounds fit on one page when possible.
+ * 1→1, 2→2, 3–4→4, 5–6→6, 7+→8 (spill to a second page if more than 8 rounds).
+ */
+export function cardsPerPageForRoundCount(roundCount: number): CardsPerPage {
+  const n = Math.max(0, Math.floor(Number(roundCount)) || 0);
+  if (n <= 1) return 1;
+  if (n === 2) return 2;
+  if (n <= 4) return 4;
+  if (n <= 6) return 6;
+  return 8;
+}
+
 function nUpGrid(cardsPerPage: CardsPerPage): { cols: number; rows: number } {
   switch (cardsPerPage) {
     case 1:
@@ -129,6 +149,8 @@ export type PrintablePdfSection = {
   cards: PrintableCard[];
   opts: PrintablePdfOpts;
 };
+
+type CardDrawItem = { card: PrintableCard; opts: PrintablePdfOpts };
 
 type FitResult = {
   titlePt: number;
@@ -596,16 +618,21 @@ function fillPageWhite(doc: jsPDF): void {
 
 export type PdfPageCursor = { pageStarted: boolean };
 
-/** Append a list of cards into `doc`, tiling `cardsPerPage` per Letter page. */
-async function appendCardsToDoc(
+type LogoCacheEntry = { dataUrl: string; drawW: number; drawH: number } | null;
+
+/**
+ * Tile heterogeneous cards (possibly different round opts/logos) using a fixed n-up grid.
+ * Starts a new page whenever the grid fills; does not pad leftover slots with later batches.
+ */
+async function appendCardItemsToDoc(
   doc: jsPDF,
-  cards: PrintableCard[],
-  opts: PrintablePdfOpts,
+  items: CardDrawItem[],
+  cardsPerPage: CardsPerPage,
   cursor: PdfPageCursor,
 ): Promise<void> {
-  if (!cards.length) return;
+  if (!items.length) return;
 
-  const cpp = normalizeCardsPerPage(opts.cardsPerPage);
+  const cpp = normalizeCardsPerPage(cardsPerPage);
   const { cols, rows } = nUpGrid(cpp);
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -614,11 +641,17 @@ async function appendCardsToDoc(
   const slotW = (pageW - pageMargin * 2 - gutter * (cols - 1)) / cols;
   const slotH = (pageH - pageMargin * 2 - gutter * (rows - 1)) / rows;
 
-  const sampleLayout = computeCardLayoutInSlot(0, 0, slotW, slotH, opts);
-  const logoForGrid = await prepareLogoForGrid(opts, sampleLayout.gridW);
+  const logoCache = new Map<string, LogoCacheEntry>();
+  const logoForOpts = async (opts: PrintablePdfOpts, gridW: number): Promise<LogoCacheEntry> => {
+    const key = `${String(opts.logoUrl || '').trim()}|${gridW}`;
+    if (logoCache.has(key)) return logoCache.get(key) ?? null;
+    const logo = await prepareLogoForGrid(opts, gridW);
+    logoCache.set(key, logo);
+    return logo;
+  };
 
   let slotOnPage = 0;
-  for (const card of cards) {
+  for (const item of items) {
     if (slotOnPage === 0) {
       if (cursor.pageStarted) doc.addPage();
       fillPageWhite(doc);
@@ -629,11 +662,24 @@ async function appendCardsToDoc(
     const row = Math.floor(slotOnPage / cols);
     const ox = pageMargin + col * (slotW + gutter);
     const oy = pageMargin + row * (slotH + gutter);
-    const layout = computeCardLayoutInSlot(ox, oy, slotW, slotH, opts);
-    drawBingoCardInSlot(doc, card, layout, logoForGrid, opts);
+    const layout = computeCardLayoutInSlot(ox, oy, slotW, slotH, item.opts);
+    const logoForGrid = await logoForOpts(item.opts, layout.gridW);
+    drawBingoCardInSlot(doc, item.card, layout, logoForGrid, item.opts);
 
     slotOnPage = (slotOnPage + 1) % cpp;
   }
+}
+
+/** Append a list of cards into `doc`, tiling `cardsPerPage` per Letter page. */
+async function appendCardsToDoc(
+  doc: jsPDF,
+  cards: PrintableCard[],
+  opts: PrintablePdfOpts,
+  cursor: PdfPageCursor,
+): Promise<void> {
+  if (!cards.length) return;
+  const items: CardDrawItem[] = cards.map((card) => ({ card, opts }));
+  await appendCardItemsToDoc(doc, items, normalizeCardsPerPage(opts.cardsPerPage), cursor);
 }
 
 /**
@@ -659,6 +705,36 @@ export async function appendMultiRoundPrintableCardsToDoc(
     if (!section.cards.length) continue;
     // Start each round on a fresh page so rounds never share a sheet.
     await appendCardsToDoc(doc, section.cards, section.opts, cursor);
+  }
+}
+
+/**
+ * One sheet (or spill pages) per player: card index i from each round, auto-fit n-up.
+ * A page never mixes two players — leftover slots stay blank.
+ */
+export async function appendPlayerPackPrintableCardsToDoc(
+  doc: jsPDF,
+  sections: PrintablePdfSection[],
+  cursor: PdfPageCursor,
+): Promise<void> {
+  const active = sections.filter((s) => s.cards.length > 0);
+  if (!active.length) return;
+
+  const packCount = Math.min(...active.map((s) => s.cards.length));
+  if (packCount < 1) return;
+
+  for (let i = 0; i < packCount; i++) {
+    const items: CardDrawItem[] = active.map((section) => ({
+      card: section.cards[i],
+      opts: section.opts,
+    }));
+    const cpp = cardsPerPageForRoundCount(items.length);
+    // Each player starts a fresh page batch (appendCardItemsToDoc opens a page on slot 0).
+    await appendCardItemsToDoc(doc, items, cpp, cursor);
+    // If this player left empty slots, force the next player onto a new page by
+    // ensuring the next append sees cursor.pageStarted and begins at slot 0 —
+    // which it always does. If items.length % cpp !== 0, the next player's first
+    // card still opens a new page because appendCardItemsToDoc always starts at slot 0.
   }
 }
 
