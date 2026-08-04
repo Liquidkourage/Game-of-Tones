@@ -3017,6 +3017,12 @@ const PublicDisplay: React.FC = () => {
       if (Array.isArray(data?.roundWinners)) setRoundWinnersBoard(data.roundWinners);
     });
 
+    newSocket.on('public-winner-dismissed', () => {
+      setWinnerCardModal(null);
+      setShowWinnerBanner(false);
+      setWinnerName('');
+    });
+
     newSocket.on('sponsor-screen-updated', (data: any) => {
       const ss = data?.sponsorScreen;
       if (!ss || typeof ss !== 'object') return;

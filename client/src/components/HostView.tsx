@@ -7378,6 +7378,9 @@ const HostView: React.FC = () => {
 
   /** Close round-complete celebration without starting the next round or ending the session. */
   const dismissRoundCompleteModal = useCallback(() => {
+    if (socket && roomId) {
+      socket.emit('dismiss-public-winner', { roomId });
+    }
     setEventRounds((prev) => {
       const cur = currentRoundIndexRef.current;
       if (cur < 0 || cur >= prev.length || prev[cur].status === 'completed') return prev;
@@ -7400,7 +7403,7 @@ const HostView: React.FC = () => {
     setGameState('waiting');
     showToast('Round marked complete — use Round Planner to prep or start the next round when ready.', 'info');
     addLog('Round complete modal dismissed — current round marked complete', 'info');
-  }, [showToast, addLog, roomId]);
+  }, [socket, showToast, addLog, roomId]);
 
 
 

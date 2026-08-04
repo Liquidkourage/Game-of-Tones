@@ -5820,6 +5820,23 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Host: dismiss the verified-winner card without clearing the night winners board.
+  socket.on('dismiss-public-winner', (data = {}) => {
+    try {
+      const { roomId } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost =
+        room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+      room.lastDisplayWinner = null;
+      io.to(roomId).emit('public-winner-dismissed');
+      routineServerLog(`🏆 Public winner card dismissed for room ${roomId}`);
+    } catch (e) {
+      console.error('❌ Error dismissing public winner card:', e?.message || e);
+    }
+  });
+
   // Host: configure between-rounds sponsor screen (media + text + optional QR)
   socket.on('set-sponsor-screen', (data = {}) => {
     try {
