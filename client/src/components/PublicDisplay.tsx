@@ -5522,7 +5522,43 @@ const PublicDisplay: React.FC = () => {
         </div>
       )}
 
-      {showNightBoard && roundWinnersBoard.length > 0 && (
+      {showNightBoard && roundWinnersBoard.length > 0 && (() => {
+        const nightBoardRows = roundWinnersBoard.length;
+        /** Scale type down only when the list is long so every row stays readable from the floor. */
+        const nightBoardDense = nightBoardRows >= 8;
+        const nightBoardComfortable = nightBoardRows <= 4;
+        const colTemplate = 'minmax(0, 1.15fr) minmax(0, 1.35fr) minmax(0, 1.55fr)';
+        const titleSize = nightBoardDense
+          ? 'clamp(1.45rem, 3.4vmin, 2.6rem)'
+          : 'clamp(1.85rem, 4.4vmin, 3.4rem)';
+        const headerSize = nightBoardDense
+          ? 'clamp(0.95rem, 1.9vmin, 1.35rem)'
+          : 'clamp(1.1rem, 2.4vmin, 1.7rem)';
+        const roundSize = nightBoardDense
+          ? 'clamp(1.25rem, 2.8vmin, 2.1rem)'
+          : nightBoardComfortable
+            ? 'clamp(1.65rem, 3.8vmin, 2.9rem)'
+            : 'clamp(1.45rem, 3.3vmin, 2.5rem)';
+        const prizeSize = nightBoardDense
+          ? 'clamp(1.25rem, 2.8vmin, 2.1rem)'
+          : nightBoardComfortable
+            ? 'clamp(1.65rem, 3.8vmin, 2.9rem)'
+            : 'clamp(1.45rem, 3.3vmin, 2.5rem)';
+        const winnerSize = nightBoardDense
+          ? 'clamp(1.55rem, 3.6vmin, 2.75rem)'
+          : nightBoardComfortable
+            ? 'clamp(2.1rem, 5.2vmin, 4rem)'
+            : 'clamp(1.85rem, 4.4vmin, 3.4rem)';
+        const rowPadY = nightBoardDense
+          ? 'clamp(12px, 1.6vmin, 20px)'
+          : nightBoardComfortable
+            ? 'clamp(18px, 2.6vmin, 36px)'
+            : 'clamp(14px, 2vmin, 28px)';
+        const rowGap = nightBoardDense
+          ? 'clamp(8px, 1.2vmin, 14px)'
+          : 'clamp(12px, 1.8vmin, 22px)';
+
+        return (
         <div
           className="public-night-board"
           role="region"
@@ -5531,36 +5567,42 @@ const PublicDisplay: React.FC = () => {
             position: 'fixed',
             inset: 0,
             zIndex: 2500,
-            background: 'rgba(0,0,0,0.82)',
-            backdropFilter: 'blur(10px)',
+            background: 'rgba(0,0,0,0.88)',
+            backdropFilter: 'blur(12px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: 'clamp(16px, 3vmin, 40px)',
+            padding: 'clamp(12px, 2.2vmin, 36px)',
             pointerEvents: 'none',
           }}
         >
           <div
             style={{
-              width: 'min(92vw, 900px)',
-              maxHeight: 'min(88vh, 900px)',
+              width: 'min(96vw, 1760px)',
+              maxHeight: 'min(94vh, calc(100vh - 24px))',
               overflow: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
               background: pdGlass.glassPanelStrong,
-              border: `max(2px, 0.3vmin) solid ${pdGlass.borderMintStrong}`,
-              borderRadius: 'clamp(14px, 2vmin, 24px)',
-              boxShadow: `${pdGlass.glowMint}, 0 24px 64px rgba(0,0,0,0.55)`,
-              padding: 'clamp(18px, 3vmin, 36px)',
+              border: `max(3px, 0.35vmin) solid ${pdGlass.borderMintStrong}`,
+              borderRadius: 'clamp(16px, 2.2vmin, 28px)',
+              boxShadow: `${pdGlass.glowMint}, 0 32px 80px rgba(0,0,0,0.65)`,
+              padding: 'clamp(20px, 3.2vmin, 44px) clamp(22px, 3.6vmin, 52px)',
+              boxSizing: 'border-box',
             }}
           >
             <div
               style={{
-                fontSize: 'clamp(1.1rem, 2.6vmin, 1.8rem)',
-                letterSpacing: '0.18em',
+                fontSize: titleSize,
+                letterSpacing: '0.14em',
                 textTransform: 'uppercase',
-                fontWeight: 800,
-                color: 'rgba(0,255,170,0.92)',
+                fontWeight: 900,
+                color: '#5dffc0',
                 textAlign: 'center',
-                marginBottom: 'clamp(12px, 2vmin, 22px)',
+                marginBottom: 'clamp(14px, 2.4vmin, 28px)',
+                flexShrink: 0,
+                textShadow: '0 2px 18px rgba(0,0,0,0.55), 0 0 28px rgba(0,255,170,0.22)',
+                lineHeight: 1.1,
               }}
             >
               Tonight&apos;s board
@@ -5568,46 +5610,71 @@ const PublicDisplay: React.FC = () => {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'minmax(5rem, 1.1fr) minmax(5rem, 1.4fr) minmax(5rem, 1.2fr)',
-                gap: 'clamp(8px, 1.5vmin, 18px)',
-                padding: '0 clamp(12px, 1.6vmin, 18px) clamp(8px, 1.2vmin, 12px)',
-                fontSize: 'clamp(0.75rem, 1.4vmin, 1rem)',
+                gridTemplateColumns: colTemplate,
+                gap: 'clamp(12px, 2vmin, 28px)',
+                padding: `0 clamp(8px, 1.2vmin, 16px) clamp(10px, 1.4vmin, 16px)`,
+                fontSize: headerSize,
                 fontWeight: 800,
-                letterSpacing: '0.1em',
+                letterSpacing: '0.12em',
                 textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.55)',
+                color: 'rgba(255,255,255,0.72)',
+                flexShrink: 0,
+                borderBottom: '1px solid rgba(255,255,255,0.14)',
+                marginBottom: 'clamp(10px, 1.5vmin, 18px)',
               }}
             >
               <span>Round</span>
               <span>Prize</span>
               <span style={{ textAlign: 'right' }}>Winner</span>
             </div>
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'clamp(8px, 1.2vmin, 14px)' }}>
+            <ul
+              style={{
+                listStyle: 'none',
+                margin: 0,
+                padding: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: rowGap,
+                flex: '1 1 auto',
+                minHeight: 0,
+                justifyContent: nightBoardComfortable ? 'center' : 'flex-start',
+              }}
+            >
               {roundWinnersBoard.map((w, idx) => (
                 <li
                   key={`${w.roundNumber}-${w.playerName}-${idx}`}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'minmax(5rem, 1.1fr) minmax(5rem, 1.4fr) minmax(5rem, 1.2fr)',
-                    gap: 'clamp(8px, 1.5vmin, 18px)',
+                    gridTemplateColumns: colTemplate,
+                    gap: 'clamp(12px, 2vmin, 28px)',
                     alignItems: 'center',
-                    padding: 'clamp(10px, 1.4vmin, 16px) clamp(12px, 1.6vmin, 18px)',
-                    borderRadius: 12,
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(0,255,136,0.22)',
+                    padding: `${rowPadY} clamp(14px, 2vmin, 28px)`,
+                    borderRadius: 'clamp(12px, 1.4vmin, 18px)',
+                    background: 'rgba(255,255,255,0.06)',
+                    border: 'max(1px, 0.18vmin) solid rgba(0,255,136,0.28)',
+                    boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.18)',
                   }}
                 >
-                  <span style={{ fontWeight: 800, fontSize: 'clamp(1rem, 2.2vmin, 1.45rem)' }}>
+                  <span
+                    style={{
+                      fontWeight: 800,
+                      fontSize: roundSize,
+                      color: 'rgba(255,255,255,0.92)',
+                      lineHeight: 1.15,
+                      wordBreak: 'break-word',
+                      textShadow: '0 2px 10px rgba(0,0,0,0.4)',
+                    }}
+                  >
                     {w.roundName || `Round ${w.roundNumber}`}
                   </span>
                   <span
                     style={{
-                      color: '#f5d061',
-                      fontWeight: 700,
-                      fontSize: 'clamp(0.95rem, 2vmin, 1.35rem)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
+                      color: '#ffe28a',
+                      fontWeight: 800,
+                      fontSize: prizeSize,
+                      lineHeight: 1.15,
+                      wordBreak: 'break-word',
+                      textShadow: '0 2px 10px rgba(0,0,0,0.4)',
                     }}
                   >
                     {(w.prize || '').trim() || '—'}
@@ -5615,10 +5682,12 @@ const PublicDisplay: React.FC = () => {
                   <span
                     style={{
                       fontWeight: 900,
-                      fontSize: 'clamp(1.05rem, 2.4vmin, 1.6rem)',
-                      color: '#eafff8',
+                      fontSize: winnerSize,
+                      color: '#f3fffa',
                       textAlign: 'right',
+                      lineHeight: 1.12,
                       wordBreak: 'break-word',
+                      textShadow: '0 3px 16px rgba(0,0,0,0.5), 0 0 24px rgba(0,255,170,0.18)',
                     }}
                   >
                     {w.playerName}
@@ -5629,10 +5698,15 @@ const PublicDisplay: React.FC = () => {
             {roomPhase === 'round_complete' && currentRoundPrize ? (
               <div
                 style={{
-                  marginTop: 'clamp(12px, 2vmin, 20px)',
+                  marginTop: 'clamp(14px, 2.2vmin, 24px)',
                   textAlign: 'center',
-                  fontSize: 'clamp(0.9rem, 1.8vmin, 1.2rem)',
-                  color: 'rgba(255,255,255,0.65)',
+                  fontSize: nightBoardDense
+                    ? 'clamp(1.05rem, 2.2vmin, 1.55rem)'
+                    : 'clamp(1.2rem, 2.6vmin, 1.9rem)',
+                  fontWeight: 700,
+                  color: 'rgba(255,255,255,0.78)',
+                  flexShrink: 0,
+                  lineHeight: 1.25,
                 }}
               >
                 Latest prize: {currentRoundPrize}
@@ -5640,7 +5714,8 @@ const PublicDisplay: React.FC = () => {
             ) : null}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {typeof document !== 'undefined' &&
         createPortal(
