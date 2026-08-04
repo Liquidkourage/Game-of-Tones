@@ -684,6 +684,103 @@ function trackTitleArtistDedupKey(s: {
   return id || null;
 }
 
+type TrackTitleArtistCollision = {
+  title: string;
+  artist: string;
+  occurrences: Array<{
+    id: string;
+    playlistName: string;
+    playlistId: string;
+  }>;
+};
+
+/** Find Spotify rows that look like the same song but have different track ids. */
+function findTrackTitleArtistCollisions(
+  songs: Song[],
+  playlists: Array<{ id: string; name: string }>,
+): TrackTitleArtistCollision[] {
+  const playlistNames = new Map(
+    playlists.map((playlist) => [
+      canonicalPlaylistIdForMatch(String(playlist.id)),
+      playlist.name,
+    ]),
+  );
+  const groups = new Map<
+    string,
+    {
+      title: string;
+      artist: string;
+      occurrences: TrackTitleArtistCollision['occurrences'];
+      seen: Set<string>;
+    }
+  >();
+
+  for (const song of songs) {
+    const id = String(song.id || '').trim();
+    const key = trackTitleArtistDedupKey(song);
+    if (!id || !key) continue;
+
+    const playlistId = String(song.sourcePlaylistId || '').trim();
+    const canonicalPlaylistId = playlistId
+      ? canonicalPlaylistIdForMatch(playlistId)
+      : '';
+    const playlistName =
+      song.sourcePlaylistName ||
+      (canonicalPlaylistId ? playlistNames.get(canonicalPlaylistId) : '') ||
+      'Unknown playlist';
+    const occurrenceKey = `${id}\0${canonicalPlaylistId || playlistName}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        title: song.name || 'Unknown title',
+        artist: song.artist || 'Unknown artist',
+        occurrences: [],
+        seen: new Set<string>(),
+      };
+      groups.set(key, group);
+    }
+    if (group.seen.has(occurrenceKey)) continue;
+    group.seen.add(occurrenceKey);
+    group.occurrences.push({ id, playlistName, playlistId });
+  }
+
+  return Array.from(groups.values())
+    .filter((group) => new Set(group.occurrences.map((row) => row.id)).size > 1)
+    .map(({ title, artist, occurrences }) => ({ title, artist, occurrences }))
+    .sort((a, b) => `${a.artist}\0${a.title}`.localeCompare(`${b.artist}\0${b.title}`));
+}
+
+function confirmTrackTitleArtistCollisions(
+  songs: Song[],
+  playlists: Array<{ id: string; name: string }>,
+): boolean {
+  const collisions = findTrackTitleArtistCollisions(songs, playlists);
+  if (collisions.length === 0) return true;
+
+  const maxShown = 12;
+  const details = collisions.slice(0, maxShown).map((collision) => {
+    const playlistCount = new Set(
+      collision.occurrences.map((row) => row.playlistId || row.playlistName),
+    ).size;
+    const scope = playlistCount > 1 ? 'across playlists' : 'within one playlist';
+    const rows = collision.occurrences
+      .map((row) => `    • ${row.playlistName} — ID ${row.id}`)
+      .join('\n');
+    return `• ${collision.title} — ${collision.artist} (${scope})\n${rows}`;
+  });
+  if (collisions.length > maxShown) {
+    details.push(`• …and ${collisions.length - maxShown} more collision(s)`);
+  }
+
+  return window.confirm(
+    `Possible duplicate tracks found\n\n` +
+      `These tracks have the same normalized title and artist but different IDs. ` +
+      `In a 5×15 round they can land in separate columns.\n\n` +
+      `${details.join('\n\n')}\n\n` +
+      `Continue finalizing this mix?`,
+  );
+}
+
 function buildPlayedAnywhereKeys(eventRounds: EventRound[], livePlayed: Song[]): Set<string> {
   const keys = new Set<string>();
   const addSong = (s: Song | null | undefined) => {
@@ -5393,6 +5490,13 @@ const HostView: React.FC = () => {
             setFiveByFifteenInsufficientModal({ variant: 'blocked', warnings });
             return false;
           }
+          if (
+            !opts?.songListOverride &&
+            !confirmTrackTitleArtistCollisions(listToSend, playlists)
+          ) {
+            addLog('Finalize cancelled after possible duplicate-track warning.', 'warn');
+            return false;
+          }
         }
 
         console.log('?? Finalizing mix with songList:', {
@@ -6104,6 +6208,7 @@ const HostView: React.FC = () => {
           : {}),
         freeSpace: freeSpaceForStart,
         savedRoundPlayback: useSavedRoundPlayback,
+        savedRoundId: useSavedRoundPlayback ? roundForStart?.id : undefined,
         roundName: roundForStart?.name || `Round ${(currentRoundIndex ?? 0) + 1}`,
         prize: typeof roundForStart?.prize === 'string' ? roundForStart.prize.trim() : '',
       });
@@ -8193,10 +8298,23 @@ const HostView: React.FC = () => {
       setShowNightBoard(visible);
       if (socket && roomId) {
         socket.emit('set-night-board-visible', { roomId, visible });
+        if (!visible) {
+          socket.emit('dismiss-public-winner', { roomId });
+        }
       }
     },
     [socket, roomId],
   );
+
+  const dismissPublicWinnerPopup = useCallback(() => {
+    if (!socket || !roomId) {
+      showToast('Display is not connected yet.', 'error');
+      return;
+    }
+    socket.emit('dismiss-public-winner', { roomId });
+    showToast('Winner popup hidden. The winners board setting is unchanged.', 'info');
+    addLog('Public winner popup dismissed from Display controls', 'info');
+  }, [socket, roomId, showToast, addLog]);
 
   const roundBuilderFocusIndexRef = useRef(roundBuilderFocusIndex);
   useEffect(() => {
@@ -9276,6 +9394,13 @@ const HostView: React.FC = () => {
           return false;
         }
         if (!blockIfFivePlaylistsTooShort(listToSend)) return false;
+        if (
+          mixRows.length === 5 &&
+          !confirmTrackTitleArtistCollisions(listToSend, mixRows)
+        ) {
+          addLog('Save round cancelled after possible duplicate-track warning.', 'warn');
+          return false;
+        }
         pool = listToSend.map(cloneSongForSnapshot);
       } else {
         const ok = await finalizeMix({ playlists: mixRows });
@@ -9633,7 +9758,7 @@ const HostView: React.FC = () => {
   const handleRestartRound = useCallback(() => {
     if (
       !window.confirm(
-        'Restart this round?\n\nStops playback and clears cards. The same round stays active — use Start Game when ready.',
+        'Restart this round?\n\nStops playback and clears card progress. The same saved round and player card assignments stay active — use Start Game when ready.',
       )
     ) {
       return;
@@ -13170,6 +13295,39 @@ const HostView: React.FC = () => {
                   Open display
                 </a>
               ) : null}
+            </div>
+          </section>
+
+          <section className="host-glass-panel host-display-link-panel" aria-label="Live winner display controls">
+            <h2
+              className="host-manager-section__title"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 8px' }}
+            >
+              <Trophy className="w-5 h-5" style={{ color: '#ffd166' }} aria-hidden />
+              Live winner controls
+            </h2>
+            <p style={{ margin: '0 0 12px', color: '#b3b3b3', fontSize: '0.85rem', lineHeight: 1.45 }}>
+              Take the winner celebration off the projector immediately. This does not complete the round.
+            </p>
+            <div className="host-display-link-panel__actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={dismissPublicWinnerPopup}
+                style={{ borderColor: 'rgba(255, 107, 107, 0.65)', color: '#ffb3b3', fontWeight: 800 }}
+              >
+                <X className="w-4 h-4" aria-hidden />
+                Hide winner popup now
+              </button>
+              <label className="host-night-board__toggle">
+                <input
+                  type="checkbox"
+                  className="host-control-checkbox"
+                  checked={showNightBoard}
+                  onChange={(e) => setNightBoardVisible(e.target.checked)}
+                />
+                <span>Show winners board on projector</span>
+              </label>
             </div>
           </section>
 

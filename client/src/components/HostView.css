@@ -3010,12 +3010,13 @@
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 14px;
+  gap: 12px 16px;
+  padding: 12px 14px;
   margin: 0 0 10px;
 }
 
 .host-view .host-panic-strip__label {
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -3026,23 +3027,31 @@
 .host-view .host-panic-strip__buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   flex: 1 1 auto;
 }
 
 .host-view .host-panic-strip__btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 8px 12px;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 11px 16px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.08);
   color: #f2f2f2;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 700;
   cursor: pointer;
+  touch-action: manipulation;
+}
+
+.host-view .host-panic-strip__btn svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
 }
 
 .host-view .host-panic-strip__btn:disabled {

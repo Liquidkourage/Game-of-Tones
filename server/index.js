@@ -399,6 +399,50 @@ async function persistPlayerDataCard(room, player, cardOrCards) {
   }
 }
 
+function savedRoundCardOwnerKeys(playerId, player) {
+  const keys = [];
+  if (player?.clientId) keys.push(`client:${player.clientId}`);
+  if (player?.playerUserId != null) keys.push(`user:${player.playerUserId}`);
+  if (playerId) keys.push(`socket:${playerId}`);
+  return keys;
+}
+
+function savedRoundCardIdentity(savedRoundId, songs, playOrder, freeSpace) {
+  const songIds = (Array.isArray(songs) ? songs : [])
+    .map((song) => (typeof song === 'string' ? song : song?.id))
+    .filter(Boolean)
+    .map(String);
+  const orderIds = (Array.isArray(playOrder) ? playOrder : [])
+    .map((song) => (typeof song === 'string' ? song : song?.id))
+    .filter(Boolean)
+    .map(String);
+  if (!savedRoundId || songIds.length === 0) return null;
+  return `${String(savedRoundId)}|free:${freeSpace ? 1 : 0}|songs:${songIds.join(',')}|order:${orderIds.join(',')}`;
+}
+
+function cacheSavedRoundPlayerCards(room, playerId, player, cards) {
+  const roundKey = room?.activeSavedRoundCardKey;
+  if (!roundKey || !cards?.length) return;
+  if (!room.savedRoundCardsByKey) room.savedRoundCardsByKey = new Map();
+  if (!room.savedRoundCardsByKey.has(roundKey)) {
+    room.savedRoundCardsByKey.set(roundKey, new Map());
+  }
+  const roundCards = room.savedRoundCardsByKey.get(roundKey);
+  for (const ownerKey of savedRoundCardOwnerKeys(playerId, player)) {
+    roundCards.set(ownerKey, cards);
+  }
+}
+
+function savedRoundCardsForPlayer(room, roundKey, playerId, player) {
+  const roundCards = room?.savedRoundCardsByKey?.get(roundKey);
+  if (!roundCards) return [];
+  for (const ownerKey of savedRoundCardOwnerKeys(playerId, player)) {
+    const cards = playerBingoCards.asBingoCardList(roundCards.get(ownerKey));
+    if (cards.length) return cards;
+  }
+  return [];
+}
+
 function storePlayerBingoCards(room, playerId, player, cardsOrCard, preferredCardId = null) {
   const list = playerBingoCards
     .asBingoCardList(cardsOrCard)
@@ -416,6 +460,7 @@ function storePlayerBingoCards(room, playerId, player, cardsOrCard, preferredCar
     if (!room.clientCards) room.clientCards = new Map();
     room.clientCards.set(player.clientId, list);
   }
+  cacheSavedRoundPlayerCards(room, playerId, player, list);
   return list;
 }
 
@@ -7257,7 +7302,7 @@ io.on('connection', (socket) => {
 
   socket.on('start-game', async (data) => {
     routineServerLog('🎮 Start game event received:', data);
-    const { roomId, playlists, snippetLength = 30, deviceId, songList, lockedPlayOrder, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchReverse: incomingCustomReverse, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, customPatternName: incomingCustomPatternName, freeSpace, savedRoundPlayback, roundName: incomingRoundName, prize: incomingRoundPrize } = data;
+    const { roomId, playlists, snippetLength = 30, deviceId, songList, lockedPlayOrder, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchReverse: incomingCustomReverse, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, customPatternName: incomingCustomPatternName, freeSpace, savedRoundPlayback, savedRoundId, roundName: incomingRoundName, prize: incomingRoundPrize } = data;
     const room = rooms.get(roomId);
     
     routineServerLog('🔍 Room found:', !!room);
@@ -7404,6 +7449,34 @@ io.on('connection', (socket) => {
         }
 
         routineServerLog('🎵 Generating bingo cards...');
+        const savedRoundCardKey = useSavedRoundPlayback
+          ? savedRoundCardIdentity(
+              savedRoundId,
+              savedRoundSongs,
+              useLockedPlayOrder ? requestedLockedOrder : [],
+              fsForMin,
+            )
+          : null;
+        const preservedSavedRoundCards = new Map();
+        if (savedRoundCardKey) {
+          for (const [playerId, player] of room.players.entries()) {
+            const priorCards = savedRoundCardsForPlayer(
+              room,
+              savedRoundCardKey,
+              playerId,
+              player,
+            );
+            if (
+              priorCards.length &&
+              priorCards.every((card) => bingoCardMatchesCurrentRoundPool(room, card))
+            ) {
+              preservedSavedRoundCards.set(playerId, priorCards);
+            }
+          }
+          room.activeSavedRoundCardKey = savedRoundCardKey;
+        } else {
+          room.activeSavedRoundCardKey = null;
+        }
         const forceRegenerateCards = shouldRegenerateBingoCardsOnStartGame(
           room,
           playlists,
@@ -7481,7 +7554,9 @@ io.on('connection', (socket) => {
                   (Array.isArray(songList) && songList.length > 0 ? songList : null);
           }
           applyShowPoolOrderToRoom(room, roomId, showDeck);
-          const cardsOk = await generateBingoCards(roomId, playlistsToUse, songOrderForCards);
+          const cardsOk = await generateBingoCards(roomId, playlistsToUse, songOrderForCards, {
+            preservedCardsByPlayer: preservedSavedRoundCards,
+          });
           if (!cardsOk) {
             const playersNeedingCards = Array.from(room.players.values()).filter(
               (p) => p && !p.isHost && p.name !== 'Display',
@@ -9156,7 +9231,7 @@ function emitFinalizedOrderFromRoomState(roomId, room) {
   return false;
 }
 
-async function generateBingoCards(roomId, playlists, songOrder = null) {
+async function generateBingoCards(roomId, playlists, songOrder = null, options = {}) {
   routineServerLog('🎲 Generating bingo cards for room:', roomId);
   const room = rooms.get(roomId);
   if (!room) {
@@ -9563,6 +9638,23 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
   for (const [playerId, player] of room.players) {
     try {
       if (!player || player.isHost || isDisplayConnectionPlayer(player)) continue;
+      const preservedCards = playerBingoCards.asBingoCardList(
+        options.preservedCardsByPlayer?.get(playerId),
+      );
+      if (
+        preservedCards.length &&
+        preservedCards.every((card) => bingoCardMatchesCurrentRoundPool(room, card))
+      ) {
+        preservedCards.forEach(resetBingoCardMarks);
+        storePlayerBingoCards(room, playerId, player, preservedCards);
+        cards.set(playerId, preservedCards);
+        emitBingoCardsToSocket(playerId, preservedCards, { isNewCard: false, room });
+        void persistPlayerDataCard(room, player, preservedCards);
+        routineServerLog(
+          `♻️ Reused ${preservedCards.length} saved-round card(s) for ${player.name}`,
+        );
+        continue;
+      }
       routineServerLog(`🎲 Generating card for player: ${player.name} (${playerId})`);
       let chosen25 = [];
       if (mode === '1x75') {
