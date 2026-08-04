@@ -75,7 +75,7 @@ export interface SavedCustomPattern {
   id: string;
   name: string;
   positions: string[];
-  /** When set, the logical inverse of the painted shape is the winning mask. */
+  /** When set, both the painted shape and its logical inverse are winning masks. */
   matchReverse?: boolean;
   /** When set, any 90° rotation of the painted shape counts as a win (same as combined-pattern masks). */
   matchAllowRotation?: boolean;
@@ -166,7 +166,7 @@ export function isCoverAllWinPattern(pattern: BingoPattern): boolean {
 /** All 25 cell keys for a standard 5×5 card (same set as `full_card`). */
 export const STANDARD_BINGO_POSITIONS: readonly string[] = BINGO_PATTERNS.full_card.positions;
 
-/** Resolve a custom pattern's non-destructive Reverse option against its stored base mask. */
+/** Resolve one custom mask, optionally to its logical inverse. */
 export function resolveCustomPatternMask(
   positions: readonly string[],
   matchReverse?: boolean,
@@ -306,10 +306,12 @@ export function customMaskHighlightPositions(
   opts?: { matchReverse?: boolean; matchAllowRotation?: boolean; matchAllowMirror?: boolean },
 ): string[] {
   if (!positions) return [];
-  const effective = resolveCustomPatternMask(positions, opts?.matchReverse);
-  if (!effective.length) return [];
-  const t = hostOrientationTransforms(opts || {});
-  return unionMaskVariantsPositions(effective, t);
+  const variants = customPatternMaskVariants(positions, opts);
+  const union = new Set<string>();
+  for (const mask of variants) {
+    for (const pos of mask) union.add(pos);
+  }
+  return Array.from(union).sort();
 }
 
 type CardSqLite = { position: string; marked?: boolean; songId?: string; isFreeSpace?: boolean };
@@ -339,10 +341,7 @@ export function evaluateCustomPatternVisual(
   opts?: { matchReverse?: boolean; matchAllowRotation?: boolean; matchAllowMirror?: boolean },
 ): boolean {
   if (!card?.squares?.length || !basePositions) return false;
-  const effective = resolveCustomPatternMask(basePositions, opts?.matchReverse);
-  if (!effective.length) return false;
-  const transforms = hostOrientationTransforms(opts || {});
-  const variants = expandMaskOrientations(effective, transforms);
+  const variants = customPatternMaskVariants(basePositions, opts);
   return variants.some((m) => everyMarked(card, m));
 }
 
@@ -354,15 +353,12 @@ export function evaluateCustomPatternStrict(
   opts?: { matchReverse?: boolean; matchAllowRotation?: boolean; matchAllowMirror?: boolean },
 ): boolean {
   if (!card?.squares?.length || !basePositions) return false;
-  const effective = resolveCustomPatternMask(basePositions, opts?.matchReverse);
-  if (!effective.length) return false;
   const cur = playedSongIds;
   const isValid = (sq: CardSqLite) => {
     const free = !!(sq.isFreeSpace || sq.songId === '__FREE_SPACE__');
     return !!(sq.marked && (free || cur.includes(sq.songId || '')));
   };
-  const transforms = hostOrientationTransforms(opts || {});
-  const variants = expandMaskOrientations(effective, transforms);
+  const variants = customPatternMaskVariants(basePositions, opts);
   return variants.some((m) => everyStrict(card, m, isValid));
 }
 
@@ -441,6 +437,29 @@ export function expandMaskOrientations(base: readonly string[], extras?: GridTra
     add(transformPositions([...base], t));
   }
   return Array.from(maps.values());
+}
+
+/**
+ * All allowed standalone custom-pattern masks. Reverse adds the complemented
+ * shape alongside the original; orientation flags apply to both shapes.
+ */
+export function customPatternMaskVariants(
+  positions: readonly string[],
+  opts?: { matchReverse?: boolean; matchAllowRotation?: boolean; matchAllowMirror?: boolean },
+): string[][] {
+  const base = resolveCustomPatternMask(positions);
+  if (!base.length) return [];
+  const transforms = hostOrientationTransforms(opts || {});
+  const variants = new Map<string, string[]>();
+  const addShape = (shape: readonly string[]) => {
+    if (!shape.length) return;
+    for (const mask of expandMaskOrientations(shape, transforms)) {
+      variants.set(mask.join('|'), mask);
+    }
+  };
+  addShape(base);
+  if (opts?.matchReverse) addShape(resolveCustomPatternMask(base, true));
+  return Array.from(variants.values());
 }
 
 /** Whether this clause type may use extra rotations/reflections at match time. */
@@ -877,12 +896,19 @@ export function hostPatternLegitProgress(
   }
 
   if (canonical === 'custom' && opts.customMask?.length) {
-    const effective = resolveCustomPatternMask(opts.customMask, opts.customMatchReverse);
-    const transforms = hostOrientationTransforms({
+    const variants = customPatternMaskVariants(opts.customMask, {
+      matchReverse: opts.customMatchReverse,
       matchAllowRotation: opts.customMatchAllowRotation,
       matchAllowMirror: opts.customMatchAllowMirror,
     });
-    const { hit, total, pct } = maskLegitRatioBest(card, effective, transforms, legit);
+    let best = { hit: 0, total: variants[0]?.length ?? 0, pct: 0 };
+    for (const mask of variants) {
+      const candidate = maskLegitRatioBest(card, mask, undefined, legit);
+      if (candidate.pct > best.pct || (candidate.pct === best.pct && candidate.hit > best.hit)) {
+        best = candidate;
+      }
+    }
+    const { hit, total, pct } = best;
     return { hit, total, pct, winComplete: pct >= 100 };
   }
 

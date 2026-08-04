@@ -55,9 +55,7 @@ import {
   normalizeLinesRequired,
   customMaskHighlightPositions,
   LINE_PATTERN_MAX_LINES,
-  expandMaskOrientations,
-  hostOrientationTransforms,
-  resolveCustomPatternMask,
+  customPatternMaskVariants,
   clauseHighlightPositions,
   describeCompositeClauseBrief,
   describeCompositeClauseAudience,
@@ -1609,12 +1607,11 @@ const PublicDisplay: React.FC = () => {
 
   const customPatternDemoFrames = useMemo(() => {
     if (pattern !== 'custom' || !customMask || customMask.size === 0) return [];
-    const base = resolveCustomPatternMask(Array.from(customMask), customMatchReverse);
-    const transforms = hostOrientationTransforms({
+    return customPatternMaskVariants(Array.from(customMask), {
+      matchReverse: customMatchReverse,
       matchAllowRotation: customMatchAllowRotation,
       matchAllowMirror: customMatchAllowMirror,
     });
-    return expandMaskOrientations(base, transforms);
   }, [pattern, customMask, customMatchReverse, customMatchAllowRotation, customMatchAllowMirror]);
 
   /** Combined-pattern projector demos — line/full clauses expand into concrete examples; dedupe shared shapes. */

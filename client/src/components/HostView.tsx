@@ -467,7 +467,7 @@ interface EventRound {
   patternComposite?: PatternCompositeSpec;
   /** When `bingoPattern === 'line'`: how many distinct rows/columns/diagonals must be complete (1–12). */
   linesRequired?: number;
-  /** Custom pattern: use the logical inverse of the stored base mask. */
+  /** Custom pattern: allow the stored base mask and its logical inverse. */
   customMatchReverse?: boolean;
   /** Custom pattern: allow rotated placements when matching (stored per round). */
   customMatchAllowRotation?: boolean;

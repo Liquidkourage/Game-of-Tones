@@ -132,7 +132,7 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
                 onChange={(e) => setMatchReverse(e.target.checked)}
               />
               <span>
-                <strong>Reverse</strong> (use the unpainted squares)
+                <strong>Reverse</strong> (also allow the unpainted squares)
               </span>
             </label>
             <label className="host-check-row">

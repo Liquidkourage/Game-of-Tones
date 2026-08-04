@@ -11685,9 +11685,9 @@ function customPatternOrientationTransformsSrv(room) {
   return normalizeCompositeMatchVariants(acc);
 }
 
-function resolveCustomPatternMaskSrv(room) {
+function resolveCustomPatternMaskSrv(room, reverse = false) {
   const base = new Set(Array.from((room && room.customPattern) || []).filter((p) => /^[0-4]-[0-4]$/.test(p)));
-  if (!readOrientationBoolSrv(room && room.customPatternReverse)) return Array.from(base).sort();
+  if (!reverse) return Array.from(base).sort();
   const out = [];
   for (let row = 0; row < 5; row++) {
     for (let col = 0; col < 5; col++) {
@@ -11696,6 +11696,22 @@ function resolveCustomPatternMaskSrv(room) {
     }
   }
   return out;
+}
+
+function customPatternMaskVariantsSrv(room) {
+  const transforms = customPatternOrientationTransformsSrv(room);
+  const variants = new Map();
+  const addShape = (shape) => {
+    if (!shape.length) return;
+    for (const mask of expandCompositeShapeVariants(shape, transforms)) {
+      variants.set(mask.join('|'), mask);
+    }
+  };
+  addShape(resolveCustomPatternMaskSrv(room));
+  if (readOrientationBoolSrv(room && room.customPatternReverse)) {
+    addShape(resolveCustomPatternMaskSrv(room, true));
+  }
+  return [...variants.values()];
 }
 
 function patternCompositeForClient(room) {
@@ -12004,17 +12020,16 @@ function validateBingoForPattern(card, room) {
   }
 
   if (pattern === 'custom' && room?.customPattern && room.customPattern.size > 0) {
-    const baseSorted = resolveCustomPatternMaskSrv(room);
-    if (baseSorted.length === 0) {
+    const variants = customPatternMaskVariantsSrv(room);
+    if (variants.length === 0) {
       return {
         valid: false,
-        reason: 'Custom pattern is empty after applying Reverse.',
+        reason: 'Custom pattern has no valid masks.',
         type: null,
         customWinningMask: null,
       };
     }
     const transforms = customPatternOrientationTransformsSrv(room);
-    const variants = expandCompositeShapeVariants(baseSorted, transforms);
     for (const mask of variants) {
       const bad = [];
       for (const pos of mask) {
@@ -12224,7 +12239,7 @@ function getWinningPatternPositions(card, room, validationResult) {
     return validationResult.customWinningMask;
   }
   if (pattern === 'custom' && room?.customPattern && room.customPattern.size > 0) {
-    return resolveCustomPatternMaskSrv(room);
+    return customPatternMaskVariantsSrv(room)[0] || [];
   }
 
   if (pattern === 'line' && Array.isArray(validationResult?.lineWinningPositions) && validationResult.lineWinningPositions.length > 0) {
