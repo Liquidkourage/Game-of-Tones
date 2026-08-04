@@ -381,16 +381,22 @@ body {
 }
 .App .left-col .public-pattern-header h2.pattern-title-text {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: baseline;
   justify-content: center;
-  column-gap: 0.28em;
-  row-gap: 0;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  column-gap: 0.18em;
+  /* Scale with the left rail, not viewport height, so CHECKERBOARD stays on one line. */
+  font-size: clamp(0.95rem, 6.5cqi, 2.2rem);
+  letter-spacing: 0.025em;
   line-height: 1.2;
   padding-block: 0.08em 0.04em;
+  white-space: nowrap;
   word-break: normal;
-  overflow-wrap: break-word;
-  text-wrap: balance;
+  overflow-wrap: normal;
+  text-wrap: nowrap;
 }
 .App .left-col .public-pattern-title__round {
   flex: 0 0 auto;
@@ -399,6 +405,9 @@ body {
 .App .left-col .public-pattern-title__pattern {
   min-width: 0;
   max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .App .left-col .public-round-eyebrow,
 .App .left-col .public-round-prize-line {
