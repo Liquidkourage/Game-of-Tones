@@ -2,6 +2,7 @@ import React from 'react';
 import { Copy, Download, Link2 } from 'lucide-react';
 import HostActivityFeed from './HostActivityFeed';
 import HostEventActivationBar from './HostEventActivationBar';
+import HostPlayerFeedbackList, { type PlayerFeedbackEntry } from './HostPlayerFeedbackList';
 import type { HostActivityEntry } from '../../host/hostActivityLog';
 import { DEFAULT_PLAYLIST_TITLE_FLAGS, type BingoWinPolicy } from '../../utils/hostPreferences';
 import type { PublicDisplayTitleRevealMode } from '../../utils/publicDisplayTitleReveal';
@@ -11,7 +12,7 @@ type HostSettingsPanelProps = {
   connectionPanel: React.ReactNode;
   activityEntries: HostActivityEntry[];
   onExportEventRecap: () => void;
-  playerFeedbackCount: number;
+  playerFeedback: PlayerFeedbackEntry[];
   onDownloadPlayerFeedback: () => void;
   onCopyPlayerFeedback: () => void;
   hybridInPersonPlusOnline: boolean;
@@ -43,7 +44,7 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
   connectionPanel,
   activityEntries,
   onExportEventRecap,
-  playerFeedbackCount,
+  playerFeedback,
   onDownloadPlayerFeedback,
   onCopyPlayerFeedback,
   hybridInPersonPlusOnline,
@@ -268,17 +269,18 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
       <section className="host-glass-panel host-settings-workspace__export">
         <h2 className="host-settings-workspace__title">Player feedback</h2>
         <p className="host-host-prefs__hint">
-          {playerFeedbackCount === 0
+          {playerFeedback.length === 0
             ? 'No feedback received yet.'
-            : `${playerFeedbackCount} message${playerFeedbackCount === 1 ? '' : 's'} saved in this browser.`}
+            : `${playerFeedback.length} message${playerFeedback.length === 1 ? '' : 's'} saved in this browser.`}
           {' '}Up to 500 messages are kept for this room.
         </p>
-        <div className="host-host-prefs__radios">
+        <HostPlayerFeedbackList entries={playerFeedback} />
+        <div className="host-host-prefs__radios host-player-feedback-actions">
           <button
             type="button"
             className="btn-secondary"
             onClick={onDownloadPlayerFeedback}
-            disabled={playerFeedbackCount === 0}
+            disabled={playerFeedback.length === 0}
           >
             <Download className="w-4 h-4" aria-hidden />
             Download .txt
@@ -287,7 +289,7 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
             type="button"
             className="btn-secondary"
             onClick={onCopyPlayerFeedback}
-            disabled={playerFeedbackCount === 0}
+            disabled={playerFeedback.length === 0}
           >
             <Copy className="w-4 h-4" aria-hidden />
             Copy all

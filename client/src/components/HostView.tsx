@@ -41,6 +41,7 @@ import {
   Settings,
   Settings2,
   Copy,
+  Download,
   ExternalLink,
 } from 'lucide-react';
 import io from 'socket.io-client';
@@ -158,6 +159,10 @@ import HostPreShowChecklist, { type PreShowCheckItem } from './host/HostPreShowC
 import HostRoundTimeline from './host/HostRoundTimeline';
 import HostNightBoardPanel from './host/HostNightBoardPanel';
 import HostPanicStrip from './host/HostPanicStrip';
+import HostPlayerFeedbackList, {
+  type PlayerFeedbackEntry,
+} from './host/HostPlayerFeedbackList';
+import HostSubmodalPortal from './HostSubmodalPortal';
 import HostSponsorScreenPanel, { type SponsorScreenConfig } from './host/HostSponsorScreenPanel';
 import HostPoolQualityReport from './host/HostPoolQualityReport';
 import HostGameLivePanel from './host/HostGameLivePanel';
@@ -191,13 +196,6 @@ import './HostFormControls.css';
 const MAX_CUSTOM_PATTERN_NAME_EMIT = 80;
 const SPOTIFY_SKIP_AUTO_CONNECT_KEY = 'spotify_skip_auto_connect';
 const HOST_FEEDBACK_LIMIT = 500;
-
-type PlayerFeedbackEntry = {
-  id: string;
-  playerName: string;
-  message: string;
-  submittedAt: number;
-};
 
 type SongRequestEntry = {
   id: string;
@@ -1643,6 +1641,7 @@ const HostView: React.FC = () => {
   const [playerFeedback, setPlayerFeedback] = useState<PlayerFeedbackEntry[]>(() =>
     readHostFeedback(roomId),
   );
+  const [showPlayerFeedbackModal, setShowPlayerFeedbackModal] = useState(false);
   const [songRequests, setSongRequests] = useState<SongRequestEntry[]>([]);
   const [requestModerationBusyId, setRequestModerationBusyId] = useState<string | null>(null);
   const [youtubeMusicConnected, setYoutubeMusicConnected] = useState(false);
@@ -12845,6 +12844,8 @@ const HostView: React.FC = () => {
                     onRejectBingo={() => void rejectBingo()}
                     onResume={handleManualResumeGame}
                     onRedoLastCall={handleSkipToPrevious}
+                    onOpenFeedback={() => setShowPlayerFeedbackModal(true)}
+                    feedbackCount={playerFeedback.length}
                     canRejectBingo={!!pendingVerification && !isProcessingVerification}
                     canResume={gamePaused || !!pendingVerification}
                     transportLocked={!!pendingVerification || isProcessingVerification}
@@ -12991,7 +12992,7 @@ const HostView: React.FC = () => {
                 roomId={roomId ?? null}
                 activityEntries={activityLog}
                 onExportEventRecap={handleExportEventRecap}
-                playerFeedbackCount={playerFeedback.length}
+                playerFeedback={playerFeedback}
                 onDownloadPlayerFeedback={handleDownloadPlayerFeedback}
                 onCopyPlayerFeedback={handleCopyPlayerFeedback}
                 hybridInPersonPlusOnline={hybridInPersonPlusOnline}
@@ -14317,6 +14318,37 @@ const HostView: React.FC = () => {
           aliasArtist={songAliases[editingSong.id]?.artist}
         />
       )}
+
+      <HostSubmodalPortal
+        isOpen={showPlayerFeedbackModal}
+        onClose={() => setShowPlayerFeedbackModal(false)}
+        title="Player feedback"
+        subtitle={`${playerFeedback.length} message${playerFeedback.length === 1 ? '' : 's'} saved for this room`}
+        titleId="host-player-feedback-modal-title"
+        maxWidth="720px"
+      >
+        <div className="host-player-feedback-modal__actions">
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={handleDownloadPlayerFeedback}
+            disabled={playerFeedback.length === 0}
+          >
+            <Download className="w-4 h-4" aria-hidden />
+            Download .txt
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={handleCopyPlayerFeedback}
+            disabled={playerFeedback.length === 0}
+          >
+            <Copy className="w-4 h-4" aria-hidden />
+            Copy all
+          </button>
+        </div>
+        <HostPlayerFeedbackList entries={playerFeedback} />
+      </HostSubmodalPortal>
 
       <HostTutorial
         open={hostTutorialOpen}

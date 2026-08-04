@@ -1,5 +1,5 @@
 import React from 'react';
-import { SkipForward, RotateCw, XCircle, Play, Undo2 } from 'lucide-react';
+import { SkipForward, RotateCw, XCircle, Play, Undo2, MessageSquareText } from 'lucide-react';
 
 type HostPanicStripProps = {
   onSkip: () => void;
@@ -7,6 +7,8 @@ type HostPanicStripProps = {
   onRejectBingo: () => void;
   onResume: () => void;
   onRedoLastCall: () => void;
+  onOpenFeedback: () => void;
+  feedbackCount: number;
   canRejectBingo: boolean;
   canResume: boolean;
   /** When true, Skip / Bump / Redo are disabled (e.g. verification pending). */
@@ -20,6 +22,8 @@ const HostPanicStrip: React.FC<HostPanicStripProps> = ({
   onRejectBingo,
   onResume,
   onRedoLastCall,
+  onOpenFeedback,
+  feedbackCount,
   canRejectBingo,
   canResume,
   transportLocked = false,
@@ -84,6 +88,15 @@ const HostPanicStrip: React.FC<HostPanicStripProps> = ({
         >
           <Undo2 className="w-4 h-4" aria-hidden />
           Redo last call
+        </button>
+        <button
+          type="button"
+          className="host-panic-strip__btn host-panic-strip__btn--feedback"
+          onClick={onOpenFeedback}
+          title="Read player feedback"
+        >
+          <MessageSquareText className="w-4 h-4" aria-hidden />
+          Feedback ({feedbackCount})
         </button>
       </div>
     </div>

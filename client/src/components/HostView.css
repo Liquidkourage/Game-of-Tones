@@ -3061,6 +3061,13 @@
   color: #b8ffd9;
 }
 
+.host-view .host-panic-strip__btn--feedback {
+  margin-left: auto;
+  border-color: rgba(105, 190, 255, 0.4);
+  background: rgba(70, 150, 255, 0.13);
+  color: #d8edff;
+}
+
 .host-view .host-night-board {
   margin: 0 0 10px;
   padding: 12px 14px;
