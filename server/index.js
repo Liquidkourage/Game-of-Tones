@@ -17,6 +17,7 @@ const usersStore = require('./users');
 const organizationsStore = require('./organizations');
 const billingStore = require('./billing');
 const hostRoomPrepStore = require('./hostRoomPrep');
+const roomSongRequestsStore = require('./roomSongRequests');
 const hostPreferencesStore = require('./hostPreferences');
 const playersStore = require('./players');
 const playerAuth = require('./playerAuth');
@@ -840,6 +841,31 @@ function cancelPendingRoomCleanup(roomId, reason) {
   routineServerLog(`Cancelled pending cleanup for room ${roomId}${reason ? ` (${reason})` : ''}`);
 }
 
+async function hydrateRoomSongRequests(room) {
+  if (!room?.id) return;
+  try {
+    room.songRequests = await roomSongRequestsStore.loadRequests(db, room.id);
+  } catch (error) {
+    console.error('hydrateRoomSongRequests failed:', error?.message || error);
+    if (!Array.isArray(room.songRequests)) room.songRequests = [];
+  }
+}
+
+function persistRoomSongRequests(room) {
+  if (!room?.id || !db) return;
+  const requests = Array.isArray(room.songRequests) ? room.songRequests : [];
+  void roomSongRequestsStore.saveRequests(db, room.id, requests).catch((error) => {
+    console.error('persistRoomSongRequests failed:', error?.message || error);
+  });
+}
+
+function clearPersistedRoomSongRequests(roomId) {
+  if (!roomId || !db) return;
+  void roomSongRequestsStore.clearRequests(db, roomId).catch((error) => {
+    console.error('clearPersistedRoomSongRequests failed:', error?.message || error);
+  });
+}
+
 function scheduleRoomCleanupAfterHostDisconnect(roomId) {
   const existing = pendingRoomCleanupTimers.get(roomId);
   if (existing) clearTimeout(existing);
@@ -852,6 +878,7 @@ function scheduleRoomCleanupAfterHostDisconnect(roomId) {
     if (room.players.size > 0) return; // someone joined during the grace period
     void finalizeOrgEventForRoom(room);
     rooms.delete(roomId);
+    clearPersistedRoomSongRequests(roomId);
     routineServerLog(`Removed abandoned room after grace period: ${roomId}`);
   }, HOST_DISCONNECT_ROOM_GRACE_MS);
   if (typeof timer.unref === 'function') timer.unref();
@@ -1686,6 +1713,7 @@ async function initializeDatabase() {
     await billingStore.ensureBillingTables(db);
     await songAliasesStore.ensureSongAliasesTable(db);
     await hostRoomPrepStore.ensureHostRoomPrepTable(db);
+    await roomSongRequestsStore.ensureRoomSongRequestsTable(db);
     await hostPreferencesStore.ensureHostPreferencesTable(db);
     await playersStore.ensurePlayerTables(db);
     await playerAccountsStore.ensurePlayerAccountTables(db);
@@ -4701,10 +4729,12 @@ io.on('connection', (socket) => {
         publicDisplayLetterRevealToast: true,
         maxPlayerBingoCards: 1,
         bingoWinPolicy: 'any_round',
+        songRequests: [],
         createdAt: new Date().toISOString()
       };
       rooms.set(roomId, newRoom);
-      
+      await hydrateRoomSongRequests(newRoom);
+
       // Log organization info
       if (organizationId !== 'DEFAULT') {
         routineServerLog(`🏢 Room ${roomId} created for organization ${organizationId}`);
@@ -5128,7 +5158,8 @@ io.on('connection', (socket) => {
       room.songRequests = [
         ...(Array.isArray(room.songRequests) ? room.songRequests : []),
         request,
-      ].slice(-500);
+      ].slice(-roomSongRequestsStore.MAX_ROOM_SONG_REQUESTS);
+      persistRoomSongRequests(room);
       for (const [playerId, roomPlayer] of room.players) {
         if (playerId === room.host || roomPlayer?.isHost) {
           io.to(playerId).emit('song-request-updated', request);
@@ -5189,6 +5220,7 @@ io.on('connection', (socket) => {
         ...(resolvedSong ? { resolvedSong } : {}),
       };
       room.songRequests = requests.map((entry, i) => (i === index ? updated : entry));
+      persistRoomSongRequests(room);
       for (const [playerId, roomPlayer] of room.players) {
         if (playerId === room.host || roomPlayer?.isHost) {
           io.to(playerId).emit('song-request-updated', updated);
@@ -5207,6 +5239,7 @@ io.on('connection', (socket) => {
     const player = room?.players?.get(socket.id);
     if (!room || (socket.id !== room.host && !player?.isHost)) return;
     room.songRequests = [];
+    clearPersistedRoomSongRequests(roomId);
     for (const [playerId, roomPlayer] of room.players) {
       if (playerId === room.host || roomPlayer?.isHost) {
         io.to(playerId).emit('song-requests-cleared');
@@ -7733,8 +7766,10 @@ io.on('connection', (socket) => {
           publicDisplayLetterRevealToast: true,
           maxPlayerBingoCards: 1,
           bingoWinPolicy: 'any_round',
+          songRequests: [],
         };
         rooms.set(roomId, newRoom);
+        await hydrateRoomSongRequests(newRoom);
         socket.join(roomId);
         
         // Try starting the game again
@@ -13969,9 +14004,11 @@ app.post('/api/host/rooms', async (req, res) => {
         patternComposite: undefined,
         maxPlayerBingoCards: 1,
         bingoWinPolicy: 'any_round',
+        songRequests: [],
         createdAt: new Date().toISOString(),
       };
       rooms.set(code, newRoom);
+      await hydrateRoomSongRequests(newRoom);
     }
     const roomRef = rooms.get(code);
     if (roomRef) {
