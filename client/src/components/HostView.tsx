@@ -1671,6 +1671,9 @@ const HostView: React.FC = () => {
   const [roundWinners, setRoundWinners] = useState<Array<any>>([]);
   /** Projector night winners board visibility (host toggle). */
   const [showNightBoard, setShowNightBoard] = useState(false);
+  /** Game-tab Tonight accordion — user-controlled; auto-collapses once when a round goes live. */
+  const [tonightOpen, setTonightOpen] = useState(true);
+  const tonightWasPlayingRef = useRef(false);
   const [sponsorScreen, setSponsorScreen] = useState<SponsorScreenConfig>(() => {
     try {
       const raw = localStorage.getItem(`sponsor-screen-${roomId}`);
@@ -3190,6 +3193,18 @@ const HostView: React.FC = () => {
       }
     };
   }, [showConnectionModal]);
+
+  /** Collapse Tonight once when playback starts; leave it alone if the host re-opens it. */
+  useEffect(() => {
+    const playing = gameState === 'playing';
+    if (playing && !tonightWasPlayingRef.current) {
+      setTonightOpen(false);
+    }
+    if (!playing) {
+      setTonightOpen(true);
+    }
+    tonightWasPlayingRef.current = playing;
+  }, [gameState]);
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -13015,7 +13030,8 @@ const HostView: React.FC = () => {
               <>
                 <details
                   className="host-game-tonight host-glass-panel"
-                  open={gameState !== 'playing'}
+                  open={tonightOpen}
+                  onToggle={(e) => setTonightOpen(e.currentTarget.open)}
                   data-host-tutorial="next-round"
                 >
                   <summary className="host-game-tonight__summary">
@@ -13032,7 +13048,7 @@ const HostView: React.FC = () => {
                   </summary>
                   <div className="host-game-tonight__body">
                     <HostRoundTimeline
-                      className="host-round-timeline--game"
+                      className="host-round-timeline--game host-game-tonight__nested"
                       rounds={roundTimelineRows}
                       summary={roundTimelineSummary}
                       onSelectRound={handleSelectRoundForPrep}
@@ -13040,6 +13056,7 @@ const HostView: React.FC = () => {
                     />
                     {(eventRounds.length > 0 || roundWinners.length > 0) && (
                       <HostNightBoardPanel
+                        className="host-game-tonight__nested"
                         plannedRounds={eventRounds.map((r) => ({
                           name: r.name,
                           prize: r.prize,
