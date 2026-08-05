@@ -7586,17 +7586,17 @@ const HostView: React.FC = () => {
   const leftoverPoolSongsRef = useRef(leftoverPoolSongs);
   leftoverPoolSongsRef.current = leftoverPoolSongs;
 
-  /** Virtual library row for the leftovers pool — only offered once at least one track exists. */
-  const leftoversVirtualPlaylist = useMemo<Playlist | null>(() => {
-    if (leftoverPoolSongs.length === 0) return null;
-    return {
+  /** Virtual library row for the leftovers pool — always present (like Requests), even at 0 tracks. */
+  const leftoversVirtualPlaylist = useMemo<Playlist>(
+    () => ({
       id: LEFTOVERS_PLAYLIST_ID,
       name: LEFTOVERS_PLAYLIST_NAME,
       tracks: leftoverPoolSongs.length,
       description:
         'Virtual playlist — tracks from earlier rounds tonight that were never played. Updates live until you finalize a round with it.',
-    };
-  }, [leftoverPoolSongs]);
+    }),
+    [leftoverPoolSongs.length],
+  );
 
   /** Approved requests resolve to playable Spotify tracks and form the Requests virtual playlist. */
   const requestPoolSongs = useMemo<Song[]>(() => {
@@ -7660,6 +7660,38 @@ const HostView: React.FC = () => {
       return next;
     });
   }, [requestPoolSongs.length, roomId]);
+
+  useEffect(() => {
+    setEventRounds((current) => {
+      let changed = false;
+      const next = current.map((round) => {
+        if (!round.playlistIds?.includes(LEFTOVERS_PLAYLIST_ID) || round.savedMixSnapshot?.songs?.length) {
+          return round;
+        }
+        const playlistIndex = round.playlistIds.indexOf(LEFTOVERS_PLAYLIST_ID);
+        const names = [...round.playlistNames];
+        if (names[playlistIndex] !== LEFTOVERS_PLAYLIST_NAME) {
+          names[playlistIndex] = LEFTOVERS_PLAYLIST_NAME;
+          changed = true;
+        }
+        if (round.songCount !== leftoverPoolSongs.length) changed = true;
+        return {
+          ...round,
+          kind: 'leftovers' as const,
+          name: 'Leftovers',
+          playlistNames: names,
+          songCount: leftoverPoolSongs.length,
+        };
+      });
+      if (!changed) return current;
+      try {
+        localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
+      } catch {
+        /* keep room state in memory */
+      }
+      return next;
+    });
+  }, [leftoverPoolSongs.length, roomId]);
 
   const moderateSongRequest = useCallback(
     async (request: SongRequestEntry, status: 'approved' | 'rejected') => {
@@ -8036,6 +8068,15 @@ const HostView: React.FC = () => {
       playlists: mixPlaylistSelection,
     });
   }, [requestPoolSongs.length, playlistSelectionKey]);
+
+  useEffect(() => {
+    if (gameStateRef.current === 'playing') return;
+    if (!mixPlaylistSelection.some((playlist) => isLeftoversPlaylistId(playlist.id))) return;
+    void generateSongListRef.current({
+      reason: 'selection',
+      playlists: mixPlaylistSelection,
+    });
+  }, [leftoverPoolSongs.length, playlistSelectionKey]);
 
   // Advanced playback functions
   const [volumeTimeout, setVolumeTimeout] = useState<NodeJS.Timeout | null>(null);
@@ -8933,13 +8974,7 @@ const HostView: React.FC = () => {
         }
       }
       if (hasLeftovers && !ids.has(LEFTOVERS_PLAYLIST_ID)) {
-        merged.push(
-          leftoversVirtualPlaylist ?? {
-            id: LEFTOVERS_PLAYLIST_ID,
-            name: LEFTOVERS_PLAYLIST_NAME,
-            tracks: leftoverPoolSongsRef.current.length,
-          },
-        );
+        merged.push(leftoversVirtualPlaylist);
       }
       if (hasRequests && !ids.has(REQUESTS_PLAYLIST_ID)) {
         merged.push(requestsVirtualPlaylist);
@@ -8990,13 +9025,7 @@ const HostView: React.FC = () => {
   const resolvePlaylistForRoundAssign = useCallback(
     (playlistId: string): Playlist | undefined => {
       if (isLeftoversPlaylistId(playlistId)) {
-        return (
-          leftoversVirtualPlaylist ?? {
-            id: LEFTOVERS_PLAYLIST_ID,
-            name: LEFTOVERS_PLAYLIST_NAME,
-            tracks: leftoverPoolSongsRef.current.length,
-          }
-        );
+        return leftoversVirtualPlaylist;
       }
       if (isRequestsPlaylistId(playlistId)) {
         return requestsVirtualPlaylist;
@@ -9047,6 +9076,22 @@ const HostView: React.FC = () => {
         }
         if (round.playlistIds.length > 0) {
           showToast('Requests is a dedicated meta-round. Add it to an empty round.', 'info');
+          return;
+        }
+      }
+      if (isLeftoversPlaylistId(playlist.id)) {
+        const existingLeftoversRound = prev.findIndex(
+          (candidate, index) =>
+            index !== roundIndex &&
+            (candidate.kind === 'leftovers' ||
+              candidate.playlistIds?.includes(LEFTOVERS_PLAYLIST_ID)),
+        );
+        if (existingLeftoversRound >= 0) {
+          showToast('Leftovers is already assigned to another round.', 'info');
+          return;
+        }
+        if (round.playlistIds.length > 0) {
+          showToast('Leftovers is a dedicated meta-round. Add it to an empty round.', 'info');
           return;
         }
       }
@@ -11002,7 +11047,7 @@ const HostView: React.FC = () => {
         playlists={[
           ...playlistsForRoundPlanner,
           requestsVirtualPlaylist,
-          ...(leftoversVirtualPlaylist ? [leftoversVirtualPlaylist] : []),
+          leftoversVirtualPlaylist,
         ]}
         currentRound={currentRoundIndex}
         onStartRound={handleStartRound}
@@ -11875,7 +11920,7 @@ const HostView: React.FC = () => {
                           )}
                         </div>
                       </div>
-                      {leftoversVirtualPlaylist ? (() => {
+                      {(() => {
                         const assignedRoundCount =
                           playlistAssignedRoundCounts.get(LEFTOVERS_PLAYLIST_ID) || 0;
                         const count = leftoversVirtualPlaylist.tracks;
@@ -11938,7 +11983,9 @@ const HostView: React.FC = () => {
                                 className="host-playlist-desc"
                                 title="Every track from earlier rounds' pools that was never played tonight. Refreshes live as rounds finish — the mix locks in when you finalize/save a round with it."
                               >
-                                Unplayed tracks from tonight&rsquo;s finished rounds. Updates live until you finalize.
+                                {count === 0
+                                  ? 'Fills as rounds finish with unplayed tracks. Dedicated meta-round — add to an empty bucket.'
+                                  : 'Unplayed tracks from tonight\u2019s finished rounds. Updates live until you finalize.'}
                               </span>
                             </span>
                             <span
@@ -12035,7 +12082,7 @@ const HostView: React.FC = () => {
                             ) : null}
                           </div>
                         );
-                      })() : null}
+                      })()}
                       {libraryTablePlaylists.length === 0 ? (
                           <div className="host-playlist-library-table__empty">
                             {playlistLibrarySource === 'youtube'
@@ -13219,7 +13266,6 @@ const HostView: React.FC = () => {
                     onAddLeftoversRound={() => handleAddMetaRound('leftovers')}
                     canAddLeftoversRound={
                       eventRounds.length < MAX_EVENT_ROUNDS &&
-                      leftoverPoolSongs.length > 0 &&
                       !eventRounds.some(
                         (round) =>
                           round.kind === 'leftovers' ||

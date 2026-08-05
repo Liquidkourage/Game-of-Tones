@@ -153,7 +153,7 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
               title={
                 canAddLeftoversRound
                   ? 'Add the unplayed-songs meta-round'
-                  : 'Leftovers is already on the timeline or has no songs yet'
+                  : 'Leftovers is already on the timeline'
               }
             >
               <Plus className="w-4 h-4" aria-hidden />
