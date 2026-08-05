@@ -4246,3 +4246,213 @@
   cursor: not-allowed;
   opacity: 0.45;
 }
+
+/* Settings tab — condensed game defaults cockpit */
+.host-settings-cockpit {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.host-settings-cockpit__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.host-settings-cockpit__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.host-settings-cockpit__row {
+  display: flex;
+  align-items: center;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.host-settings-cockpit__row:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.host-settings-cockpit__label {
+  min-width: 4.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(0, 255, 163, 0.85);
+}
+
+.host-settings-cockpit__controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.host-settings-cockpit__controls--snippet {
+  gap: 12px;
+}
+
+.host-settings-cockpit__controls--snippet .host-range {
+  flex: 1 1 160px;
+  min-width: 120px;
+  max-width: 280px;
+}
+
+.host-settings-cockpit__value {
+  min-width: 2.5rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #00ff88;
+}
+
+.host-settings-cockpit__hint {
+  font-size: 0.72rem;
+  color: #fbbf24;
+}
+
+.host-settings-cockpit__segment {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.host-settings-cockpit__seg-btn {
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.28);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.host-settings-cockpit__seg-btn.is-on {
+  border-color: rgba(0, 255, 136, 0.45);
+  background: rgba(0, 255, 136, 0.14);
+  color: #eafff8;
+}
+
+.host-settings-cockpit__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: #c8d0d8;
+  cursor: pointer;
+  user-select: none;
+}
+
+.host-settings-cockpit__letters {
+  text-transform: uppercase;
+  letter-spacing: 0.35em;
+  font-weight: 800;
+}
+
+.host-settings-more {
+  padding: 0;
+  overflow: hidden;
+}
+
+.host-settings-more__summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  padding: 12px 16px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #c5d4e0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.host-settings-more__summary::-webkit-details-marker {
+  display: none;
+}
+
+.host-settings-more__summary::after {
+  content: '';
+  margin-left: auto;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid rgba(255, 255, 255, 0.45);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.45);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+
+.host-settings-more[open] > .host-settings-more__summary::after {
+  transform: rotate(-135deg);
+  margin-top: 3px;
+}
+
+.host-settings-more__badge {
+  margin-left: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #6fdfae;
+  background: rgba(0, 255, 136, 0.12);
+  border: 1px solid rgba(0, 255, 136, 0.3);
+}
+
+.host-settings-more__body {
+  padding: 12px 14px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.host-settings-more__body--grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 720px) {
+  .host-settings-more__body--grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.host-settings-more__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.host-settings-more__actions .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  padding: 8px 12px;
+}
+
+.host-settings-more__body--activity .host-activity-feed {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+}
+
+.host-settings-more__body--activity .host-activity-feed__title {
+  display: none;
+}

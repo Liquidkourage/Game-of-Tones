@@ -70,6 +70,8 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
   maxPlayerBingoCardsLocked = false,
 }) => {
   const lettersIncomplete = bingoColumnLetters.length > 0 && bingoColumnLetters.length < 5;
+  const letterRevealEnabled = publicDisplayTitleRevealMode === 'letter';
+
   return (
     <div className="host-settings-workspace">
       <section className="host-glass-panel host-settings-workspace__connection">
@@ -82,222 +84,257 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
         <div className="host-settings-workspace__connection-body">{connectionPanel}</div>
       </section>
 
-      <section className="host-glass-panel host-settings-workspace__prefs">
-        <h2 className="host-settings-workspace__title">Defaults</h2>
-        <label className="host-host-prefs__field">
-          <span className="host-host-prefs__label">Snippet length ({snippetLength}s)</span>
-          <input
-            type="range"
-            className="host-range host-range--snippet"
-            min={5}
-            max={60}
-            value={snippetLength}
-            onChange={(e) => onSnippetLengthChange(Number(e.target.value))}
-          />
-        </label>
-        <fieldset className="host-host-prefs__field">
-          <legend className="host-host-prefs__label">Snippet start</legend>
-          <div className="host-host-prefs__radios">
+      <section className="host-glass-panel host-settings-cockpit" aria-label="Game defaults">
+        <div className="host-settings-cockpit__header">
+          <h2 className="host-settings-cockpit__title">Game defaults</h2>
+        </div>
+
+        <div className="host-settings-cockpit__row">
+          <span className="host-settings-cockpit__label">Snippet</span>
+          <div className="host-settings-cockpit__controls host-settings-cockpit__controls--snippet">
+            <input
+              type="range"
+              className="host-range host-range--snippet"
+              min={5}
+              max={60}
+              value={snippetLength}
+              onChange={(e) => onSnippetLengthChange(Number(e.target.value))}
+              aria-label={`Snippet length ${snippetLength} seconds`}
+            />
+            <span className="host-settings-cockpit__value">{snippetLength}s</span>
+          </div>
+        </div>
+
+        <div className="host-settings-cockpit__row">
+          <span className="host-settings-cockpit__label">Start</span>
+          <div className="host-settings-cockpit__segment" role="group" aria-label="Snippet start">
             {(
               [
                 ['none', 'From start'],
-                ['early', 'Early random'],
+                ['early', 'Early'],
                 ['random', 'Random'],
               ] as const
             ).map(([val, label]) => (
-              <label key={val} className="host-host-prefs__radio">
-                <input
-                  type="radio"
-                  name="settings-prefs-random-starts"
-                  checked={randomStarts === val}
-                  onChange={() => onRandomStartsChange(val)}
-                />
+              <button
+                key={val}
+                type="button"
+                className={
+                  randomStarts === val
+                    ? 'host-settings-cockpit__seg-btn is-on'
+                    : 'host-settings-cockpit__seg-btn'
+                }
+                onClick={() => onRandomStartsChange(val)}
+              >
                 {label}
-              </label>
+              </button>
             ))}
           </div>
-        </fieldset>
-        <label className="host-manager-hybrid host-settings-workspace__hybrid">
-          <input
-            type="checkbox"
-            className="host-control-checkbox"
-            checked={hybridInPersonPlusOnline}
-            onChange={(e) => onHybridChange(e.target.checked)}
-          />
-          <span>
-            <strong>Hybrid</strong>
-          </span>
-        </label>
-        <fieldset className="host-host-prefs__field">
-          <legend className="host-host-prefs__label">Official wins</legend>
-          <div className="host-host-prefs__radios">
+        </div>
+
+        <div className="host-settings-cockpit__row">
+          <span className="host-settings-cockpit__label">Cards</span>
+          <div className="host-settings-cockpit__controls">
+            <select
+              className="host-host-prefs__select"
+              value={maxPlayerBingoCards}
+              disabled={maxPlayerBingoCardsLocked}
+              onChange={(e) => onMaxPlayerBingoCardsChange(Number(e.target.value))}
+              aria-label="Cards per player"
+            >
+              <option value={1}>1 per player</option>
+              <option value={2}>2 per player</option>
+              <option value={3}>3 per player</option>
+            </select>
+            {maxPlayerBingoCardsLocked ? (
+              <span className="host-settings-cockpit__hint">Locked while live</span>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="host-settings-cockpit__row">
+          <span className="host-settings-cockpit__label">Wins</span>
+          <div className="host-settings-cockpit__segment" role="group" aria-label="Official wins">
             {(
               [
                 ['any_round', 'Any round'],
                 ['one_win', 'One win only'],
               ] as const
             ).map(([val, label]) => (
-              <label key={val} className="host-host-prefs__radio">
-                <input
-                  type="radio"
-                  name="settings-prefs-bingo-win-policy"
-                  checked={bingoWinPolicy === val}
-                  onChange={() => onBingoWinPolicyChange(val)}
-                />
+              <button
+                key={val}
+                type="button"
+                className={
+                  bingoWinPolicy === val
+                    ? 'host-settings-cockpit__seg-btn is-on'
+                    : 'host-settings-cockpit__seg-btn'
+                }
+                onClick={() => onBingoWinPolicyChange(val)}
+                title={
+                  val === 'one_win'
+                    ? 'After a verified win, later pattern completes get a shout-out but do not pause the round.'
+                    : 'Players can call an official (pausing) bingo each round.'
+                }
+              >
                 {label}
-              </label>
+              </button>
             ))}
           </div>
-          <span className="host-host-prefs__hint">
-            {bingoWinPolicy === 'one_win'
-              ? 'After a verified win, later pattern completes get a shout-out but do not pause the round.'
-              : 'Players can call an official (pausing) bingo each round.'}
-          </span>
-        </fieldset>
-        <label className="host-host-prefs__field">
-          <span className="host-host-prefs__label">Cards per player</span>
-          <select
-            className="host-host-prefs__select"
-            value={maxPlayerBingoCards}
-            disabled={maxPlayerBingoCardsLocked}
-            onChange={(e) => onMaxPlayerBingoCardsChange(Number(e.target.value))}
-          >
-            <option value={1}>1 card</option>
-            <option value={2}>2 cards</option>
-            <option value={3}>3 cards</option>
-          </select>
-          <span className="host-host-prefs__hint">
-            Dealt to every player at round start / finalize / late-join.
-            {maxPlayerBingoCardsLocked
-              ? ' Locked while this round is live.'
-              : ' Cannot change while a round is live.'}
-          </span>
-        </label>
-        <label className="host-host-prefs__field">
-          <span className="host-host-prefs__label">Playlist title flags</span>
-          <input
-            type="text"
-            className="host-host-prefs__input"
-            value={playlistTitleFlags}
-            maxLength={200}
-            placeholder={DEFAULT_PLAYLIST_TITLE_FLAGS}
-            onChange={(e) => onPlaylistTitleFlagsChange(e.target.value)}
-          />
-          <span className="host-host-prefs__hint">
-            Comma-separated. The playlist library&rsquo;s picks/All toggle shows only playlists whose
-            titles contain one of these flags.
-          </span>
-        </label>
-        <label className="host-host-prefs__field">
-          <span className="host-host-prefs__label">Column letters</span>
-          <input
-            type="text"
-            className="host-host-prefs__input"
-            value={bingoColumnLetters}
-            maxLength={5}
-            placeholder="BINGO"
-            spellCheck={false}
-            autoCapitalize="characters"
-            style={{ textTransform: 'uppercase', letterSpacing: '0.35em', fontWeight: 800 }}
-            onChange={(e) => onBingoColumnLettersChange(e.target.value)}
-          />
-          <span
-            className="host-host-prefs__hint"
-            style={lettersIncomplete ? { color: '#f5d061' } : undefined}
-          >
-            {lettersIncomplete
-              ? 'Needs exactly 5 letters — BINGO is used until then.'
-              : 'Exactly 5 letters for card columns and the call list — e.g. BINGO, TEMPO, TONES.'}
-          </span>
-        </label>
-      </section>
+        </div>
 
-      <section className="host-glass-panel host-settings-workspace__prefs">
-        <h2 className="host-settings-workspace__title">Projector defaults</h2>
-        <label className="host-host-prefs__field">
-          <span className="host-host-prefs__label">Reveal titles on projector</span>
-          <select
-            className="host-host-prefs__select"
-            value={publicDisplayTitleRevealMode}
-            onChange={(e) => onTitleRevealModeChange(e.target.value)}
-          >
-            <option value="letter">By letter (timed)</option>
-            <option value="track_start">Full title at clip start</option>
-            <option value="track_end">Full title at clip end</option>
-          </select>
-        </label>
-        <label className="host-host-prefs__field">
-          <span className="host-host-prefs__label">Letter reveal interval</span>
-          <select
-            className="host-host-prefs__select"
-            value={letterRevealIntervalSec}
-            disabled={publicDisplayTitleRevealMode !== 'letter'}
-            onChange={(e) => onLetterRevealIntervalChange(Number(e.target.value))}
-          >
-            {[5, 10, 15, 20, 30, 45, 60, 90, 120].map((sec) => (
-              <option key={sec} value={sec}>
-                {sec} seconds
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="host-host-prefs__field host-host-prefs__field--checkbox">
-          <span className="host-host-prefs__label">Letter reveal toast</span>
-          <span className="host-host-prefs__checkbox-row">
+        <div className="host-settings-cockpit__row">
+          <span className="host-settings-cockpit__label">Mode</span>
+          <label className="host-settings-cockpit__toggle">
             <input
               type="checkbox"
-              checked={publicDisplayLetterRevealToast}
-              disabled={publicDisplayTitleRevealMode !== 'letter'}
-              onChange={(e) => onLetterRevealToastChange(e.target.checked)}
+              className="host-control-checkbox"
+              checked={hybridInPersonPlusOnline}
+              onChange={(e) => onHybridChange(e.target.checked)}
             />
-            Show &ldquo;Revealed:&hellip;&rdquo; banner on projector
-          </span>
-        </label>
-      </section>
-
-      {/* Always-reachable event lifecycle controls — the setup cockpit's copy disappears once a round is live. */}
-      {roomId ? <HostEventActivationBar roomId={roomId} /> : null}
-
-      <section className="host-glass-panel host-settings-workspace__export">
-        <h2 className="host-settings-workspace__title">Recap</h2>
-        <button type="button" className="btn-secondary" onClick={onExportEventRecap}>
-          <Download className="w-4 h-4" aria-hidden />
-          Export JSON
-        </button>
-      </section>
-
-      <section className="host-glass-panel host-settings-workspace__export">
-        <h2 className="host-settings-workspace__title">Player feedback</h2>
-        <p className="host-host-prefs__hint">
-          {playerFeedback.length === 0
-            ? 'No feedback received yet.'
-            : `${playerFeedback.length} message${playerFeedback.length === 1 ? '' : 's'} saved in this browser.`}
-          {' '}Up to 500 messages are kept for this room.
-        </p>
-        <HostPlayerFeedbackList entries={playerFeedback} />
-        <div className="host-host-prefs__radios host-player-feedback-actions">
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={onDownloadPlayerFeedback}
-            disabled={playerFeedback.length === 0}
-          >
-            <Download className="w-4 h-4" aria-hidden />
-            Download .txt
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={onCopyPlayerFeedback}
-            disabled={playerFeedback.length === 0}
-          >
-            <Copy className="w-4 h-4" aria-hidden />
-            Copy all
-          </button>
+            <span>Hybrid (in-person + online)</span>
+          </label>
         </div>
       </section>
 
-      <HostActivityFeed entries={activityEntries} />
+      {roomId ? <HostEventActivationBar roomId={roomId} /> : null}
+
+      <details className="host-glass-panel host-settings-more">
+        <summary className="host-settings-more__summary">Projector defaults</summary>
+        <div className="host-settings-more__body host-settings-more__body--grid">
+          <label className="host-host-prefs__field">
+            <span className="host-host-prefs__label">Reveal titles</span>
+            <select
+              className="host-host-prefs__select"
+              value={publicDisplayTitleRevealMode}
+              onChange={(e) => onTitleRevealModeChange(e.target.value)}
+            >
+              <option value="letter">By letter (timed)</option>
+              <option value="track_start">Full title at clip start</option>
+              <option value="track_end">Full title at clip end</option>
+            </select>
+          </label>
+          <label className="host-host-prefs__field">
+            <span className="host-host-prefs__label">Letter interval</span>
+            <select
+              className="host-host-prefs__select"
+              value={letterRevealIntervalSec}
+              disabled={!letterRevealEnabled}
+              onChange={(e) => onLetterRevealIntervalChange(Number(e.target.value))}
+            >
+              {[5, 10, 15, 20, 30, 45, 60, 90, 120].map((sec) => (
+                <option key={sec} value={sec}>
+                  {sec}s
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="host-host-prefs__field host-host-prefs__field--checkbox">
+            <span className="host-host-prefs__label">Reveal toast</span>
+            <span className="host-host-prefs__checkbox-row">
+              <input
+                type="checkbox"
+                checked={publicDisplayLetterRevealToast}
+                disabled={!letterRevealEnabled}
+                onChange={(e) => onLetterRevealToastChange(e.target.checked)}
+              />
+              Show “Revealed:…” banner
+            </span>
+          </label>
+        </div>
+      </details>
+
+      <details className="host-glass-panel host-settings-more">
+        <summary className="host-settings-more__summary">Library &amp; column letters</summary>
+        <div className="host-settings-more__body host-settings-more__body--grid">
+          <label className="host-host-prefs__field">
+            <span className="host-host-prefs__label">Playlist title flags</span>
+            <input
+              type="text"
+              className="host-host-prefs__input"
+              value={playlistTitleFlags}
+              maxLength={200}
+              placeholder={DEFAULT_PLAYLIST_TITLE_FLAGS}
+              onChange={(e) => onPlaylistTitleFlagsChange(e.target.value)}
+            />
+            <span className="host-host-prefs__hint">
+              Comma-separated. Library picks/All uses titles that contain one of these.
+            </span>
+          </label>
+          <label className="host-host-prefs__field">
+            <span className="host-host-prefs__label">Column letters</span>
+            <input
+              type="text"
+              className="host-host-prefs__input host-settings-cockpit__letters"
+              value={bingoColumnLetters}
+              maxLength={5}
+              placeholder="BINGO"
+              spellCheck={false}
+              autoCapitalize="characters"
+              onChange={(e) => onBingoColumnLettersChange(e.target.value)}
+            />
+            <span
+              className="host-host-prefs__hint"
+              style={lettersIncomplete ? { color: '#f5d061' } : undefined}
+            >
+              {lettersIncomplete
+                ? 'Needs exactly 5 letters — BINGO is used until then.'
+                : 'Exactly 5 letters for cards + call list (BINGO, TEMPO, TONES…).'}
+            </span>
+          </label>
+        </div>
+      </details>
+
+      <details className="host-glass-panel host-settings-more">
+        <summary className="host-settings-more__summary">
+          Recap &amp; feedback
+          {playerFeedback.length > 0 ? (
+            <span className="host-settings-more__badge">{playerFeedback.length}</span>
+          ) : null}
+        </summary>
+        <div className="host-settings-more__body">
+          <div className="host-settings-more__actions">
+            <button type="button" className="btn-secondary" onClick={onExportEventRecap}>
+              <Download className="w-4 h-4" aria-hidden />
+              Export recap JSON
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={onDownloadPlayerFeedback}
+              disabled={playerFeedback.length === 0}
+            >
+              <Download className="w-4 h-4" aria-hidden />
+              Feedback .txt
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={onCopyPlayerFeedback}
+              disabled={playerFeedback.length === 0}
+            >
+              <Copy className="w-4 h-4" aria-hidden />
+              Copy feedback
+            </button>
+          </div>
+          <p className="host-host-prefs__hint">
+            {playerFeedback.length === 0
+              ? 'No player feedback yet.'
+              : `${playerFeedback.length} message${playerFeedback.length === 1 ? '' : 's'} in this browser (max 500).`}
+          </p>
+          <HostPlayerFeedbackList entries={playerFeedback} />
+        </div>
+      </details>
+
+      <details className="host-glass-panel host-settings-more">
+        <summary className="host-settings-more__summary">
+          Activity
+          {activityEntries.length > 0 ? (
+            <span className="host-settings-more__badge">{activityEntries.length}</span>
+          ) : null}
+        </summary>
+        <div className="host-settings-more__body host-settings-more__body--activity">
+          <HostActivityFeed entries={activityEntries} />
+        </div>
+      </details>
     </div>
   );
 };

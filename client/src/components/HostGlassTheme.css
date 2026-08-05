@@ -1730,8 +1730,24 @@
 .host-glass-theme .host-game-live-extras {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   min-height: 0;
+}
+
+.host-glass-theme .host-settings-cockpit,
+.host-glass-theme .host-settings-more {
+  background: linear-gradient(
+    155deg,
+    rgba(72, 52, 120, 0.36) 0%,
+    rgba(28, 26, 48, 0.72) 100%
+  );
+  backdrop-filter: var(--host-glass-blur);
+  -webkit-backdrop-filter: var(--host-glass-blur);
+  border: 1px solid var(--host-glass-border);
+  border-radius: var(--host-glass-radius);
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.32),
+    0 0 40px rgba(109, 40, 217, 0.1);
 }
 
 .host-glass-theme .host-players-workspace__title,
