@@ -3,6 +3,8 @@ import {
   CheckCircle2,
   ChevronUp,
   Eraser,
+  ImageIcon,
+  ListMusic,
   MessageSquareText,
   Play,
   RotateCcw,
@@ -20,6 +22,13 @@ export type HostQuickBarProps = {
   transportLocked?: boolean;
   feedbackCount: number;
   hasNextPlanned: boolean;
+  /** Prep / waiting: show Set round + Start game. */
+  prepRoundReadyForGoLive?: boolean;
+  mixGameActionsBlocked?: boolean;
+  startGameLabel?: string;
+  onSetRound?: () => void;
+  onResetSplash?: () => void;
+  onStartGame?: () => void;
   onRejectBingo: () => void;
   onResume: () => void;
   onRedoLastCall: () => void;
@@ -32,7 +41,8 @@ export type HostQuickBarProps = {
 };
 
 /**
- * Sticky bottom "Quick" strip on the Game tab — live interventions + round lifecycle.
+ * Sticky bottom "Quick" strip on the Game tab.
+ * Prep: Set round / Splash / Start game. Live: interventions + round lifecycle.
  * Transport (Pause / Skip / Bump) stays on Now Playing only.
  */
 const HostQuickBar: React.FC<HostQuickBarProps> = ({
@@ -42,6 +52,12 @@ const HostQuickBar: React.FC<HostQuickBarProps> = ({
   transportLocked = false,
   feedbackCount,
   hasNextPlanned,
+  prepRoundReadyForGoLive = false,
+  mixGameActionsBlocked = false,
+  startGameLabel = 'Start game',
+  onSetRound,
+  onResetSplash,
+  onStartGame,
   onRejectBingo,
   onResume,
   onRedoLastCall,
@@ -53,6 +69,7 @@ const HostQuickBar: React.FC<HostQuickBarProps> = ({
   onClearPrepCache,
 }) => {
   const isLive = gameState === 'playing';
+  const isPrep = !isLive && gameState !== 'ended';
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
 
@@ -76,41 +93,83 @@ const HostQuickBar: React.FC<HostQuickBarProps> = ({
     <div className="host-quick-bar host-glass-panel" role="toolbar" aria-label="Quick controls">
       <div className="host-quick-bar__label">Quick</div>
 
-      <div className="host-quick-bar__group" aria-label="Live interventions">
-        {isLive ? (
-          <>
-            <button
-              type="button"
-              className="host-quick-bar__btn host-quick-bar__btn--danger"
-              onClick={onRejectBingo}
-              disabled={!canRejectBingo}
-              title="Reject current bingo claim"
-            >
-              <XCircle className="w-4 h-4" aria-hidden />
-              Reject
-            </button>
-            <button
-              type="button"
-              className="host-quick-bar__btn host-quick-bar__btn--go"
-              onClick={onResume}
-              disabled={!canResume}
-              title="Resume after pause / verification"
-            >
-              <Play className="w-4 h-4" aria-hidden />
-              Resume
-            </button>
+      {isPrep ? (
+        <div className="host-quick-bar__group host-quick-bar__group--prep" aria-label="Go live">
+          {prepRoundReadyForGoLive && onSetRound ? (
             <button
               type="button"
               className="host-quick-bar__btn"
-              onClick={onRedoLastCall}
-              disabled={transportLocked}
-              title="Redo last call (previous song)"
+              onClick={onSetRound}
+              disabled={mixGameActionsBlocked}
+              title="Deal cards and show the call list on the projector"
             >
-              <Undo2 className="w-4 h-4" aria-hidden />
-              Redo
+              <ListMusic className="w-4 h-4" aria-hidden />
+              Set round
             </button>
-          </>
-        ) : null}
+          ) : null}
+          {onResetSplash ? (
+            <button
+              type="button"
+              className="host-quick-bar__btn"
+              onClick={onResetSplash}
+              title="Put the splash / QR screen back on the projector"
+            >
+              <ImageIcon className="w-4 h-4" aria-hidden />
+              Splash
+            </button>
+          ) : null}
+          {onStartGame ? (
+            <button
+              type="button"
+              className="host-quick-bar__btn host-quick-bar__btn--primary"
+              onClick={onStartGame}
+              disabled={mixGameActionsBlocked}
+              title="Begin playback"
+              data-host-tutorial="play-start"
+            >
+              <Play className="w-4 h-4" aria-hidden />
+              {startGameLabel}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {isLive ? (
+        <div className="host-quick-bar__group" aria-label="Live interventions">
+          <button
+            type="button"
+            className="host-quick-bar__btn host-quick-bar__btn--danger"
+            onClick={onRejectBingo}
+            disabled={!canRejectBingo}
+            title="Reject current bingo claim"
+          >
+            <XCircle className="w-4 h-4" aria-hidden />
+            Reject
+          </button>
+          <button
+            type="button"
+            className="host-quick-bar__btn host-quick-bar__btn--go"
+            onClick={onResume}
+            disabled={!canResume}
+            title="Resume after pause / verification"
+          >
+            <Play className="w-4 h-4" aria-hidden />
+            Resume
+          </button>
+          <button
+            type="button"
+            className="host-quick-bar__btn"
+            onClick={onRedoLastCall}
+            disabled={transportLocked}
+            title="Redo last call (previous song)"
+          >
+            <Undo2 className="w-4 h-4" aria-hidden />
+            Redo
+          </button>
+        </div>
+      ) : null}
+
+      <div className="host-quick-bar__group" aria-label="Always available">
         <button
           type="button"
           className="host-quick-bar__btn host-quick-bar__btn--feedback"

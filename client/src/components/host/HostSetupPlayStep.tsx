@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Image as ImageIcon, ListChecks, ListMusic, Loader2, Play } from 'lucide-react';
+import { CheckCircle2, ListChecks, Loader2 } from 'lucide-react';
 import HostPlaylistAvailabilityWarnings from '../HostPlaylistAvailabilityWarnings';
 import type { PlaylistAvailabilityIssue } from '../HostPlaylistAvailabilityWarnings';
 import { playlistDisplayParts } from '../../utils/roundPrintLabels';
@@ -20,17 +20,9 @@ export type HostSetupPlayStepProps = {
   mixGameActionsBlocked: boolean;
   finalizeMixBusy: boolean;
   finalizeMixElapsedSec: number;
-  savedRoundRoomSyncBusy: boolean;
-  isSpotifyConnecting: boolean;
-  mixNeedsHostSpotify: boolean;
   playlistAvailabilityIssues: PlaylistAvailabilityIssue[];
   preShowChecklistItems: PreShowCheckItem[];
   onFinalizeMix: () => void;
-  onStartGame: () => void;
-  /** Deal cards to the room if needed + show the call list (column headers) on the projector. */
-  onSetRound?: () => void;
-  /** Put the splash (QR / join) screen back on the projector. */
-  onResetSplash?: () => void;
 };
 
 const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
@@ -47,15 +39,9 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
   mixGameActionsBlocked,
   finalizeMixBusy,
   finalizeMixElapsedSec,
-  savedRoundRoomSyncBusy,
-  isSpotifyConnecting,
-  mixNeedsHostSpotify,
   playlistAvailabilityIssues,
   preShowChecklistItems,
   onFinalizeMix,
-  onStartGame,
-  onSetRound,
-  onResetSplash,
 }) => {
   const showPlaylistsLabel = finalizeMixBusy
     ? finalizeMixElapsedSec > 0
@@ -136,35 +122,16 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
         </p>
       ) : null}
 
-      {prepRoundReadyForGoLive && onSetRound ? (
-        <div className="host-setup-play__preview">
-          <p className="host-setup-play__preview-copy">
-            <strong>Set round</strong> deals player cards and puts the call list on the projector —
-            column headers show this round&apos;s playlists — so you can break the round down before
-            any music plays. Start game begins playback whenever you&apos;re ready.
-          </p>
-          <div className="host-setup-play__preview-actions">
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={onSetRound}
-              disabled={mixGameActionsBlocked}
-            >
-              <ListMusic className="w-4 h-4" aria-hidden />
-              Set round
-            </button>
-            {onResetSplash ? (
-              <button type="button" className="btn-secondary" onClick={onResetSplash}>
-                <ImageIcon className="w-4 h-4" aria-hidden />
-                Back to splash
-              </button>
-            ) : null}
-          </div>
-        </div>
+      {prepRoundReadyForGoLive ? (
+        <p className="host-setup-play__preview-copy">
+          Use the <strong>Quick</strong> bar below: <strong>Set round</strong> deals cards and puts
+          the call list on the projector; <strong>Start game</strong> begins playback when you&apos;re
+          ready.
+        </p>
       ) : null}
 
-      <div className="host-setup-play__actions">
-        {showPrimaryFinalizeMixButton ? (
+      {showPrimaryFinalizeMixButton ? (
+        <div className="host-setup-play__actions">
           <button
             type="button"
             className={
@@ -183,21 +150,8 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
             )}
             {showPlaylistsLabel}
           </button>
-        ) : null}
-        <button
-          type="button"
-          className="btn-primary host-r4-btn-primary host-r4-btn-primary--wide"
-          onClick={onStartGame}
-          disabled={mixGameActionsBlocked}
-        >
-          <Play className="w-5 h-5" aria-hidden />
-          {savedRoundRoomSyncBusy
-            ? 'Syncing…'
-            : isSpotifyConnecting && mixNeedsHostSpotify
-              ? 'Connecting Spotify…'
-              : 'Start game'}
-        </button>
-      </div>
+        </div>
+      ) : null}
 
       {finalizeMixBusy ? (
         <p className="host-r4-finalize-progress" role="status" aria-live="polite">

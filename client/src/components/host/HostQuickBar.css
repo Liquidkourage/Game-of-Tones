@@ -32,6 +32,10 @@
   gap: 8px;
 }
 
+.host-quick-bar__group--prep .host-quick-bar__btn--primary {
+  min-width: 8.5rem;
+}
+
 .host-quick-bar__divider {
   width: 1px;
   align-self: stretch;

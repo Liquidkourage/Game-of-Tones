@@ -10671,13 +10671,13 @@ const HostView: React.FC = () => {
     }
     if (gameState === 'ended') {
       return getNextPlannedRound() >= 0
-        ? 'Round complete. Start the next planned round from Event actions below.'
-        : 'Round complete. Build another round on the Rounds tab, or wrap up in Event actions.';
+        ? 'Round complete. Start the next planned round from Quick below.'
+        : 'Round complete. Build another round on the Rounds tab, or wrap up from Quick.';
     }
     if (!anyRoundHasPlaylists) return 'Build tonight’s rounds on the Rounds tab to get started.';
     if (!prepRoundReadyForGoLive)
       return 'Set patterns and playback on the Setup tab, then finalize on Game.';
-    return 'Ready — Set round to deal cards and brief the room, then Start game.';
+    return 'Ready — use Quick below to Set round, then Start game.';
   })();
 
   const getBingoPoolTrackCountForRound = useCallback(
@@ -12941,18 +12941,9 @@ const HostView: React.FC = () => {
                     mixGameActionsBlocked={mixGameActionsBlocked}
                     finalizeMixBusy={finalizeMixBusy}
                     finalizeMixElapsedSec={finalizeMixElapsedSec}
-                    savedRoundRoomSyncBusy={savedRoundRoomSyncBusy}
-                    isSpotifyConnecting={isSpotifyConnecting}
-                    mixNeedsHostSpotify={mixNeedsHostSpotify}
                     playlistAvailabilityIssues={playlistAvailabilityIssues}
                     preShowChecklistItems={preShowChecklistItems}
                     onFinalizeMix={() => void finalizeMix()}
-                    onStartGame={() => void startGame()}
-                    onSetRound={() => void handleSetRoundOnDisplay()}
-                    onResetSplash={() => {
-                      socket?.emit('display-show-splash', { roomId });
-                      showToast('Projector back on the splash screen.', 'info');
-                    }}
                   />
                 </div>
               </div>
@@ -13129,6 +13120,21 @@ const HostView: React.FC = () => {
                 transportLocked={!!pendingVerification || isProcessingVerification}
                 feedbackCount={playerFeedback.length}
                 hasNextPlanned={getNextPlannedRound() >= 0}
+                prepRoundReadyForGoLive={prepRoundReadyForGoLive}
+                mixGameActionsBlocked={mixGameActionsBlocked}
+                startGameLabel={
+                  savedRoundRoomSyncBusy
+                    ? 'Syncing…'
+                    : isSpotifyConnecting && mixNeedsHostSpotify
+                      ? 'Connecting Spotify…'
+                      : 'Start game'
+                }
+                onSetRound={() => void handleSetRoundOnDisplay()}
+                onResetSplash={() => {
+                  socket?.emit('display-show-splash', { roomId });
+                  showToast('Projector back on the splash screen.', 'info');
+                }}
+                onStartGame={() => void startGame()}
                 onRejectBingo={() => void rejectBingo()}
                 onResume={handleManualResumeGame}
                 onRedoLastCall={handleSkipToPrevious}
