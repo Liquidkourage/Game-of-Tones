@@ -163,7 +163,6 @@ import HostSettingsPanel from './host/HostSettingsPanel';
 import HostPreShowChecklist, { type PreShowCheckItem } from './host/HostPreShowChecklist';
 import HostRoundTimeline from './host/HostRoundTimeline';
 import HostNightBoardPanel from './host/HostNightBoardPanel';
-import HostPanicStrip from './host/HostPanicStrip';
 import HostPlayerFeedbackList, {
   type PlayerFeedbackEntry,
 } from './host/HostPlayerFeedbackList';
@@ -175,7 +174,7 @@ import HostDisplayExtrasPanel from './host/HostDisplayExtrasPanel';
 import type { HostSetupStep } from './host/HostSetupFlow';
 import HostSetupStatusStrip from './host/HostSetupStatusStrip';
 import HostGameModeBanner from './host/HostGameModeBanner';
-import HostEventActionsPanel from './host/HostEventActionsPanel';
+import HostQuickBar from './host/HostQuickBar';
 import HostSetupPlayStep from './host/HostSetupPlayStep';
 import HostPlaylistRoundAssignMenu from './host/HostPlaylistRoundAssignMenu';
 import HostSelectedRoundPanel from './host/HostSelectedRoundPanel';
@@ -12976,41 +12975,45 @@ const HostView: React.FC = () => {
 
             {hostGlassNav === 'game' && !showHostSetupCockpit && (
               <>
-                <div data-host-tutorial="next-round">
-                  <HostRoundTimeline
-                    className="host-round-timeline--game"
-                    rounds={roundTimelineRows}
-                    summary={roundTimelineSummary}
-                    onSelectRound={handleSelectRoundForPrep}
-                    columnLetters={bingoColumnLettersArr}
-                  />
-                </div>
-                {(eventRounds.length > 0 || roundWinners.length > 0) && (
-                  <HostNightBoardPanel
-                    plannedRounds={eventRounds.map((r) => ({
-                      name: r.name,
-                      prize: r.prize,
-                      status: r.status,
-                    }))}
-                    winners={roundWinners}
-                    showOnProjector={showNightBoard}
-                    onToggleProjector={setNightBoardVisible}
-                  />
-                )}
-                {(gameState === 'playing' || gamePaused || !!pendingVerification) && (
-                  <HostPanicStrip
-                    onSkip={skipSong}
-                    onBump={replayCurrentClip}
-                    onRejectBingo={() => void rejectBingo()}
-                    onResume={handleManualResumeGame}
-                    onRedoLastCall={handleSkipToPrevious}
-                    onOpenFeedback={() => setShowPlayerFeedbackModal(true)}
-                    feedbackCount={playerFeedback.length}
-                    canRejectBingo={!!pendingVerification && !isProcessingVerification}
-                    canResume={gamePaused || !!pendingVerification}
-                    transportLocked={!!pendingVerification || isProcessingVerification}
-                  />
-                )}
+                <details
+                  className="host-game-tonight host-glass-panel"
+                  open={gameState !== 'playing'}
+                  data-host-tutorial="next-round"
+                >
+                  <summary className="host-game-tonight__summary">
+                    Tonight
+                    {hostActiveRoundSummary.roundName ? (
+                      <span className="host-game-tonight__summary-meta">
+                        · {hostActiveRoundSummary.roundName}
+                        {hostActiveRoundSummary.playedCount != null &&
+                        hostActiveRoundSummary.poolCount != null
+                          ? ` · ${hostActiveRoundSummary.playedCount}/${hostActiveRoundSummary.poolCount}`
+                          : ''}
+                      </span>
+                    ) : null}
+                  </summary>
+                  <div className="host-game-tonight__body">
+                    <HostRoundTimeline
+                      className="host-round-timeline--game"
+                      rounds={roundTimelineRows}
+                      summary={roundTimelineSummary}
+                      onSelectRound={handleSelectRoundForPrep}
+                      columnLetters={bingoColumnLettersArr}
+                    />
+                    {(eventRounds.length > 0 || roundWinners.length > 0) && (
+                      <HostNightBoardPanel
+                        plannedRounds={eventRounds.map((r) => ({
+                          name: r.name,
+                          prize: r.prize,
+                          status: r.status,
+                        }))}
+                        winners={roundWinners}
+                        showOnProjector={showNightBoard}
+                        onToggleProjector={setNightBoardVisible}
+                      />
+                    )}
+                  </div>
+                </details>
                   <HostGameDashboard
                     gameState={gameState}
                     currentSong={currentSong}
@@ -13119,15 +13122,23 @@ const HostView: React.FC = () => {
             )}
 
             {hostGlassNav === 'game' && !hostRoomHydrating ? (
-              <HostEventActionsPanel
+              <HostQuickBar
                 gameState={gameState}
+                canRejectBingo={!!pendingVerification && !isProcessingVerification}
+                canResume={gamePaused || !!pendingVerification}
+                transportLocked={!!pendingVerification || isProcessingVerification}
+                feedbackCount={playerFeedback.length}
+                hasNextPlanned={getNextPlannedRound() >= 0}
+                onRejectBingo={() => void rejectBingo()}
+                onResume={handleManualResumeGame}
+                onRedoLastCall={handleSkipToPrevious}
+                onOpenFeedback={() => setShowPlayerFeedbackModal(true)}
                 onEndRound={handleEndRound}
                 onResetCurrentRound={resetCurrentRound}
                 onStartNextPlanned={() => {
                   const next = getNextPlannedRound();
                   if (next >= 0) jumpToRound(next);
                 }}
-                hasNextPlanned={getNextPlannedRound() >= 0}
                 onResetEvent={resetEvent}
                 onClearPrepCache={clearRoomRoundPrepStorage}
               />

@@ -199,7 +199,6 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
     savedRound,
     playersOnlineCount,
     winnersCount,
-    lastPlayed,
     playlistNames,
     poolSongs,
     playlistAvailabilityIssues,
@@ -588,19 +587,6 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
           </dl>
         </div>
 
-        {lastPlayed && (gameState === 'playing' || gameState === 'ended') ? (
-          <p
-            className="host-r4-round__last"
-            title={`${lastPlayed.name}${lastPlayed.artist ? ` — ${lastPlayed.artist}` : ''}`}
-          >
-            <span className="host-r4-round__last-label">Last call</span>
-            <span className="host-r4-round__last-title">{lastPlayed.name}</span>
-            {lastPlayed.artist ? (
-              <span className="host-r4-round__last-artist"> — {lastPlayed.artist}</span>
-            ) : null}
-          </p>
-        ) : null}
-
         {playlistNames.length > 0 ? (
           <div className="host-r4-pills">
             {playlistNames.slice(0, 5).map((name, i) => (
@@ -674,26 +660,12 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
         </div>
       </section>
 
-      {/* Host actions */}
-      <section className="host-r4-card host-glass-panel host-r4-actions" aria-label="Host actions" data-host-tutorial="end-round">
+      {/* Host actions — transport (Skip / Bump) lives on Now Playing only */}
+      <section className="host-r4-card host-glass-panel host-r4-actions" aria-label="Host actions">
         <p className="host-r4-card__eyebrow">Host actions</p>
         <div className="host-r4-action-grid">
           {gameState === 'playing' ? (
             <>
-              <button type="button" className="host-r4-action-tile" onClick={onSkip}>
-                <SkipForward className="w-5 h-5" aria-hidden />
-                Skip song
-              </button>
-              <button
-                type="button"
-                className="host-r4-action-tile"
-                onClick={onReplayClip}
-                disabled={!currentSong}
-                title="Same song, new start position (does not skip / advance the pool)"
-              >
-                <RotateCw className="w-5 h-5" aria-hidden />
-                Bump clip
-              </button>
               <button type="button" className="host-r4-action-tile" onClick={onOpenLibrary}>
                 <ListPlus className="w-5 h-5" aria-hidden />
                 Library

@@ -332,6 +332,24 @@
   z-index: 1;
 }
 
+.host-glass-theme .host-game-tonight,
+.host-glass-theme .host-quick-bar {
+  background: linear-gradient(
+    155deg,
+    rgba(72, 52, 120, 0.36) 0%,
+    rgba(28, 26, 48, 0.72) 100%
+  );
+  backdrop-filter: var(--host-glass-blur);
+  -webkit-backdrop-filter: var(--host-glass-blur);
+  border: 1px solid var(--host-glass-border);
+  border-radius: var(--host-glass-radius);
+}
+
+.host-glass-theme .host-quick-bar {
+  border-color: rgba(0, 255, 163, 0.4);
+  background: linear-gradient(165deg, rgba(8, 22, 18, 0.98) 0%, rgba(12, 18, 32, 0.98) 100%);
+}
+
 .host-glass-theme .host-live-dock--pinned {
   border-width: 1px;
   border-color: var(--host-glass-border-mint);
