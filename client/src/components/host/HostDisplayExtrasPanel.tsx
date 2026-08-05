@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Monitor, Save, Trash2 } from 'lucide-react';
+import { Save, Trash2 } from 'lucide-react';
 import {
   loadDisplayPresets,
   saveDisplayPresets,
@@ -55,29 +55,36 @@ const HostDisplayExtrasPanel: React.FC<HostDisplayExtrasPanelProps> = ({
   };
 
   return (
-    <section className="host-display-extras host-glass-panel" aria-label="Display diagnostics and presets">
-      <h2 className="host-display-extras__title">
-        <Monitor className="host-display-extras__icon" aria-hidden />
-        Diagnostics &amp; presets
-      </h2>
+    <section className="host-display-extras" aria-label="Display diagnostics and presets">
       <dl className="host-display-extras__diag">
         <div>
-          <dt>Projector socket</dt>
-          <dd className={displayConnected ? (displayStale ? 'is-stale' : 'is-ok') : 'is-off'}>
-            {displayConnected
-              ? displayStale
-                ? `Connected · stale (${displaySyncLabel})`
-                : `Connected · ${displaySyncLabel}`
-              : 'Not connected'}
-          </dd>
-        </div>
-        <div>
-          <dt>Call layout mode</dt>
+          <dt>Call layout</dt>
           <dd>{publicDisplayCallListMode}</dd>
         </div>
         <div>
-          <dt>Font scale</dt>
+          <dt>Font</dt>
           <dd>{(publicDisplayFontSize * 100).toFixed(0)}%</dd>
+        </div>
+        <div>
+          <dt>Reveal</dt>
+          <dd>
+            {publicDisplayTitleRevealMode === 'letter'
+              ? `Letter · ${letterRevealIntervalSec}s`
+              : publicDisplayTitleRevealMode === 'track_start'
+                ? 'Track start'
+                : 'Track end'}
+            {publicDisplayLetterRevealToast ? ' · toast on' : ''}
+          </dd>
+        </div>
+        <div>
+          <dt>Socket</dt>
+          <dd className={displayConnected ? (displayStale ? 'is-stale' : 'is-ok') : 'is-off'}>
+            {displayConnected
+              ? displayStale
+                ? `Stale · ${displaySyncLabel}`
+                : displaySyncLabel
+              : 'Off'}
+          </dd>
         </div>
       </dl>
 

@@ -581,16 +581,24 @@
   color: var(--host-glass-mint);
 }
 
-.host-glass-theme .host-glass-view--display .host-event-settings {
-  border: none;
+.host-glass-theme .host-glass-view--display .host-display-workspace {
+  gap: 12px;
 }
 
-.host-glass-theme .host-glass-view--display .host-event-settings__summary {
-  display: none;
-}
-
-.host-glass-theme .host-glass-view--display .host-event-settings__body {
-  padding-top: 0;
+.host-glass-theme .host-glass-view--display .host-display-cockpit,
+.host-glass-theme .host-glass-view--display .host-display-more {
+  background: linear-gradient(
+    155deg,
+    rgba(72, 52, 120, 0.36) 0%,
+    rgba(28, 26, 48, 0.72) 100%
+  );
+  backdrop-filter: var(--host-glass-blur);
+  -webkit-backdrop-filter: var(--host-glass-blur);
+  border: 1px solid var(--host-glass-border);
+  border-radius: var(--host-glass-radius);
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.32),
+    0 0 40px rgba(109, 40, 217, 0.1);
 }
 
 .host-glass-theme .host-header--r4 .host-header__brand {
@@ -2113,10 +2121,10 @@
 
 .host-glass-theme .host-display-extras__diag {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 10px;
-  margin: 0 0 14px;
-  font-size: 0.82rem;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px 12px;
+  margin: 0 0 12px;
+  font-size: 0.8rem;
 }
 
 .host-glass-theme .host-display-extras__diag dt {

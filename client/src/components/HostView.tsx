@@ -1758,7 +1758,7 @@ const HostView: React.FC = () => {
   const [canUndoSkip, setCanUndoSkip] = useState(false);
   const roundsPanelRef = useRef<HTMLElement>(null);
   const hostShellMainRef = useRef<HTMLDivElement>(null);
-  const displaySettingsRef = useRef<HTMLDetailsElement>(null);
+  const displaySettingsRef = useRef<HTMLDivElement>(null);
   /** 5�15 mode: playlist title per column (from `fiveby15-pool`, else five selected playlists). */
   const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
   const [roundBuilderFocusIndex, setRoundBuilderFocusIndex] = useState(0);
@@ -13303,254 +13303,187 @@ const HostView: React.FC = () => {
             ) : null}
 
             {hostGlassNav === 'display' && (
-          <details ref={displaySettingsRef} className="host-event-settings" open data-host-tutorial="display">
-            <summary className="host-event-settings__summary">
-              <Monitor className="w-5 h-5" aria-hidden />
-              Projector &amp; event rules
-            </summary>
-            <div className="host-event-settings__body">
-
-          <section className="host-glass-panel host-display-link-panel" aria-label="Public display link">
-            <h2
-              className="host-manager-section__title"
-              style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 8px' }}
-            >
-              <Monitor className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
-              Display link
-            </h2>
-            <code className="host-display-link-panel__url">{publicDisplayUrl || '—'}</code>
-            <div className="host-display-link-panel__actions">
-              <button type="button" className="btn-secondary" onClick={handleCopyDisplayLink}>
-                <Copy className="w-4 h-4" aria-hidden />
-                Copy link
-              </button>
-              {publicDisplayUrl ? (
-                <a className="btn-primary" href={publicDisplayUrl} target="_blank" rel="noreferrer">
-                  <ExternalLink className="w-4 h-4" aria-hidden />
-                  Open display
-                </a>
-              ) : null}
-            </div>
-          </section>
-
-          <section className="host-glass-panel host-display-link-panel" aria-label="Live winner display controls">
-            <h2
-              className="host-manager-section__title"
-              style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 8px' }}
-            >
-              <Trophy className="w-5 h-5" style={{ color: '#ffd166' }} aria-hidden />
-              Live winner controls
-            </h2>
-            <p style={{ margin: '0 0 12px', color: '#b3b3b3', fontSize: '0.85rem', lineHeight: 1.45 }}>
-              Take the winner celebration off the projector immediately. This does not complete the round.
-            </p>
-            <div className="host-display-link-panel__actions">
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={dismissPublicWinnerPopup}
-                style={{ borderColor: 'rgba(255, 107, 107, 0.65)', color: '#ffb3b3', fontWeight: 800 }}
+              <div
+                ref={displaySettingsRef}
+                className="host-display-workspace"
+                data-host-tutorial="display"
               >
-                <X className="w-4 h-4" aria-hidden />
-                Hide winner popup now
-              </button>
-              <label className="host-night-board__toggle">
-                <input
-                  type="checkbox"
-                  className="host-control-checkbox"
-                  checked={showNightBoard}
-                  onChange={(e) => setNightBoardVisible(e.target.checked)}
-                />
-                <span>Show winners board on projector</span>
-              </label>
-            </div>
-          </section>
+                <section className="host-glass-panel host-display-cockpit" aria-label="Projector controls">
+                  <div className="host-display-cockpit__header">
+                    <h2 className="host-display-cockpit__title">
+                      <Monitor className="w-5 h-5" aria-hidden />
+                      Projector
+                    </h2>
+                    <span
+                      className={
+                        displayPresence.connected
+                          ? displayPresence.stale
+                            ? 'host-display-cockpit__status is-stale'
+                            : 'host-display-cockpit__status is-ok'
+                          : 'host-display-cockpit__status is-off'
+                      }
+                    >
+                      {displayPresence.connected
+                        ? displayPresence.stale
+                          ? `Stale · ${displaySyncLabel}`
+                          : `Live · ${displaySyncLabel}`
+                        : 'Not connected'}
+                    </span>
+                  </div>
 
-          <motion.section
-            className="host-manager-round host-manager-section"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.25 }}
-          >
-            <h2 className="host-manager-section__title host-event-settings__hidden-heading">
-              Event rules
-            </h2>
-          </motion.section>
+                  <div className="host-display-cockpit__link-row">
+                    <code className="host-display-cockpit__url">{publicDisplayUrl || '—'}</code>
+                    <div className="host-display-cockpit__actions">
+                      <button type="button" className="btn-secondary" onClick={handleCopyDisplayLink}>
+                        <Copy className="w-4 h-4" aria-hidden />
+                        Copy
+                      </button>
+                      {publicDisplayUrl ? (
+                        <a className="btn-primary" href={publicDisplayUrl} target="_blank" rel="noreferrer">
+                          <ExternalLink className="w-4 h-4" aria-hidden />
+                          Open
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
 
-          <HostSponsorScreenPanel
-            config={sponsorScreen}
-            canShow={gameState !== 'playing'}
-            onSave={saveSponsorScreenConfig}
-            onSetVisible={setSponsorScreenVisible}
-          />
+                  <div className="host-display-cockpit__row">
+                    <span className="host-display-cockpit__label">Screen</span>
+                    <div className="host-display-cockpit__actions">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => socket?.emit('display-show-splash', { roomId })}
+                      >
+                        <ImageIcon className="w-4 h-4" aria-hidden />
+                        Splash
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => socket?.emit('display-show-call-list', { roomId })}
+                      >
+                        <ListMusic className="w-4 h-4" aria-hidden />
+                        Call list
+                      </button>
+                      {showYoutubeMusicInConnectionModal ? (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={openYoutubeHostPlaybackWindow}
+                          title={
+                            hideYoutubeCornerPlayer
+                              ? 'Dedicated playback window is active'
+                              : 'Open dedicated YouTube playback window'
+                          }
+                        >
+                          <AppWindow className="w-4 h-4" aria-hidden />
+                          YouTube window
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
 
-          <HostDisplayExtrasPanel
-            displayConnected={displayPresence.connected}
-            displayStale={displayPresence.stale}
-            displaySyncLabel={displaySyncLabel}
-            publicDisplayCallListMode={publicDisplayCallListMode}
-            publicDisplayFontSize={publicDisplayFontSize}
-            publicDisplayTitleRevealMode={publicDisplayTitleRevealMode}
-            letterRevealIntervalSec={letterRevealIntervalSec}
-            publicDisplayLetterRevealToast={publicDisplayLetterRevealToast}
-            onApplyPreset={(p) => {
-              updatePublicDisplayFontSize(p.publicDisplayFontSize);
-              updatePublicDisplayTitleRevealMode(p.publicDisplayTitleRevealMode);
-              updatePublicDisplayLetterRevealInterval(p.letterRevealIntervalSec);
-              if (p.publicDisplayLetterRevealToast != null) {
-                updatePublicDisplayLetterRevealToast(p.publicDisplayLetterRevealToast);
-              }
-              addLog(`Applied display preset "${p.name}"`, 'info');
-            }}
-          />
+                  <div className="host-display-cockpit__row">
+                    <span className="host-display-cockpit__label">Title size</span>
+                    <div className="host-display-cockpit__font">
+                      <button
+                        type="button"
+                        className="host-display-cockpit__font-btn"
+                        onClick={() => updatePublicDisplayFontSize(publicDisplayFontSize - 0.1)}
+                        disabled={publicDisplayFontSize <= 0.5}
+                        aria-label="Decrease title size"
+                      >
+                        −
+                      </button>
+                      <div className="host-display-cockpit__font-value" aria-live="polite">
+                        {(publicDisplayFontSize * 100).toFixed(0)}%
+                      </div>
+                      <button
+                        type="button"
+                        className="host-display-cockpit__font-btn"
+                        onClick={() => updatePublicDisplayFontSize(publicDisplayFontSize + 0.1)}
+                        disabled={publicDisplayFontSize >= 3.0}
+                        aria-label="Increase title size"
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary host-display-cockpit__font-reset"
+                        onClick={() => updatePublicDisplayFontSize(1)}
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
 
-          <motion.section
-            className="host-manager-section host-manager-section--display host-manager-display-pane font-size-section"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            aria-labelledby="host-manager-display-title"
-          >
-            <h2
-              id="host-manager-display-title"
-              className="host-manager-section__title"
-              style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 8px' }}
-            >
-              <Monitor className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
-              Public display
-            </h2>
-            <p className="host-manager-display__sub">Title &amp; artist size</p>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
-              <button
-                onClick={() => updatePublicDisplayFontSize(publicDisplayFontSize - 0.1)}
-                disabled={publicDisplayFontSize <= 0.5}
-                style={{
-                  padding: '10px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  background: publicDisplayFontSize <= 0.5 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)',
-                  color: publicDisplayFontSize <= 0.5 ? '#666' : '#ffffff',
-                  cursor: publicDisplayFontSize <= 0.5 ? 'not-allowed' : 'pointer',
-                  fontSize: '1.2rem',
-                  fontWeight: 'bold',
-                  minWidth: '50px'
-                }}
-              >
-                -
-              </button>
-              
-              <div style={{
-                minWidth: '120px',
-                textAlign: 'center',
-                padding: '10px 20px',
-                background: 'rgba(0,255,136,0.1)',
-                borderRadius: '8px',
-                border: '1px solid rgba(0,255,136,0.3)'
-              }}>
-                <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#00ff88' }}>
-                  {(publicDisplayFontSize * 100).toFixed(0)}%
-                </div>
-                <div style={{ fontSize: '0.8rem', color: '#b3b3b3', marginTop: '4px' }}>
-                  {publicDisplayFontSize.toFixed(1)}× vs auto-fit
-                </div>
+                  <div className="host-display-cockpit__row">
+                    <span className="host-display-cockpit__label">
+                      <Trophy className="w-4 h-4" aria-hidden />
+                      Winners
+                    </span>
+                    <div className="host-display-cockpit__actions">
+                      <button
+                        type="button"
+                        className="btn-secondary host-display-cockpit__dismiss-winner"
+                        onClick={dismissPublicWinnerPopup}
+                        title="Hide the winner celebration on the projector (does not complete the round)"
+                      >
+                        <X className="w-4 h-4" aria-hidden />
+                        Hide popup
+                      </button>
+                      <label className="host-display-cockpit__toggle">
+                        <input
+                          type="checkbox"
+                          className="host-control-checkbox"
+                          checked={showNightBoard}
+                          onChange={(e) => setNightBoardVisible(e.target.checked)}
+                        />
+                        <span>Show board</span>
+                      </label>
+                    </div>
+                  </div>
+                </section>
+
+                <details className="host-glass-panel host-display-more">
+                  <summary className="host-display-more__summary">Sponsor screen</summary>
+                  <div className="host-display-more__body">
+                    <HostSponsorScreenPanel
+                      config={sponsorScreen}
+                      canShow={gameState !== 'playing'}
+                      onSave={saveSponsorScreenConfig}
+                      onSetVisible={setSponsorScreenVisible}
+                      className="host-display-more__nested"
+                    />
+                  </div>
+                </details>
+
+                <details className="host-glass-panel host-display-more">
+                  <summary className="host-display-more__summary">Diagnostics &amp; presets</summary>
+                  <div className="host-display-more__body">
+                    <HostDisplayExtrasPanel
+                      displayConnected={displayPresence.connected}
+                      displayStale={displayPresence.stale}
+                      displaySyncLabel={displaySyncLabel}
+                      publicDisplayCallListMode={publicDisplayCallListMode}
+                      publicDisplayFontSize={publicDisplayFontSize}
+                      publicDisplayTitleRevealMode={publicDisplayTitleRevealMode}
+                      letterRevealIntervalSec={letterRevealIntervalSec}
+                      publicDisplayLetterRevealToast={publicDisplayLetterRevealToast}
+                      onApplyPreset={(p) => {
+                        updatePublicDisplayFontSize(p.publicDisplayFontSize);
+                        updatePublicDisplayTitleRevealMode(p.publicDisplayTitleRevealMode);
+                        updatePublicDisplayLetterRevealInterval(p.letterRevealIntervalSec);
+                        if (p.publicDisplayLetterRevealToast != null) {
+                          updatePublicDisplayLetterRevealToast(p.publicDisplayLetterRevealToast);
+                        }
+                        addLog(`Applied display preset "${p.name}"`, 'info');
+                      }}
+                    />
+                  </div>
+                </details>
               </div>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => updatePublicDisplayFontSize(1)}
-                style={{ fontSize: '0.85rem', padding: '10px 14px' }}
-              >
-                Reset to 100% (auto-fit)
-              </button>
-              <button
-                onClick={() => updatePublicDisplayFontSize(publicDisplayFontSize + 0.1)}
-                disabled={publicDisplayFontSize >= 3.0}
-                style={{
-                  padding: '10px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  background: publicDisplayFontSize >= 3.0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)',
-                  color: publicDisplayFontSize >= 3.0 ? '#666' : '#ffffff',
-                  cursor: publicDisplayFontSize >= 3.0 ? 'not-allowed' : 'pointer',
-                  fontSize: '1.2rem',
-                  fontWeight: 'bold',
-                  minWidth: '50px'
-                }}
-              >
-                +
-              </button>
-            </div>
-            <div className="host-manager-display__divider" />
-            <p className="host-manager-display__sub">Screen modes</p>
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-              <button 
-                className="btn-secondary" 
-                onClick={() => socket?.emit('display-show-splash', { roomId })}
-                style={{ 
-                  fontSize: '0.9rem', 
-                  padding: '10px 16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-              >
-                <ImageIcon className="w-4 h-4" aria-hidden />
-                Splash
-              </button>
-              <button 
-                className="btn-secondary" 
-                onClick={() => socket?.emit('display-show-call-list', { roomId })}
-                style={{ 
-                  fontSize: '0.9rem', 
-                  padding: '10px 16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-              >
-                <ListMusic className="w-4 h-4" aria-hidden />
-                Call List
-              </button>
-            </div>
-          </motion.section>
-
-          {showYoutubeMusicInConnectionModal ? (
-          <motion.section
-            className="host-manager-section host-manager-section--display host-manager-display-pane host-manager-display-pane--continued font-size-section"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.35 }}
-            aria-labelledby="host-manager-display-title"
-          >
-              <>
-                <div className="host-manager-display__divider" style={{ marginTop: 14 }} />
-                <p className="host-manager-display__sub">YouTube playback window</p>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={openYoutubeHostPlaybackWindow}
-                  style={{
-                    fontSize: '0.9rem',
-                    padding: '10px 16px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}
-                >
-                  <AppWindow className="w-4 h-4" aria-hidden />
-                  Open YouTube playback window
-                </button>
-                {hideYoutubeCornerPlayer ? (
-                  <p style={{ marginTop: 10, fontSize: '0.78rem', color: '#6fdfae', lineHeight: 1.4 }}>
-                    Dedicated playback window is active — the corner mini-player is off so only one copy plays. Close that
-                    window or tab to use the corner player again.
-                  </p>
-                ) : null}
-              </>
-          </motion.section>
-          ) : null}
-            </div>
-          </details>
             )}
 
           </div>
