@@ -8820,12 +8820,6 @@ const HostView: React.FC = () => {
     return () => { cancelled = true; clearTimeout(t); };
   }, [isPlaying, currentSong]);
 
-  const confirmAndNewRound = () => {
-    // Use the same handler as the modal button for consistency
-    // This ensures full reset and proper round transition
-    handleStartNextRound();
-  };
-
   // Round management functions
   const handleUpdateRounds = useCallback(
     (newRounds: EventRound[], meta?: { reorder?: { from: number; to: number } }) => {
