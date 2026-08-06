@@ -23,6 +23,9 @@ export type HostSetupPlayStepProps = {
   playlistAvailabilityIssues: PlaylistAvailabilityIssue[];
   preShowChecklistItems: PreShowCheckItem[];
   onFinalizeMix: () => void;
+  /** Open bingo pool list (Alias titles/artists before Start game). */
+  hasFinalizedSongPool?: boolean;
+  onOpenPool?: () => void;
 };
 
 const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
@@ -42,6 +45,8 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
   playlistAvailabilityIssues,
   preShowChecklistItems,
   onFinalizeMix,
+  hasFinalizedSongPool = false,
+  onOpenPool,
 }) => {
   const showPlaylistsLabel = finalizeMixBusy
     ? finalizeMixElapsedSec > 0
@@ -114,6 +119,20 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
           <dd>{poolCount > 0 ? `${poolCount} tracks ready` : 'Not built yet'}</dd>
         </div>
       </dl>
+
+      {hasFinalizedSongPool && onOpenPool ? (
+        <div className="host-setup-play__actions">
+          <button
+            type="button"
+            className="btn-secondary host-r4-btn-secondary"
+            onClick={onOpenPool}
+            title="Review the bingo pool and edit display aliases before starting"
+          >
+            <ListChecks className="w-4 h-4" aria-hidden />
+            View bingo pool
+          </button>
+        </div>
+      ) : null}
 
       {prepRoundReadyForGoLive ? (
         <p className="host-setup-play__ready">

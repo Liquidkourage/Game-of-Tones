@@ -4,6 +4,7 @@ import {
   ChevronUp,
   Eraser,
   ImageIcon,
+  ListChecks,
   ListMusic,
   MessageSquareText,
   Play,
@@ -38,6 +39,9 @@ export type HostQuickBarProps = {
   onStartNextPlanned: () => void;
   onResetEvent: () => void;
   onClearPrepCache: () => void;
+  /** Open bingo pool (Alias titles/artists) — prep and live. */
+  hasFinalizedSongPool?: boolean;
+  onOpenPool?: () => void;
 };
 
 /**
@@ -67,6 +71,8 @@ const HostQuickBar: React.FC<HostQuickBarProps> = ({
   onStartNextPlanned,
   onResetEvent,
   onClearPrepCache,
+  hasFinalizedSongPool = false,
+  onOpenPool,
 }) => {
   const isLive = gameState === 'playing';
   const isPrep = !isLive && gameState !== 'ended';
@@ -170,6 +176,17 @@ const HostQuickBar: React.FC<HostQuickBarProps> = ({
       ) : null}
 
       <div className="host-quick-bar__group" aria-label="Always available">
+        {hasFinalizedSongPool && onOpenPool ? (
+          <button
+            type="button"
+            className="host-quick-bar__btn"
+            onClick={onOpenPool}
+            title="Review the bingo pool and edit display aliases"
+          >
+            <ListChecks className="w-4 h-4" aria-hidden />
+            Pool
+          </button>
+        ) : null}
         <button
           type="button"
           className="host-quick-bar__btn host-quick-bar__btn--feedback"

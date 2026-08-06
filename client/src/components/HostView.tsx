@@ -11295,7 +11295,10 @@ const HostView: React.FC = () => {
             {tempoLibraryPacks.length > 0 ? (
               <div className="host-catalog-pack-list">
                 {tempoLibraryPacks.map((pack) => {
-                  const isSel = selectedCatalogPlaylists.some((p) => p.id === pack.id);
+                  const packCanon = canonicalPlaylistIdForMatch(String(pack.id));
+                  const inQuickRound = Boolean(
+                    libraryQuickAssignRound?.canonicalIds.includes(packCanon),
+                  );
                   const rawDisplayName = stripGoTPrefix
                     ? stripTitleFlagPrefix(pack.name, titleFlagStripList)
                     : pack.name;
@@ -11329,19 +11332,27 @@ const HostView: React.FC = () => {
                           display: 'flex',
                           alignItems: 'center',
                           gap: 10,
-                          cursor: 'pointer',
+                          cursor: libraryQuickAssignRound ? 'pointer' : 'default',
                           flex: 1,
                           minWidth: 0,
                         }}
                       >
                         <input
                           type="checkbox"
-                          checked={isSel}
-                          aria-label={`Include in game mix: ${pack.name}`}
+                          checked={inQuickRound}
+                          disabled={!libraryQuickAssignRound}
+                          aria-label={
+                            libraryQuickAssignRound
+                              ? `${inQuickRound ? 'Remove from' : 'Add to'} ${libraryQuickAssignRound.name}: ${pack.name}`
+                              : `Assign ${pack.name} to a round`
+                          }
                           onChange={() => {
-                            setSelectedCatalogPlaylists((prev) =>
-                              isSel ? prev.filter((p) => p.id !== pack.id) : [...prev, { ...pack, catalog: true }]
-                            );
+                            if (!libraryQuickAssignRound) return;
+                            if (inQuickRound) {
+                              removePlaylistFromRoundBucket(libraryQuickAssignRound.index, pack.id);
+                            } else {
+                              addPlaylistToRoundBucket(libraryQuickAssignRound.index, pack.id);
+                            }
                           }}
                         />
                         <span
@@ -12997,6 +13008,8 @@ const HostView: React.FC = () => {
                     playlistAvailabilityIssues={playlistAvailabilityIssues}
                     preShowChecklistItems={preShowChecklistItems}
                     onFinalizeMix={() => void finalizeMix()}
+                    hasFinalizedSongPool={hasFinalizedSongPool}
+                    onOpenPool={() => setShowBingoPoolModal(true)}
                   />
                 </div>
               </div>
@@ -13201,6 +13214,8 @@ const HostView: React.FC = () => {
                 onStartNextPlanned={handlePrepareNextPlannedRound}
                 onResetEvent={resetEvent}
                 onClearPrepCache={clearRoomRoundPrepStorage}
+                hasFinalizedSongPool={hasFinalizedSongPool}
+                onOpenPool={() => setShowBingoPoolModal(true)}
               />
             ) : null}
 
