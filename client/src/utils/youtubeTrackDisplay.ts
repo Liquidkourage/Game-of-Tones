@@ -62,12 +62,30 @@ function isParenVersionOrEditTag(inner: string): boolean {
   return false;
 }
 
+/**
+ * Title-Case multi-word franchise / media tags in parens (e.g. "Fifty Shades Darker").
+ * Requires 3+ words so 1–2 word performer credits like "(Taylor Swift)" still parse as artist.
+ */
+function looksLikeTitleCaseMediaTag(inner: string): boolean {
+  const x = String(inner || '').trim();
+  if (!x) return false;
+  if (/[&/]/.test(x) || /\b(feat\.?|ft\.|featuring)\b/i.test(x)) return false;
+  const words = x.split(/\s+/).filter(Boolean);
+  if (words.length < 3) return false;
+  return words.every(
+    (w) =>
+      /^[A-Z][A-Za-z'’]*$/.test(w) || /^(of|the|a|an|and|in|to|from)$/i.test(w),
+  );
+}
+
 function isParenSubtitleOrRecordingMeta(inner: string): boolean {
   const x = String(inner || '').trim();
   if (/^with\s+(my|your|his|her|our|their)\b/i.test(x)) return true;
   if (/^from\s+(the|a)\b/i.test(x)) return true;
   if (/\brecords?\b/i.test(x) && /\d{4}/.test(x)) return true;
   if (/^live\s+at\b/i.test(x)) return true;
+  if (/\b(soundtrack|ost|score|theme)\b/i.test(x)) return true;
+  if (looksLikeTitleCaseMediaTag(x)) return true;
   return false;
 }
 
@@ -110,7 +128,13 @@ function tryLeadingTwoWordPersonArtist(normalized: string): { title: string; art
   if (!m) return null;
   const w1 = m[1].split(/\s+/)[0];
   const pair = `${m[1].split(/\s+/)[0]} ${m[1].split(/\s+/)[1]}`.toLowerCase();
-  if (/^(The|A|An|All|My|Your|Our|Its?|If|When|Where|Why|How|Let|One|Two|Three|For|But|Not|And|She|Her|His|Our)$/i.test(w1)) return null;
+  if (
+    /^(The|A|An|All|My|Your|Our|Its?|If|When|Where|Why|How|Let|One|Two|Three|For|But|Not|And|She|Her|His|Our|You|I|We|Don't|Can't|Won't|Ain't)$/i.test(
+      w1,
+    )
+  ) {
+    return null;
+  }
   const badPair = new Set([
     'one more',
     'one last',
@@ -130,6 +154,7 @@ function tryLeadingTwoWordPersonArtist(normalized: string): { title: string; art
     'we are',
     'we can',
     'you are',
+    'you need',
     'blame it',
     'quit playing',
     'drop it',
