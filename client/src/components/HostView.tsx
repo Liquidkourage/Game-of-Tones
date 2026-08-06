@@ -9933,6 +9933,7 @@ const HostView: React.FC = () => {
     });
   }, [socket]);
 
+  /** After bingo (or host end): finish current round, load next planned mix, do not Start Game. */
   const handlePrepareNextPlannedRound = useCallback(() => {
     const nextIndex = getNextPlannedRound();
     if (nextIndex < 0) {
@@ -9940,18 +9941,31 @@ const HostView: React.FC = () => {
       return;
     }
     const round = eventRoundsRef.current[nextIndex];
+    if (!emitRoundPlaybackReset()) {
+      showToast('Not connected — cannot advance rounds', 'error');
+      return;
+    }
     completeCurrentRound();
     jumpToRound(nextIndex);
     setRoundComplete(null);
+    setPendingVerification(null);
     setGamePaused(true);
     gameStateRef.current = 'waiting';
     setGameState('waiting');
+    setHostGlassNav('game');
     showToast(
-      `${round?.name || 'Next round'} loaded for prep — review the mix, then tap Start Game when ready.`,
-      'info',
+      `${round?.name || 'Next round'} ready — tap Start Game when the room is set.`,
+      'success',
     );
-    addLog(`Prepared ${round?.name || 'next round'} for host review (no auto-start)`, 'info');
-  }, [getNextPlannedRound, completeCurrentRound, jumpToRound, showToast, addLog]);
+    addLog(`Advanced to ${round?.name || 'next round'} for prep (no auto-start)`, 'info');
+  }, [
+    getNextPlannedRound,
+    emitRoundPlaybackReset,
+    completeCurrentRound,
+    jumpToRound,
+    showToast,
+    addLog,
+  ]);
 
   const handleStartNextPlannedRound = useCallback(async () => {
     const nextIndex = getNextPlannedRound();
@@ -13080,8 +13094,6 @@ const HostView: React.FC = () => {
                     setPlaybackVolume={(v) => setPlaybackState((prev) => ({ ...prev, volume: v }))}
                     onStartGame={startGame}
                     onFinalizeMix={() => void finalizeMix()}
-                    onEndGame={endGame}
-                    onNewRoundSetup={confirmAndNewRound}
                     onOpenLibrary={openPlaylistLibrary}
                     onOpenPool={() => setShowBingoPoolModal(true)}
                     onOpenPlayerCards={openPlayerCardsModal}
@@ -13165,10 +13177,7 @@ const HostView: React.FC = () => {
                 onOpenFeedback={() => setShowPlayerFeedbackModal(true)}
                 onEndRound={handleEndRound}
                 onResetCurrentRound={resetCurrentRound}
-                onStartNextPlanned={() => {
-                  const next = getNextPlannedRound();
-                  if (next >= 0) jumpToRound(next);
-                }}
+                onStartNextPlanned={handlePrepareNextPlannedRound}
                 onResetEvent={resetEvent}
                 onClearPrepCache={clearRoomRoundPrepStorage}
               />
@@ -14270,150 +14279,102 @@ const HostView: React.FC = () => {
               gap: '12px',
               marginTop: '24px'
             }}>
-              <button
-                type="button"
-                onClick={dismissRoundCompleteModal}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  border: '2px solid rgba(255, 255, 255, 0.28)',
-                  borderRadius: '10px',
-                  padding: '14px 24px',
-                  fontSize: '1.05rem',
-                  fontWeight: 700,
-                  color: '#f4f4f4',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 10,
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.16)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-                }}
-              >
-                Back to host (mark round complete)
-              </button>
-
               {getNextPlannedRound() >= 0 ? (
                 <button
                   type="button"
                   onClick={handlePrepareNextPlannedRound}
                   style={{
-                    background: 'rgba(0, 170, 255, 0.12)',
-                    border: '2px solid rgba(0, 170, 255, 0.55)',
+                    background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
+                    border: 'none',
                     borderRadius: '10px',
-                    padding: '14px 24px',
-                    fontSize: '1.05rem',
-                    fontWeight: 700,
-                    color: '#8edcff',
+                    padding: '16px 24px',
+                    fontSize: '1.15rem',
+                    fontWeight: 'bold',
+                    color: '#001a0d',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
+                    boxShadow: '0 4px 15px rgba(0, 255, 136, 0.3)',
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: 10,
                   }}
                   onMouseOver={(e) => {
-                    e.currentTarget.style.background = 'rgba(0, 170, 255, 0.2)';
+                    e.currentTarget.style.transform = 'scale(1.03)';
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 255, 136, 0.5)';
                   }}
                   onMouseOut={(e) => {
-                    e.currentTarget.style.background = 'rgba(0, 170, 255, 0.12)';
+                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 255, 136, 0.3)';
                   }}
                 >
-                  Prepare next round (no auto-start)
+                  <SkipForward className="w-5 h-5" aria-hidden />
+                  Next round
                 </button>
-              ) : null}
-
-              <button
-                onClick={getNextPlannedRound() >= 0 ? () => void handleStartNextPlannedRound() : handleStartNextRound}
-                style={{
-                  background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
-                  border: 'none',
-                  borderRadius: '10px',
-                  padding: '16px 24px',
-                  fontSize: '1.1rem',
-                  fontWeight: 'bold',
-                  color: '#001a0d',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 15px rgba(0, 255, 136, 0.3)',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 10,
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'scale(1.05)';
-                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 255, 136, 0.5)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 255, 136, 0.3)';
-                }}
-              >
-                <SkipForward className="w-5 h-5" aria-hidden />
-                {getNextPlannedRound() >= 0 ? 'Start next planned round now' : 'Start next round'}
-              </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={dismissRoundCompleteModal}
+                  style={{
+                    background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '16px 24px',
+                    fontSize: '1.15rem',
+                    fontWeight: 'bold',
+                    color: '#001a0d',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 15px rgba(0, 255, 136, 0.3)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+                  }}
+                >
+                  Back to host
+                </button>
+              )}
 
               {getNextPlannedRound() >= 0 ? (
                 <button
-                  onClick={handleStartNextRound}
+                  type="button"
+                  onClick={dismissRoundCompleteModal}
                   style={{
-                    background: 'rgba(0, 170, 255, 0.12)',
-                    border: '2px solid rgba(0, 170, 255, 0.55)',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '2px solid rgba(255, 255, 255, 0.28)',
                     borderRadius: '10px',
                     padding: '12px 24px',
-                    fontSize: '1rem',
-                    fontWeight: 'bold',
-                    color: '#8edcff',
+                    fontSize: '0.95rem',
+                    fontWeight: 700,
+                    color: '#f4f4f4',
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease',
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: 10,
                   }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.background = 'rgba(0, 170, 255, 0.2)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.background = 'rgba(0, 170, 255, 0.12)';
-                  }}
                 >
-                  Fresh Setup Instead
+                  Stay on host (decide later)
                 </button>
               ) : null}
 
               <button
+                type="button"
                 onClick={handleEndGameSession}
                 style={{
-                  background: 'rgba(255, 68, 68, 0.2)',
-                  border: '2px solid #ff4444',
+                  background: 'transparent',
+                  border: 'none',
                   borderRadius: '10px',
-                  padding: '12px 24px',
-                  fontSize: '1rem',
-                  fontWeight: 'bold',
-                  color: '#ff4444',
+                  padding: '8px 16px',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  color: '#ff8a8a',
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 10,
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 68, 68, 0.3)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 68, 68, 0.2)';
+                  textDecoration: 'underline',
+                  textUnderlineOffset: 3,
                 }}
               >
-                <X className="w-5 h-5" aria-hidden />
-                End Game Session
+                End entire event
               </button>
             </div>
 
@@ -14423,10 +14384,15 @@ const HostView: React.FC = () => {
               marginTop: '20px',
               fontStyle: 'italic'
             }}>
-              Bingo approved and playback paused. <strong style={{ color: '#ccc', fontStyle: 'normal' }}>Back to host</strong>{' '}
-              marks this round complete. Use <strong style={{ color: '#ccc', fontStyle: 'normal' }}>Prepare next round</strong>{' '}
-              to load the next bucket without starting playback, or{' '}
-              <strong style={{ color: '#ccc', fontStyle: 'normal' }}>Start next planned round now</strong> when you are ready to go live.
+              {getNextPlannedRound() >= 0 ? (
+                <>
+                  <strong style={{ color: '#ccc', fontStyle: 'normal' }}>Next round</strong> ends this
+                  round and loads the next planned mix — it does not start playback. Tap{' '}
+                  <strong style={{ color: '#ccc', fontStyle: 'normal' }}>Start Game</strong> when ready.
+                </>
+              ) : (
+                <>No more planned rounds with playlists. Back to host keeps the night open for prep.</>
+              )}
             </p>
           </motion.div>
         </div>

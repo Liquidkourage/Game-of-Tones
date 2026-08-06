@@ -8,7 +8,6 @@ import {
   Users,
   ListPlus,
   RotateCcw,
-  Flag,
   Volume2,
   VolumeX,
   CheckCircle2,
@@ -81,8 +80,6 @@ export type HostGameDashboardProps = {
   setPlaybackVolume: (volume: number) => void;
   onStartGame: () => void;
   onFinalizeMix: () => void;
-  onEndGame: () => void;
-  onNewRoundSetup: () => void;
   onOpenLibrary: () => void;
   onOpenPool: () => void;
   onOpenPlayerCards: () => void;
@@ -221,8 +218,6 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
     setPlaybackVolume,
     onStartGame,
     onFinalizeMix,
-    onEndGame,
-    onNewRoundSetup,
     onOpenLibrary,
     onOpenPool,
     onOpenPlayerCards,
@@ -679,14 +674,6 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
               <button type="button" className="host-r4-action-tile" onClick={onResetDisplayLetters}>
                 <RotateCcw className="w-5 h-5" aria-hidden />
                 Reset letters
-              </button>
-              <button type="button" className="host-r4-action-tile host-r4-action-tile--muted" onClick={onNewRoundSetup}>
-                <RotateCcw className="w-5 h-5" aria-hidden />
-                New round
-              </button>
-              <button type="button" className="host-r4-action-tile host-r4-action-tile--danger" onClick={onEndGame}>
-                <Flag className="w-5 h-5" aria-hidden />
-                End game
               </button>
             </>
           ) : (

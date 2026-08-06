@@ -207,15 +207,15 @@ const HostQuickBar: React.FC<HostQuickBarProps> = ({
             </button>
           </>
         ) : null}
-        {hasNextPlanned ? (
+        {!isLive && hasNextPlanned ? (
           <button
             type="button"
-            className="host-quick-bar__btn"
+            className="host-quick-bar__btn host-quick-bar__btn--primary"
             onClick={onStartNextPlanned}
-            title="Jump to the next planned round"
+            title="End current round (if needed) and load the next planned mix — does not Start Game"
           >
             <SkipForward className="w-4 h-4" aria-hidden />
-            Next planned
+            Next round
           </button>
         ) : null}
 
