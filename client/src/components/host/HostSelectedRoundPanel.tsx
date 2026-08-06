@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, ArrowDownToLine, GripVertical, ListMusic, X } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, GripVertical, ListMusic, Play, X } from 'lucide-react';
 import { BINGO_COLUMN_LETTERS } from '../../utils/bingoColumnOrder';
 import { ROUND_PLAYLIST_REORDER_MIME } from '../../utils/roundPlaylistOrder';
 import { playlistDisplayParts } from '../../utils/roundPrintLabels';
@@ -26,6 +26,11 @@ export type HostSelectedRoundPanelProps = {
   dropTargetActive?: boolean;
   /** Five column letters for column-mode badges (defaults to BINGO). */
   columnLetters?: readonly string[];
+  /** True when this round is already the one Start game will use. */
+  isNextRound?: boolean;
+  /** Load this round as next for Start game / Set round. */
+  onSetNextRound?: () => void;
+  canSetNextRound?: boolean;
 };
 
 const statusLabel: Record<HostSelectedRoundPanelProps['status'], string> = {
@@ -54,6 +59,9 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
   onDropPlaylist,
   dropTargetActive = false,
   columnLetters,
+  isNextRound = false,
+  onSetNextRound,
+  canSetNextRound = true,
 }) => {
   const lowSongs = playlists.length > 0 && songCount > 0 && songCount < 15;
   const needsForPool = songCount >= 50 && songCount < 75 ? 75 - songCount : 0;
@@ -122,14 +130,43 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
         <p className="host-selected-round__eyebrow">Selected round</p>
         <h3 className="host-selected-round__title">
           {roundName}
-          <span className={`host-selected-round__status host-selected-round__status--${status}`}>
-            {statusLabel[status]}
+          <span
+            className={[
+              `host-selected-round__status host-selected-round__status--${status}`,
+              isNextRound && status !== 'active' ? 'host-selected-round__status--next' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            {isNextRound && status !== 'active' ? 'Next up' : statusLabel[status]}
           </span>
         </h3>
         <p className="host-selected-round__meta">
           {structureCopy}
           {count > 0 && songCount > 0 ? ` · ${songCount} songs` : ''}
         </p>
+        {onSetNextRound ? (
+          <button
+            type="button"
+            className={
+              isNextRound
+                ? 'btn-secondary host-selected-round__set-next is-current'
+                : 'btn-primary host-selected-round__set-next'
+            }
+            onClick={onSetNextRound}
+            disabled={isNextRound || !canSetNextRound}
+            title={
+              isNextRound
+                ? 'This round is already next for Start game'
+                : canSetNextRound
+                  ? 'Load this round for Start game and Set round'
+                  : 'End the live round before switching'
+            }
+          >
+            <Play className="w-3.5 h-3.5" aria-hidden />
+            {isNextRound ? 'Next up' : 'Set as next round'}
+          </button>
+        ) : null}
         {canReorder ? (
           <p className="host-selected-round__reorder-hint">
             Drag playlists to set {columnMode ? 'column order left → right' : 'play order'}.

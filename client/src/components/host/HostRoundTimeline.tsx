@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Play, Plus, X } from 'lucide-react';
 import { BINGO_COLUMN_LETTERS } from '../../utils/bingoColumnOrder';
 import { playlistDisplayParts } from '../../utils/roundPrintLabels';
 
@@ -34,6 +34,8 @@ type HostRoundTimelineProps = {
   onMoveRound?: (fromIndex: number, toIndex: number) => void;
   /** While set, that index cannot be dragged (live round during play). */
   moveRoundLockedIndex?: number | null;
+  /** Make this round the one Start game / Set round will use. */
+  onSetNextRound?: (index: number) => void;
   onDropPlaylist?: (roundIndex: number, playlistId: string) => void;
   /** A library playlist drag is in progress: pulse every droppable round chip. */
   dropTargetsActive?: boolean;
@@ -96,6 +98,7 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
   canRemoveRound = true,
   onMoveRound,
   moveRoundLockedIndex = null,
+  onSetNextRound,
   onDropPlaylist,
   dropTargetsActive = false,
   summary,
@@ -171,6 +174,11 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
           {canReorder ? (
             <p className="host-round-timeline__summary host-round-timeline__reorder-hint">
               Drag rounds to reorder.
+            </p>
+          ) : null}
+          {onSetNextRound ? (
+            <p className="host-round-timeline__summary host-round-timeline__reorder-hint">
+              Set next picks which round Start game uses.
             </p>
           ) : null}
         </div>
@@ -365,8 +373,17 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                     <span className="host-round-timeline__prize"> · Prize: {r.prize}</span>
                   ) : null}
                 </span>
-                <span className={`host-round-timeline__status host-round-timeline__status--${r.status}`}>
-                  {statusLabel[r.status]}
+                <span
+                  className={[
+                    `host-round-timeline__status host-round-timeline__status--${r.status}`,
+                    r.isCurrent && r.status !== 'active'
+                      ? 'host-round-timeline__status--next'
+                      : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                >
+                  {r.isCurrent && r.status !== 'active' ? 'Next up' : statusLabel[r.status]}
                 </span>
                 <span className="host-round-timeline__meta">
                   {r.playlistCount === 0 ? (
@@ -422,6 +439,32 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                   </span>
                 ) : null}
               </button>
+              {onSetNextRound ? (
+                <button
+                  type="button"
+                  className={
+                    r.isCurrent
+                      ? 'host-round-timeline__set-next host-round-timeline__set-next--current'
+                      : 'host-round-timeline__set-next'
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!r.isCurrent) onSetNextRound(r.index);
+                  }}
+                  disabled={r.isCurrent}
+                  title={
+                    r.isCurrent
+                      ? `${r.name} is already next for Start game`
+                      : `Set ${r.name} as next — Start game and Set round use this round`
+                  }
+                  aria-label={
+                    r.isCurrent ? `${r.name} is next up` : `Set ${r.name} as next round`
+                  }
+                >
+                  <Play className="w-3.5 h-3.5" aria-hidden />
+                  {r.isCurrent ? 'Next' : 'Set next'}
+                </button>
+              ) : null}
               {onRemoveRound ? (
                 <button
                   type="button"

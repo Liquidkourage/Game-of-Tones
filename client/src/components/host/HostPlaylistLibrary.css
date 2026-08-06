@@ -249,6 +249,27 @@
   color: rgba(255, 255, 255, 0.62);
 }
 
+.host-selected-round__status--next {
+  color: #9fffcf;
+  border-color: rgba(0, 255, 136, 0.35);
+  background: rgba(0, 255, 136, 0.1);
+}
+
+.host-selected-round__set-next {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+}
+
+.host-selected-round__set-next.is-current {
+  opacity: 0.9;
+  cursor: default;
+}
+
 .host-selected-round__reorder-hint {
   margin: 6px 0 0;
   font-size: 0.72rem;

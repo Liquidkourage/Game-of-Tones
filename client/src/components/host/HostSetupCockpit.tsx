@@ -14,6 +14,7 @@ export type HostSetupCockpitProps = {
   onSelectRound: (index: number) => void;
   onMoveRound?: (fromIndex: number, toIndex: number) => void;
   moveRoundLockedIndex?: number | null;
+  onSetNextRound?: (index: number) => void;
   step: HostSetupStep;
   onStepChange: (step: HostSetupStep) => void;
   playlistReady: boolean;
@@ -32,6 +33,7 @@ const HostSetupCockpit: React.FC<HostSetupCockpitProps> = ({
   onSelectRound,
   onMoveRound,
   moveRoundLockedIndex = null,
+  onSetNextRound,
   step,
   onStepChange,
   playlistReady,
@@ -53,6 +55,7 @@ const HostSetupCockpit: React.FC<HostSetupCockpitProps> = ({
           onSelectRound={onSelectRound}
           onMoveRound={onMoveRound}
           moveRoundLockedIndex={moveRoundLockedIndex}
+          onSetNextRound={onSetNextRound}
         />
       </div>
       <HostSetupFlow

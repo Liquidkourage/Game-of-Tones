@@ -2033,6 +2033,44 @@
   box-shadow: inset -3px 0 0 0 rgba(0, 255, 136, 0.85);
 }
 
+.host-glass-theme .host-round-timeline__status--next {
+  color: #9fffcf;
+  font-weight: 700;
+}
+
+.host-glass-theme .host-round-timeline__set-next {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  padding: 6px 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.host-glass-theme .host-round-timeline__set-next:hover:not(:disabled) {
+  background: rgba(0, 255, 136, 0.12);
+  color: #9fffcf;
+}
+
+.host-glass-theme .host-round-timeline__set-next--current,
+.host-glass-theme .host-round-timeline__set-next:disabled {
+  opacity: 0.85;
+  cursor: default;
+  color: #9fffcf;
+  background: rgba(0, 255, 136, 0.08);
+}
+
 .host-glass-theme .host-round-timeline__remove {
   display: flex;
   align-items: center;

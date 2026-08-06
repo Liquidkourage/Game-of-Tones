@@ -13019,6 +13019,7 @@ const HostView: React.FC = () => {
                     onSelectRound={handleSelectRoundForPrep}
                     onMoveRound={handleMoveRound}
                     moveRoundLockedIndex={moveRoundLockedIndex}
+                    onSetNextRound={handleSelectRoundForPrep}
                   />
                 </div>
                 <div className="host-setup-flow__panel host-glass-panel" data-host-tutorial="play">
@@ -13058,6 +13059,7 @@ const HostView: React.FC = () => {
                 onSelectRound={handleSelectRoundForPrep}
                 onMoveRound={handleMoveRound}
                 moveRoundLockedIndex={moveRoundLockedIndex}
+                onSetNextRound={handleSelectRoundForPrep}
                 playlistReady={setupPlaylistReady}
                 prepRoundReadyForGoLive={prepRoundReadyForGoLive}
                 onGoToRounds={() => onHostGlassNav('rounds')}
@@ -13095,6 +13097,7 @@ const HostView: React.FC = () => {
                       onSelectRound={handleSelectRoundForPrep}
                       onMoveRound={handleMoveRound}
                       moveRoundLockedIndex={moveRoundLockedIndex}
+                      onSetNextRound={handleSelectRoundForPrep}
                       columnLetters={bingoColumnLettersArr}
                     />
                     {(eventRounds.length > 0 || roundWinners.length > 0) && (
@@ -13342,6 +13345,7 @@ const HostView: React.FC = () => {
                     canRemoveRound={eventRounds.length > 1}
                     onMoveRound={handleMoveRound}
                     moveRoundLockedIndex={moveRoundLockedIndex}
+                    onSetNextRound={handleSelectRoundForPrep}
                     onDropPlaylist={addPlaylistToRoundBucket}
                     dropTargetsActive={libraryPlaylistDragActive}
                     columnLetters={bingoColumnLettersArr}
@@ -13357,6 +13361,16 @@ const HostView: React.FC = () => {
                       playlists={selectedRoundForPanel.playlists}
                       canEdit={
                         !(gameState === 'playing' && selectedRoundForPanel.index === currentRoundIndex)
+                      }
+                      isNextRound={selectedRoundForPanel.index === currentRoundIndex}
+                      onSetNextRound={() =>
+                        handleSelectRoundForPrep(selectedRoundForPanel.index)
+                      }
+                      canSetNextRound={
+                        !(
+                          gameState === 'playing' &&
+                          eventRounds[currentRoundIndex]?.status !== 'completed'
+                        )
                       }
                       onRemovePlaylist={(playlistId) =>
                         removePlaylistFromRoundBucket(selectedRoundForPanel.index, playlistId)

@@ -9,6 +9,7 @@ export type HostSetupTabWorkspaceProps = {
   onSelectRound: (index: number) => void;
   onMoveRound?: (fromIndex: number, toIndex: number) => void;
   moveRoundLockedIndex?: number | null;
+  onSetNextRound?: (index: number) => void;
   playlistReady: boolean;
   onGoToRounds: () => void;
   onGoToGame: () => void;
@@ -23,6 +24,7 @@ const HostSetupTabWorkspace: React.FC<HostSetupTabWorkspaceProps> = ({
   onSelectRound,
   onMoveRound,
   moveRoundLockedIndex = null,
+  onSetNextRound,
   playlistReady,
   onGoToRounds,
   onGoToGame,
@@ -41,6 +43,7 @@ const HostSetupTabWorkspace: React.FC<HostSetupTabWorkspaceProps> = ({
           onSelectRound={onSelectRound}
           onMoveRound={onMoveRound}
           moveRoundLockedIndex={moveRoundLockedIndex}
+          onSetNextRound={onSetNextRound}
         />
       </div>
 
