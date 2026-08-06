@@ -7935,10 +7935,10 @@ const HostView: React.FC = () => {
             : apple
             ? `${API_BASE || ''}/api/apple/music/playlist/${encodeURIComponent(playlist.id)}/tracks${q ? `?${q}` : ''}`
             : catalog
-            ? `${API_BASE || ''}/api/spotify/catalog/playlist/${playlist.id}${q ? `?${q}` : ''}`
-            : `${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}${q ? `?${q}` : ''}`;
+            ? `${API_BASE || ''}/api/spotify/catalog/playlist/${encodeURIComponent(playlist.id)}/tracks${q ? `?${q}` : ''}`
+            : `${API_BASE || ''}/api/spotify/playlist-tracks/${encodeURIComponent(playlist.id)}${q ? `?${q}` : ''}`;
           const response = await hostFetch(url, { cache: 'no-store' });
-          const data = (await response.json()) as {
+          let data: {
             success?: boolean;
             tracks?: Song[];
             loadStats?: PlaylistLoadStats;
@@ -7948,7 +7948,22 @@ const HostView: React.FC = () => {
             retryAfterSec?: number;
             upstreamUnavailable?: boolean;
             cacheMessage?: string;
-          };
+          } = {};
+          try {
+            data = (await response.json()) as typeof data;
+          } catch {
+            addLog(
+              `Failed to load tracks for ${playlist.name || playlist.id} (${response.status}${catalog ? ', Tempo Library' : ''}).`,
+              'warn',
+            );
+            continue;
+          }
+          if (!response.ok && !data.success) {
+            addLog(
+              `Failed to load tracks for ${playlist.name || playlist.id}: ${data.message || data.error || response.status}${catalog ? ' (Tempo Library)' : ''}.`,
+              'warn',
+            );
+          }
 
           if (genRef.current !== myBuild) {
             return [];
