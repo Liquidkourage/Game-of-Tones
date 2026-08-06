@@ -10717,6 +10717,7 @@ const HostView: React.FC = () => {
 
   const showHostSetupCockpit =
     gameState === 'waiting' && !hostRoomHydrating && hostGlassNav === 'game';
+  const moveRoundLockedIndex = gameState === 'playing' ? currentRoundIndex : null;
 
   /** Game tab mode banner: same anchor in prep / live / between-rounds states. */
   const gameModeBannerMode: 'prep' | 'live' | 'ended' =
@@ -12970,6 +12971,8 @@ const HostView: React.FC = () => {
                     emptyHint="Add music on the Rounds tab — your round will show up here."
                     columnLetters={bingoColumnLettersArr}
                     onSelectRound={handleSelectRoundForPrep}
+                    onMoveRound={handleMoveRound}
+                    moveRoundLockedIndex={moveRoundLockedIndex}
                   />
                 </div>
                 <div className="host-setup-flow__panel host-glass-panel" data-host-tutorial="play">
@@ -13005,6 +13008,8 @@ const HostView: React.FC = () => {
                 roundSummary={roundTimelineSummary}
                 columnLetters={bingoColumnLettersArr}
                 onSelectRound={handleSelectRoundForPrep}
+                onMoveRound={handleMoveRound}
+                moveRoundLockedIndex={moveRoundLockedIndex}
                 playlistReady={setupPlaylistReady}
                 prepRoundReadyForGoLive={prepRoundReadyForGoLive}
                 onGoToRounds={() => onHostGlassNav('rounds')}
@@ -13040,6 +13045,8 @@ const HostView: React.FC = () => {
                       rounds={roundTimelineRows}
                       summary={roundTimelineSummary}
                       onSelectRound={handleSelectRoundForPrep}
+                      onMoveRound={handleMoveRound}
+                      moveRoundLockedIndex={moveRoundLockedIndex}
                       columnLetters={bingoColumnLettersArr}
                     />
                     {(eventRounds.length > 0 || roundWinners.length > 0) && (
@@ -13284,9 +13291,7 @@ const HostView: React.FC = () => {
                     onRemoveRound={handleRemoveRound}
                     canRemoveRound={eventRounds.length > 1}
                     onMoveRound={handleMoveRound}
-                    moveRoundLockedIndex={
-                      gameState === 'playing' ? currentRoundIndex : null
-                    }
+                    moveRoundLockedIndex={moveRoundLockedIndex}
                     onDropPlaylist={addPlaylistToRoundBucket}
                     dropTargetsActive={libraryPlaylistDragActive}
                     columnLetters={bingoColumnLettersArr}

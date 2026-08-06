@@ -115,12 +115,13 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
 
   // Read-only timeline (Game tab / setup cockpit) with nothing prepped: an empty
   // draft chip has nothing to do, so say so instead of showing it.
+  // onMoveRound alone does not count — reorder needs 2+ rounds and shouldn't
+  // hide the empty-state hint on setup/game screens.
   const interactive = Boolean(
     onAddRound ||
       onAddLeftoversRound ||
       onAddRequestsRound ||
       onRemoveRound ||
-      onMoveRound ||
       onDropPlaylist,
   );
   const nothingPrepped = rounds.every(

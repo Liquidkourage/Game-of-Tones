@@ -12,6 +12,8 @@ export type HostSetupCockpitProps = {
   /** Five column letters (host pref, e.g. TEMPO); defaults to BINGO. */
   columnLetters?: readonly string[];
   onSelectRound: (index: number) => void;
+  onMoveRound?: (fromIndex: number, toIndex: number) => void;
+  moveRoundLockedIndex?: number | null;
   step: HostSetupStep;
   onStepChange: (step: HostSetupStep) => void;
   playlistReady: boolean;
@@ -28,6 +30,8 @@ const HostSetupCockpit: React.FC<HostSetupCockpitProps> = ({
   roundsEmptyHint,
   columnLetters,
   onSelectRound,
+  onMoveRound,
+  moveRoundLockedIndex = null,
   step,
   onStepChange,
   playlistReady,
@@ -47,6 +51,8 @@ const HostSetupCockpit: React.FC<HostSetupCockpitProps> = ({
           emptyHint={roundsEmptyHint}
           columnLetters={columnLetters}
           onSelectRound={onSelectRound}
+          onMoveRound={onMoveRound}
+          moveRoundLockedIndex={moveRoundLockedIndex}
         />
       </div>
       <HostSetupFlow

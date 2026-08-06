@@ -7,6 +7,8 @@ export type HostSetupTabWorkspaceProps = {
   roundSummary?: string;
   columnLetters?: readonly string[];
   onSelectRound: (index: number) => void;
+  onMoveRound?: (fromIndex: number, toIndex: number) => void;
+  moveRoundLockedIndex?: number | null;
   playlistReady: boolean;
   onGoToRounds: () => void;
   onGoToGame: () => void;
@@ -19,6 +21,8 @@ const HostSetupTabWorkspace: React.FC<HostSetupTabWorkspaceProps> = ({
   roundSummary,
   columnLetters,
   onSelectRound,
+  onMoveRound,
+  moveRoundLockedIndex = null,
   playlistReady,
   onGoToRounds,
   onGoToGame,
@@ -35,6 +39,8 @@ const HostSetupTabWorkspace: React.FC<HostSetupTabWorkspaceProps> = ({
           emptyHint="Assign playlists on the Rounds tab first."
           columnLetters={columnLetters}
           onSelectRound={onSelectRound}
+          onMoveRound={onMoveRound}
+          moveRoundLockedIndex={moveRoundLockedIndex}
         />
       </div>
 
