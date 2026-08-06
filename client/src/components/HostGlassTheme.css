@@ -2004,38 +2004,33 @@
   color: rgba(245, 208, 97, 0.92);
 }
 
-.host-glass-theme .host-round-timeline__reorder {
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
+.host-glass-theme .host-round-timeline__chip--draggable {
+  cursor: grab;
 }
 
-.host-glass-theme .host-round-timeline__move {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  border: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: transparent;
-  color: rgba(255, 255, 255, 0.45);
-  padding: 0 7px;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+.host-glass-theme .host-round-timeline__chip--draggable .host-round-timeline__main {
+  cursor: grab;
 }
 
-.host-glass-theme .host-round-timeline__move:last-child {
-  border-bottom: none;
+.host-glass-theme .host-round-timeline__chip--draggable:active,
+.host-glass-theme .host-round-timeline__chip--draggable:active .host-round-timeline__main {
+  cursor: grabbing;
 }
 
-.host-glass-theme .host-round-timeline__move:hover:not(:disabled) {
-  background: rgba(0, 255, 136, 0.1);
-  color: #9fffcf;
+.host-glass-theme .host-round-timeline__chip--dragging {
+  opacity: 0.45;
 }
 
-.host-glass-theme .host-round-timeline__move:disabled {
-  opacity: 0.3;
+.host-glass-theme .host-round-timeline__chip--move-locked {
   cursor: not-allowed;
+}
+
+.host-glass-theme .host-round-timeline__chip--drop-before {
+  box-shadow: inset 3px 0 0 0 rgba(0, 255, 136, 0.85);
+}
+
+.host-glass-theme .host-round-timeline__chip--drop-after {
+  box-shadow: inset -3px 0 0 0 rgba(0, 255, 136, 0.85);
 }
 
 .host-glass-theme .host-round-timeline__remove {
