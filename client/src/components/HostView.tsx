@@ -8951,42 +8951,58 @@ const HostView: React.FC = () => {
     [handleUpdateRoundBingoFields],
   );
 
-  /** Resolved rows match `mixPlaylistSelection` merge order (library first, then catalog-only). */
+  /**
+   * Resolve round playlistIds → mix rows in stored order (B–O column order for 5×15).
+   * Prefer Tempo Library (catalog) when the same Spotify id appears in both libraries so
+   * tracks load via the catalog endpoint — personal+catalog mixes were losing catalog packs
+   * (or fetching them as personal) when ids overlapped or URI forms differed.
+   */
   const resolveMixPlaylistRowsForRound = useCallback(
     (round: EventRound): Playlist[] | null => {
-      const idSet = new Set((round.playlistIds || []).map((id) => String(id)));
-      const hasLeftovers = idSet.has(LEFTOVERS_PLAYLIST_ID);
-      const hasRequests = idSet.has(REQUESTS_PLAYLIST_ID);
-      const fromLibrary = playlistsForRoundPlanner.filter((p) => idSet.has(String(p.id)));
-      const libraryIdSet = new Set(fromLibrary.map((p) => String(p.id)));
-      const fromCatalog = catalogPackOptions.filter(
-        (p) => idSet.has(String(p.id)) && !libraryIdSet.has(String(p.id)),
-      );
-      if (fromLibrary.length === 0 && fromCatalog.length === 0 && !hasLeftovers && !hasRequests) {
+      const wanted = round.playlistIds || [];
+      if (!wanted.length) return null;
+
+      const merged: Playlist[] = [];
+      const missing: string[] = [];
+
+      for (let i = 0; i < wanted.length; i++) {
+        const rawId = wanted[i];
+        if (isLeftoversPlaylistId(rawId)) {
+          merged.push(leftoversVirtualPlaylist);
+          continue;
+        }
+        if (isRequestsPlaylistId(rawId)) {
+          merged.push(requestsVirtualPlaylist);
+          continue;
+        }
+        const canon = canonicalPlaylistIdForMatch(String(rawId));
+        const fromCatalog = catalogPackOptions.find(
+          (p) => canonicalPlaylistIdForMatch(String(p.id)) === canon,
+        );
+        if (fromCatalog) {
+          merged.push({ ...fromCatalog, catalog: true });
+          continue;
+        }
+        const fromLibrary = playlistsForRoundPlanner.find(
+          (p) => canonicalPlaylistIdForMatch(String(p.id)) === canon,
+        );
+        if (fromLibrary) {
+          merged.push(
+            fromLibrary.catalog === true ? { ...fromLibrary, catalog: true } : fromLibrary,
+          );
+          continue;
+        }
+        missing.push((round.playlistNames || [])[i] || String(rawId));
+      }
+
+      if (missing.length > 0) {
+        console.warn(
+          '[resolveMixPlaylistRowsForRound] unresolved playlist(s) for',
+          round.name,
+          missing,
+        );
         return null;
       }
-      const merged: Playlist[] = [...fromLibrary];
-      const ids = new Set(fromLibrary.map((p) => p.id));
-      for (const c of fromCatalog) {
-        if (!ids.has(c.id)) {
-          merged.push({ ...c, catalog: true });
-          ids.add(c.id);
-        }
-      }
-      if (hasLeftovers && !ids.has(LEFTOVERS_PLAYLIST_ID)) {
-        merged.push(leftoversVirtualPlaylist);
-      }
-      if (hasRequests && !ids.has(REQUESTS_PLAYLIST_ID)) {
-        merged.push(requestsVirtualPlaylist);
-      }
-      /** Return rows in the round's stored order (host-set / B–O column order), not library
-       *  order — in 5-playlist column mode the mix order sent at finalize maps to card columns. */
-      const orderIndex = new Map((round.playlistIds || []).map((id, i) => [String(id), i]));
-      merged.sort(
-        (a, b) =>
-          (orderIndex.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER) -
-          (orderIndex.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER),
-      );
       return merged;
     },
     [playlistsForRoundPlanner, catalogPackOptions, leftoversVirtualPlaylist, requestsVirtualPlaylist],
@@ -9389,9 +9405,13 @@ const HostView: React.FC = () => {
     }
 
     const mixRows = resolveMixPlaylistRowsForRound(round0);
-    if (!mixRows) {
+    if (!mixRows || mixRows.length !== (round0.playlistIds || []).length) {
       window.alert(
-        'No playlists from this round matched your library. Use Connection to refresh, or re-drag playlists from the library into this bucket.',
+        `Could not resolve all playlists for ${round0.name} (${mixRows?.length ?? 0} of ${(round0.playlistIds || []).length}). Open Rounds → Tempo Library (refresh if needed), confirm each pack is still listed, then re-add any missing playlist to this round and Save again.`,
+      );
+      addLog(
+        `Save round blocked: unresolved playlists for ${round0.name} (resolved ${mixRows?.length ?? 0}/${(round0.playlistIds || []).length}).`,
+        'warn',
       );
       return false;
     }
