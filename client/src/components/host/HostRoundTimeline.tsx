@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react';
 import { BINGO_COLUMN_LETTERS } from '../../utils/bingoColumnOrder';
 import { playlistDisplayParts } from '../../utils/roundPrintLabels';
 
@@ -27,6 +27,10 @@ type HostRoundTimelineProps = {
   canAddRequestsRound?: boolean;
   onRemoveRound?: (index: number) => void;
   canRemoveRound?: boolean;
+  /** Reorder rounds (Earlier / Later). */
+  onMoveRound?: (fromIndex: number, toIndex: number) => void;
+  /** While set, that index cannot be moved (live round during play). */
+  moveRoundLockedIndex?: number | null;
   onDropPlaylist?: (roundIndex: number, playlistId: string) => void;
   /** A library playlist drag is in progress: pulse every droppable round chip. */
   dropTargetsActive?: boolean;
@@ -74,6 +78,8 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
   canAddRequestsRound = true,
   onRemoveRound,
   canRemoveRound = true,
+  onMoveRound,
+  moveRoundLockedIndex = null,
   onDropPlaylist,
   dropTargetsActive = false,
   summary,
@@ -91,7 +97,12 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
   // Read-only timeline (Game tab / setup cockpit) with nothing prepped: an empty
   // draft chip has nothing to do, so say so instead of showing it.
   const interactive = Boolean(
-    onAddRound || onAddLeftoversRound || onAddRequestsRound || onRemoveRound || onDropPlaylist,
+    onAddRound ||
+      onAddLeftoversRound ||
+      onAddRequestsRound ||
+      onRemoveRound ||
+      onMoveRound ||
+      onDropPlaylist,
   );
   const nothingPrepped = rounds.every(
     (r) => r.status === 'unplanned' && r.playlistCount === 0 && !r.saved,
@@ -130,6 +141,11 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
         <div>
           <h2 className="host-round-timeline__title">Tonight&apos;s rounds</h2>
           {summary ? <p className="host-round-timeline__summary">{summary}</p> : null}
+          {onMoveRound && rounds.length > 1 ? (
+            <p className="host-round-timeline__summary host-round-timeline__reorder-hint">
+              Use Earlier / Later to reorder.
+            </p>
+          ) : null}
         </div>
         <div className="host-round-timeline__header-actions">
           {onAddRound ? (
@@ -187,7 +203,13 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
         <p className="host-round-timeline__drop-hint">Drop a playlist onto a round to assign it.</p>
       ) : null}
       <div className="host-round-timeline__track" role="list">
-        {rounds.map((r) => (
+        {rounds.map((r) => {
+          const moveLocked =
+            moveRoundLockedIndex != null && r.index === moveRoundLockedIndex;
+          const canMoveEarlier = Boolean(onMoveRound) && r.index > 0 && !moveLocked;
+          const canMoveLater =
+            Boolean(onMoveRound) && r.index < rounds.length - 1 && !moveLocked;
+          return (
           <div
             key={r.index}
             role="listitem"
@@ -292,6 +314,48 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                 </span>
               ) : null}
             </button>
+            {onMoveRound && rounds.length > 1 ? (
+              <div className="host-round-timeline__reorder" role="group" aria-label={`Reorder ${r.name}`}>
+                <button
+                  type="button"
+                  className="host-round-timeline__move"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMoveRound(r.index, r.index - 1);
+                  }}
+                  disabled={!canMoveEarlier}
+                  title={
+                    moveLocked
+                      ? 'Live round — end it before moving'
+                      : canMoveEarlier
+                        ? `Move ${r.name} earlier`
+                        : 'Already first'
+                  }
+                  aria-label={`Move ${r.name} earlier`}
+                >
+                  <ArrowUp className="w-3.5 h-3.5" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className="host-round-timeline__move"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMoveRound(r.index, r.index + 1);
+                  }}
+                  disabled={!canMoveLater}
+                  title={
+                    moveLocked
+                      ? 'Live round — end it before moving'
+                      : canMoveLater
+                        ? `Move ${r.name} later`
+                        : 'Already last'
+                  }
+                  aria-label={`Move ${r.name} later`}
+                >
+                  <ArrowDown className="w-3.5 h-3.5" aria-hidden />
+                </button>
+              </div>
+            ) : null}
             {onRemoveRound ? (
               <button
                 type="button"
@@ -308,7 +372,8 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
               </button>
             ) : null}
           </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

@@ -2004,6 +2004,40 @@
   color: rgba(245, 208, 97, 0.92);
 }
 
+.host-glass-theme .host-round-timeline__reorder {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.host-glass-theme .host-round-timeline__move {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  padding: 0 7px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.host-glass-theme .host-round-timeline__move:last-child {
+  border-bottom: none;
+}
+
+.host-glass-theme .host-round-timeline__move:hover:not(:disabled) {
+  background: rgba(0, 255, 136, 0.1);
+  color: #9fffcf;
+}
+
+.host-glass-theme .host-round-timeline__move:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 .host-glass-theme .host-round-timeline__remove {
   display: flex;
   align-items: center;
@@ -2025,6 +2059,11 @@
 .host-glass-theme .host-round-timeline__remove:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+.host-glass-theme .host-round-timeline__reorder-hint {
+  margin-top: 2px;
+  opacity: 0.85;
 }
 
 .host-glass-theme .host-round-timeline__playlists {

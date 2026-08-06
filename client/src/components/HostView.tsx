@@ -12653,6 +12653,26 @@ const HostView: React.FC = () => {
     ],
   );
 
+  const handleMoveRound = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      const rounds = eventRoundsRef.current;
+      if (fromIndex < 0 || fromIndex >= rounds.length) return;
+      if (toIndex < 0 || toIndex >= rounds.length) return;
+      if (fromIndex === toIndex) return;
+      if (gameState === 'playing' && fromIndex === currentRoundIndexRef.current) {
+        showToast('That round is live — end the round before moving it. Other rounds can be reordered.', 'info');
+        return;
+      }
+      const next = [...rounds];
+      const [item] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, item);
+      const normalized = ensureEventRoundNames(next);
+      handleUpdateRounds(normalized, { reorder: { from: fromIndex, to: toIndex } });
+      addLog(`Moved ${item.name} ${toIndex < fromIndex ? 'earlier' : 'later'}`, 'info');
+    },
+    [gameState, handleUpdateRounds, addLog, showToast],
+  );
+
   const handleRemoveRound = useCallback(
     (roundIndex: number) => {
       if (gameState === 'playing' && roundIndex === currentRoundIndex) {
@@ -13263,6 +13283,10 @@ const HostView: React.FC = () => {
                     }
                     onRemoveRound={handleRemoveRound}
                     canRemoveRound={eventRounds.length > 1}
+                    onMoveRound={handleMoveRound}
+                    moveRoundLockedIndex={
+                      gameState === 'playing' ? currentRoundIndex : null
+                    }
                     onDropPlaylist={addPlaylistToRoundBucket}
                     dropTargetsActive={libraryPlaylistDragActive}
                     columnLetters={bingoColumnLettersArr}
