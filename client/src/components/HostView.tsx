@@ -2720,8 +2720,42 @@ const HostView: React.FC = () => {
         const allPlaylists = (data.playlists || []).filter((playlist: Playlist) => 
           !playlist.name.startsWith('TEMPO')
         );
-        
-        setPlaylists(allPlaylists);
+
+        setPlaylists((prev) => {
+          // Playlist edited on Spotify (track total changed): drop "already loaded" so the next
+          // setlist build refetches tracks instead of reusing a stale buffer (e.g. 72 after
+          // the host fixed the playlist to 75).
+          const prevById = new Map(
+            prev.map((p) => [canonicalPlaylistIdForMatch(String(p.id)), p]),
+          );
+          for (const pl of allPlaylists) {
+            const canon = canonicalPlaylistIdForMatch(String(pl.id));
+            const was = prevById.get(canon);
+            if (!was) continue;
+            const prevListed = Math.max(0, Number(was.tracks) || 0);
+            const nextListed = Math.max(0, Number(pl.tracks) || 0);
+            if (prevListed > 0 && nextListed > 0 && prevListed !== nextListed) {
+              fullyLoadedPlaylistIdsRef.current.delete(pl.id);
+              fullyLoadedPlaylistIdsRef.current.delete(canon);
+              playlistIdsNeedingTrackRefreshRef.current.add(pl.id);
+              playlistIdsNeedingTrackRefreshRef.current.add(canon);
+            }
+          }
+          return allPlaylists;
+        });
+        if (forceRefresh) {
+          // Explicit library refresh: always re-pull tracks for assigned mix playlists.
+          for (const pl of allPlaylists) {
+            if (mixPlaylistSelectionRef.current.some(
+              (m) =>
+                canonicalPlaylistIdForMatch(String(m.id)) ===
+                canonicalPlaylistIdForMatch(String(pl.id)),
+            )) {
+              fullyLoadedPlaylistIdsRef.current.delete(pl.id);
+              playlistIdsNeedingTrackRefreshRef.current.add(pl.id);
+            }
+          }
+        }
         // Fresh library fetch: load Official packs shortly after (another GET /me/playlists on catalog token).
         // Stale/cache response: Spotify is already rate-limiting — defer catalog to avoid an immediate second burst (same app quota); Official packs still loads after cooldown.
         scheduleCatalogPacksLoad(data.fromSpotifyListCache === true ? 60_000 : 7500);
@@ -3443,6 +3477,8 @@ const HostView: React.FC = () => {
   const songListRef = useRef<Song[]>([]);
   /** Playlist ids we have already fully loaded track lists for. */
   const fullyLoadedPlaylistIdsRef = useRef<Set<string>>(new Set());
+  /** Spotify playlist ids whose library `tracks` total changed — next setlist build must refetch with refresh=1. */
+  const playlistIdsNeedingTrackRefreshRef = useRef<Set<string>>(new Set());
   /** Playlist id -> epoch ms until which auto track hydration is skipped after a Spotify 5xx (mirrors server cooldown; manual Refresh bypasses). */
   const playlistTracksUnavailableUntilRef = useRef<Map<string, number>>(new Map());
   /** Extra debounce once after Spotify OAuth / reconnect before setlist import (ms). */
@@ -3460,6 +3496,7 @@ const HostView: React.FC = () => {
     setlistBuildGenerationRef.current += 1;
     finalizeSetlistGenerationRef.current += 1;
     fullyLoadedPlaylistIdsRef.current.clear();
+    playlistIdsNeedingTrackRefreshRef.current.clear();
   }, []);
 
   /** Room-level finalize applies to one playlist mix — clear when switching to another round's prep. */
@@ -7815,6 +7852,21 @@ const HostView: React.FC = () => {
               !isMetaPlaylistId(s.sourcePlaylistId)
           );
 
+      /** Spotify ids that must bypass server/client track cache (playlist was edited / library refresh). */
+      const forceTrackRefreshIds = new Set<string>();
+      for (const p of rows) {
+        const canon = canonicalPlaylistIdForMatch(String(p.id));
+        if (
+          playlistIdsNeedingTrackRefreshRef.current.has(p.id) ||
+          playlistIdsNeedingTrackRefreshRef.current.has(canon)
+        ) {
+          fullyLoadedPlaylistIdsRef.current.delete(p.id);
+          fullyLoadedPlaylistIdsRef.current.delete(canon);
+          forceTrackRefreshIds.add(p.id);
+          forceTrackRefreshIds.add(canon);
+        }
+      }
+
       let toFetch = rows.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
 
       // Ref says every selected playlist was fetched, but we have no tracks in memory (reconnect, room
@@ -7925,7 +7977,11 @@ const HostView: React.FC = () => {
           }
           const qs = new URLSearchParams();
           if (playlist.name) qs.set('playlistName', playlist.name);
-          if (opts?.force) qs.set('refresh', '1');
+          const forceTrackRefresh =
+            opts?.force === true ||
+            forceTrackRefreshIds.has(playlist.id) ||
+            forceTrackRefreshIds.has(canonicalPlaylistIdForMatch(String(playlist.id)));
+          if (forceTrackRefresh) qs.set('refresh', '1');
           const q = qs.toString();
           const catalog = playlist.catalog === true;
           const yt = playlist.youtubeMusic === true;
@@ -8029,6 +8085,8 @@ const HostView: React.FC = () => {
             allSongs.push(...rows);
             fullyLoadedPlaylistIdsRef.current.add(playlist.id);
             playlistTracksUnavailableUntilRef.current.delete(playlist.id);
+            playlistIdsNeedingTrackRefreshRef.current.delete(playlist.id);
+            playlistIdsNeedingTrackRefreshRef.current.delete(plCanon);
             if (!catalog && !yt && !apple) {
               applyPlaylistExplicitKnowledge(playlist.id, data.tracks, setPlaylists, setSelectedPlaylists);
             }
