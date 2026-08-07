@@ -9680,6 +9680,14 @@ const HostView: React.FC = () => {
     const eligible: number[] = [];
     const needsFix: string[] = [];
     rounds.forEach((r, i) => {
+      // Leftovers / Requests are live meta buckets — not Save-round snapshots. Skip quietly.
+      if (
+        r.kind === 'leftovers' ||
+        r.kind === 'requests' ||
+        (r.playlistIds || []).some((id) => isMetaPlaylistId(id))
+      ) {
+        return;
+      }
       const n = (r.playlistIds || []).length;
       if (r.status === 'completed' || n === 0) return;
       if (!isValidRoundPlaylistCount(n)) {
