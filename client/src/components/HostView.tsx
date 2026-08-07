@@ -483,6 +483,70 @@ function normalizeWebApiQuarantine(raw: unknown): WebApiQuarantineState {
 
 const MAX_EVENT_ROUNDS = 12;
 
+/** Host DOM toasts — stacked top-right so concurrent messages stay readable. */
+const HOST_DOM_TOAST_STACK: HTMLDivElement[] = [];
+const HOST_DOM_TOAST_BASE_TOP_PX = 20;
+const HOST_DOM_TOAST_GAP_PX = 10;
+
+function layoutHostDomToasts() {
+  let top = HOST_DOM_TOAST_BASE_TOP_PX;
+  for (const el of HOST_DOM_TOAST_STACK) {
+    el.style.top = `${top}px`;
+    top += el.offsetHeight + HOST_DOM_TOAST_GAP_PX;
+  }
+}
+
+function pushHostDomToast(
+  message: string,
+  type: 'info' | 'success' | 'warn' | 'error' = 'info',
+  durationMs = 3000,
+) {
+  const toast = document.createElement('div');
+  const icons = { info: 'i', success: 'OK', warn: '!', error: '!' };
+  const colors = {
+    info: '#00aaff',
+    success: '#00ff88',
+    warn: '#ffaa00',
+    error: '#ff4444',
+  };
+
+  toast.textContent = `${icons[type]} ${message}`;
+  Object.assign(toast.style, {
+    position: 'fixed',
+    top: `${HOST_DOM_TOAST_BASE_TOP_PX}px`,
+    right: '20px',
+    maxWidth: 'min(420px, calc(100vw - 40px))',
+    background: colors[type],
+    color: type === 'warn' ? '#000' : '#fff',
+    padding: '12px 20px',
+    borderRadius: '8px',
+    fontWeight: 'bold',
+    fontSize: '14px',
+    lineHeight: '1.35',
+    zIndex: '10000',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    transition: 'top 0.2s ease, opacity 0.3s ease',
+  });
+
+  HOST_DOM_TOAST_STACK.push(toast);
+  document.body.appendChild(toast);
+  layoutHostDomToasts();
+
+  window.setTimeout(() => {
+    toast.style.opacity = '0';
+    window.setTimeout(() => {
+      const idx = HOST_DOM_TOAST_STACK.indexOf(toast);
+      if (idx >= 0) HOST_DOM_TOAST_STACK.splice(idx, 1);
+      try {
+        toast.remove();
+      } catch {
+        /* already gone */
+      }
+      layoutHostDomToasts();
+    }, 300);
+  }, durationMs);
+}
+
 function ensureEventRoundNames(rounds: EventRound[]): EventRound[] {
   let standardIndex = 0;
   return rounds.map((round) => {
@@ -2057,41 +2121,9 @@ const HostView: React.FC = () => {
     }
   }, [roomId, playerFeedback]);
 
-  // Show toast notification to host
+  // Show toast notification to host (stacked so concurrent toasts don't cover each other)
   const showToast = (message: string, type: 'info' | 'success' | 'warn' | 'error' = 'info') => {
-    const toast = document.createElement('div');
-    const icons = { info: 'i', success: 'OK', warn: '!', error: '!' };
-    const colors = { 
-      info: '#00aaff', 
-      success: '#00ff88', 
-      warn: '#ffaa00', 
-      error: '#ff4444' 
-    };
-    
-    toast.textContent = `${icons[type]} ${message}`;
-    Object.assign(toast.style, {
-      position: 'fixed',
-      top: '20px',
-      right: '20px',
-      background: colors[type],
-      color: type === 'warn' ? '#000' : '#fff',
-      padding: '12px 20px',
-      borderRadius: '8px',
-      fontWeight: 'bold',
-      fontSize: '14px',
-      zIndex: '10000',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-      animation: 'slideIn 0.3s ease-out'
-    });
-    
-    document.body.appendChild(toast);
-    setTimeout(() => { 
-      try { 
-        toast.style.opacity = '0';
-        toast.style.transition = 'opacity 0.3s';
-        setTimeout(() => document.body.removeChild(toast), 300);
-      } catch {} 
-    }, 3000);
+    pushHostDomToast(message, type);
   };
 
   // Advanced playback states
