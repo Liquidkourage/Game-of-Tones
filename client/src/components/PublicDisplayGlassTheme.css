@@ -594,3 +594,23 @@
     padding: 10px 16px;
   }
 }
+
+/* Light theme — outdoor / bright rooms (toggle on connect + live display) */
+.App .public-display--glass.public-display--light {
+  --pd-void: #f4f6fb;
+  --pd-ink: #e4e9f4;
+  --pd-violet: #6d28d9;
+  --pd-mint: #059669;
+  --pd-snow: #0f172a;
+  --pd-violet-rgb: 109, 40, 217;
+  --pd-mint-rgb: 5, 150, 105;
+  color: var(--pd-snow);
+}
+
+.App .public-display--glass.public-display--light::before {
+  background: radial-gradient(circle, rgba(var(--pd-violet-rgb), 0.22) 0%, transparent 68%);
+}
+
+.App .public-display--glass.public-display--light::after {
+  background: radial-gradient(circle, rgba(var(--pd-mint-rgb), 0.16) 0%, transparent 68%);
+}

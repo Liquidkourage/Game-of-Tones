@@ -9,14 +9,23 @@ import {
 } from '../utils/playerFetch';
 
 type Mode = 'login' | 'signup' | 'guest';
+export type PlayerUiTheme = 'dark' | 'light';
 
 type Props = {
   onGuestContinue: (displayName: string) => void;
   onAccountReady: (user: PlayerAccountUser, stats: PlayerStats | null, recentRounds: PlayerRoundHistory[]) => void;
   initialMode?: Mode;
+  theme?: PlayerUiTheme;
+  onThemeChange?: (theme: PlayerUiTheme) => void;
 };
 
-const PlayerAccountGate: React.FC<Props> = ({ onGuestContinue, onAccountReady, initialMode = 'login' }) => {
+const PlayerAccountGate: React.FC<Props> = ({
+  onGuestContinue,
+  onAccountReady,
+  initialMode = 'login',
+  theme = 'dark',
+  onThemeChange,
+}) => {
   const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,6 +33,7 @@ const PlayerAccountGate: React.FC<Props> = ({ onGuestContinue, onAccountReady, i
   const [guestName, setGuestName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const light = theme === 'light';
 
   const submitAccount = async () => {
     setBusy(true);
@@ -53,13 +63,24 @@ const PlayerAccountGate: React.FC<Props> = ({ onGuestContinue, onAccountReady, i
     }
   };
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '10px 12px',
+    borderRadius: 10,
+    border: light ? '1px solid rgba(15, 23, 42, 0.18)' : '1px solid rgba(255,255,255,0.25)',
+    background: light ? 'rgba(255,255,255,0.95)' : 'rgba(0,0,0,0.35)',
+    color: light ? '#0f172a' : '#fff',
+    boxSizing: 'border-box',
+  };
+
   return (
     <div
+      className={`player-account-gate${light ? ' player-account-gate--light' : ''}`}
       style={{
         position: 'fixed',
         inset: 0,
         zIndex: 2000,
-        background: 'rgba(0,0,0,0.88)',
+        background: light ? 'rgba(244, 246, 251, 0.96)' : 'rgba(0,0,0,0.88)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -69,16 +90,60 @@ const PlayerAccountGate: React.FC<Props> = ({ onGuestContinue, onAccountReady, i
       <div
         style={{
           width: 'min(92vw, 440px)',
-          background: 'rgba(255,255,255,0.07)',
-          border: '1px solid rgba(255,255,255,0.16)',
+          background: light ? 'rgba(255,255,255,0.96)' : 'rgba(255,255,255,0.07)',
+          border: light ? '1px solid rgba(15, 23, 42, 0.12)' : '1px solid rgba(255,255,255,0.16)',
           borderRadius: 16,
           padding: 20,
-          color: '#fff',
+          color: light ? '#0f172a' : '#fff',
+          boxShadow: light ? '0 16px 40px rgba(15, 23, 42, 0.12)' : undefined,
         }}
       >
-        <h3 style={{ margin: '0 0 6px', fontSize: '1.35rem' }}>Join the game</h3>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 12,
+            marginBottom: 6,
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: '1.35rem' }}>Join the game</h3>
+          {onThemeChange ? (
+            <div
+              role="group"
+              aria-label="Appearance"
+              style={{
+                display: 'inline-flex',
+                gap: 4,
+                padding: 3,
+                borderRadius: 999,
+                border: light ? '1px solid rgba(15,23,42,0.15)' : '1px solid rgba(255,255,255,0.2)',
+                flexShrink: 0,
+              }}
+            >
+              <button
+                type="button"
+                className={theme === 'dark' ? 'btn-primary' : 'btn-secondary'}
+                aria-pressed={theme === 'dark'}
+                onClick={() => onThemeChange('dark')}
+                style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+              >
+                Dark
+              </button>
+              <button
+                type="button"
+                className={theme === 'light' ? 'btn-primary' : 'btn-secondary'}
+                aria-pressed={theme === 'light'}
+                onClick={() => onThemeChange('light')}
+                style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+              >
+                Light
+              </button>
+            </div>
+          ) : null}
+        </div>
 
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, marginTop: 12 }}>
           {(['login', 'signup', 'guest'] as Mode[]).map((m) => (
             <button
               key={m}
@@ -156,7 +221,10 @@ const PlayerAccountGate: React.FC<Props> = ({ onGuestContinue, onAccountReady, i
               style={inputStyle}
             />
             {error ? (
-              <p style={{ color: '#ff8888', margin: '10px 0 0', fontSize: '0.9rem' }} role="alert">
+              <p
+                style={{ color: light ? '#b91c1c' : '#ff8888', margin: '10px 0 0', fontSize: '0.9rem' }}
+                role="alert"
+              >
                 {error}
               </p>
             ) : null}
@@ -177,16 +245,6 @@ const PlayerAccountGate: React.FC<Props> = ({ onGuestContinue, onAccountReady, i
       </div>
     </div>
   );
-};
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '10px 12px',
-  borderRadius: 10,
-  border: '1px solid rgba(255,255,255,0.25)',
-  background: 'rgba(0,0,0,0.35)',
-  color: '#fff',
-  boxSizing: 'border-box',
 };
 
 export default PlayerAccountGate;

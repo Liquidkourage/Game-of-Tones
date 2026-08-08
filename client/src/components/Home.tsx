@@ -51,6 +51,17 @@ const Home: React.FC = () => {
   const [hostSignInPageUrl, setHostSignInPageUrl] = useState('');
   const [hostSignInUrlCopied, setHostSignInUrlCopied] = useState(false);
   const [resumeHostRoom, setResumeHostRoom] = useState<{ roomId: string } | null>(null);
+  const [hostEvents, setHostEvents] = useState<
+    Array<{
+      roomId: string;
+      updatedAt: string | null;
+      roundCount: number;
+      savedRoundCount: number;
+      roundNames: string[];
+      live?: boolean;
+    }> | null
+  >(null);
+  const [hostEventsError, setHostEventsError] = useState<string | null>(null);
 
   /** Player / QR links: ?join, ?mode=player, ?player=1 — hide host path unless explicitly opened */
   const joinOnly = useMemo(() => {
@@ -178,6 +189,46 @@ const Home: React.FC = () => {
         }
       } catch {
         if (!cancelled) setResumeHostRoom(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hostSession]);
+
+  useEffect(() => {
+    if (!hostSession) {
+      setHostEvents(null);
+      setHostEventsError(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await hostFetch(`${API_BASE || ''}/api/host/rooms/prep`);
+        if (cancelled) return;
+        if (!res.ok) {
+          setHostEvents([]);
+          setHostEventsError(res.status === 503 ? 'Cloud prep unavailable' : 'Could not load saved events');
+          return;
+        }
+        const data = (await res.json()) as {
+          events?: Array<{
+            roomId: string;
+            updatedAt: string | null;
+            roundCount: number;
+            savedRoundCount: number;
+            roundNames: string[];
+            live?: boolean;
+          }>;
+        };
+        setHostEvents(Array.isArray(data.events) ? data.events : []);
+        setHostEventsError(null);
+      } catch {
+        if (!cancelled) {
+          setHostEvents([]);
+          setHostEventsError('Could not load saved events');
+        }
       }
     })();
     return () => {
@@ -620,6 +671,91 @@ const Home: React.FC = () => {
                     <ListMusic className="btn-icon" aria-hidden />
                     Plan rounds &amp; playlists
                   </button>
+                </div>
+
+                <div className="home-host-events" style={{ marginTop: 18, textAlign: 'left' }}>
+                  <h4 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Your saved events</h4>
+                  {hostEvents === null ? (
+                    <p className="home-card-lead" style={{ opacity: 0.7, margin: 0 }}>
+                      Loading saved rounds…
+                    </p>
+                  ) : hostEventsError ? (
+                    <p className="home-card-lead" style={{ opacity: 0.75, margin: 0 }}>
+                      {hostEventsError}
+                    </p>
+                  ) : hostEvents.length === 0 ? (
+                    <p className="home-card-lead" style={{ opacity: 0.75, margin: 0 }}>
+                      No cloud-saved rounds yet. Open a room and Save round — they show up here even after
+                      the live room ends.
+                    </p>
+                  ) : (
+                    <ul className="home-host-events__list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                      {hostEvents.slice(0, 12).map((ev) => {
+                        const when = ev.updatedAt ? new Date(ev.updatedAt) : null;
+                        const whenLabel =
+                          when && !Number.isNaN(when.getTime())
+                            ? when.toLocaleString(undefined, {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                              })
+                            : 'Saved';
+                        const names =
+                          ev.roundNames.length > 0
+                            ? ev.roundNames.join(' · ')
+                            : `${ev.roundCount} round${ev.roundCount === 1 ? '' : 's'}`;
+                        return (
+                          <li
+                            key={ev.roomId}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 10,
+                              padding: '10px 0',
+                              borderTop: '1px solid rgba(255,255,255,0.1)',
+                            }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 700 }}>
+                                Room {ev.roomId}
+                                {ev.live ? (
+                                  <span
+                                    style={{
+                                      marginLeft: 8,
+                                      fontSize: '0.75rem',
+                                      fontWeight: 600,
+                                      color: '#00ff88',
+                                    }}
+                                  >
+                                    Live
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div style={{ fontSize: '0.82rem', opacity: 0.75, marginTop: 2 }}>
+                                {whenLabel}
+                                {ev.savedRoundCount > 0
+                                  ? ` · ${ev.savedRoundCount} saved`
+                                  : ` · ${ev.roundCount} planned`}
+                                {names ? ` · ${names}` : ''}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ flexShrink: 0, padding: '8px 12px' }}
+                              onClick={() =>
+                                goToHostRoom(ev.roomId, hostDisplayName, { tab: 'rounds' })
+                              }
+                            >
+                              Open
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </div>
               </>
             ) : (

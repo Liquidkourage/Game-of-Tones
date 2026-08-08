@@ -26,7 +26,12 @@ import {
 } from '../utils/publicDisplayTitleReveal';
 import { effectivePublicDisplayFontScale } from '../utils/publicDisplayFontScale';
 import { playlistDisplayParts } from '../utils/roundPrintLabels';
-import { pdGlass } from '../publicDisplayGlassTheme';
+import {
+  DISPLAY_THEME_STORAGE_KEY,
+  glassForDisplayTheme,
+  readStoredDisplayTheme,
+  type PublicDisplayTheme,
+} from '../publicDisplayGlassTheme';
 import './PublicDisplayGlassTheme.css';
 import {
   computeBingoCellTextScale,
@@ -1288,6 +1293,16 @@ const PublicDisplay: React.FC = () => {
   useEffect(() => {
     isVerificationPendingRef.current = isVerificationPending;
   }, [isVerificationPending]);
+  const [displayTheme, setDisplayTheme] = useState<PublicDisplayTheme>(() => readStoredDisplayTheme());
+  const pdGlass = glassForDisplayTheme(displayTheme);
+  const chooseDisplayTheme = useCallback((theme: PublicDisplayTheme) => {
+    setDisplayTheme(theme);
+    try {
+      localStorage.setItem(DISPLAY_THEME_STORAGE_KEY, theme);
+    } catch {
+      /* ignore */
+    }
+  }, []);
   // Flag to prevent auto-reveal during reset operations
   const isResettingRef = useRef<boolean>(false);
   /** Five call columns on projector (fixed; not URL-configurable). */
@@ -2953,6 +2968,7 @@ const PublicDisplay: React.FC = () => {
         setGameState(prev => ({ ...prev, winners: data.winners || prev.winners }));
         try {
           if (data.playerName) {
+            const continueRound = data.continueRound === true;
             const isFirstWinner = data.isFirstWinner;
             const totalWinners = data.totalWinners || 1;
             const wc = data.winningCard;
@@ -2974,27 +2990,35 @@ const PublicDisplay: React.FC = () => {
                   typeof data.prize === 'string' && data.prize.trim() ? data.prize.trim() : null,
               });
               playPublicCelebrationSound();
+              if (continueRound) {
+                // Brief celebration, then back to the live board (round keeps going).
+                window.setTimeout(() => setWinnerCardModal(null), 5500);
+              }
             } else {
-              if (isFirstWinner) {
+              if (continueRound) {
+                setWinnerName(`🏆 BINGO! ${data.playerName} — round continues`);
+              } else if (isFirstWinner) {
                 setWinnerName(`🏆 BINGO! ${data.playerName} WINS!`);
               } else {
                 setWinnerName(`🎉 Another BINGO! ${data.playerName} also wins! (${totalWinners} total)`);
               }
               setShowWinnerBanner(true);
               playPublicCelebrationSound();
-              const celebrationTime = isFirstWinner ? 6000 : 4000;
+              const celebrationTime = continueRound ? 5000 : isFirstWinner ? 6000 : 4000;
               setTimeout(() => setShowWinnerBanner(false), celebrationTime);
             }
             if (Array.isArray(data.roundWinners)) setRoundWinnersBoard(data.roundWinners);
             if (data.showNightBoard !== undefined) setShowNightBoard(!!data.showNightBoard);
-            else setShowNightBoard(true);
+            else if (!continueRound) setShowNightBoard(true);
             if (typeof data.roundName === 'string' && data.roundName.trim()) {
               setCurrentRoundName(data.roundName.trim());
             }
             if (typeof data.prize === 'string') {
               setCurrentRoundPrize(data.prize.trim() || null);
             }
-            setRoomPhase('round_complete');
+            if (!continueRound) {
+              setRoomPhase('round_complete');
+            }
           }
         } catch {}
       }
@@ -5050,15 +5074,63 @@ const PublicDisplay: React.FC = () => {
     );
   };
 
+  const themeToggle = (
+    <div
+      className="public-display-theme-toggle"
+      style={{
+        display: 'inline-flex',
+        gap: 6,
+        padding: 4,
+        borderRadius: 999,
+        border: `1px solid ${pdGlass.borderViolet}`,
+        background: displayTheme === 'light' ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.35)',
+      }}
+      role="group"
+      aria-label="Display theme"
+    >
+      <button
+        type="button"
+        className="btn-secondary"
+        aria-pressed={displayTheme === 'dark'}
+        onClick={() => chooseDisplayTheme('dark')}
+        style={{
+          padding: '6px 12px',
+          fontWeight: 800,
+          fontSize: '0.85rem',
+          opacity: displayTheme === 'dark' ? 1 : 0.65,
+          border: displayTheme === 'dark' ? `1px solid ${pdGlass.borderMint}` : '1px solid transparent',
+        }}
+      >
+        Dark
+      </button>
+      <button
+        type="button"
+        className="btn-secondary"
+        aria-pressed={displayTheme === 'light'}
+        onClick={() => chooseDisplayTheme('light')}
+        style={{
+          padding: '6px 12px',
+          fontWeight: 800,
+          fontSize: '0.85rem',
+          opacity: displayTheme === 'light' ? 1 : 0.65,
+          border: displayTheme === 'light' ? `1px solid ${pdGlass.borderMint}` : '1px solid transparent',
+        }}
+      >
+        Light
+      </button>
+    </div>
+  );
+
   // If no room code is present, render a landing form to connect
   if (!roomId) {
     return (
       <div
-        className="public-display-connect"
+        className={`public-display-connect${displayTheme === 'light' ? ' public-display-connect--light' : ''}`}
         style={{
           position: 'fixed',
           inset: 0,
           background: pdGlass.pageBgConnect,
+          color: pdGlass.snow,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -5078,7 +5150,8 @@ const PublicDisplay: React.FC = () => {
           }}
         >
           <div style={{ fontWeight: 1000, fontSize: 'clamp(2.2rem, 6vw, 3.2rem)', marginBottom: 8, letterSpacing: '0.04em' }}>TEMPO – Public Display</div>
-          <div style={{ opacity: 0.9, marginBottom: 18 }}>Enter a room code to connect the display</div>
+          <div style={{ opacity: 0.9, marginBottom: 14 }}>Enter a room code to connect the display</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>{themeToggle}</div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
             <input
               value={connectCode}
@@ -5095,9 +5168,9 @@ const PublicDisplay: React.FC = () => {
                 width: 'min(72vw, 360px)',
                 padding: '12px 14px',
                 borderRadius: 10,
-                background: 'rgba(0,0,0,0.35)',
-                color: '#fff',
-                border: '1px solid rgba(255,255,255,0.25)',
+                background: displayTheme === 'light' ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.35)',
+                color: pdGlass.snow,
+                border: `1px solid ${pdGlass.borderViolet}`,
                 fontWeight: 900,
                 letterSpacing: '0.04em',
                 textAlign: 'center'
@@ -5119,7 +5192,7 @@ const PublicDisplay: React.FC = () => {
   return (
     <div
       ref={displayRef}
-      className={`public-display public-display--glass${venueBranding ? ' public-display--venue' : ''}`}
+      className={`public-display public-display--glass${displayTheme === 'light' ? ' public-display--light' : ''}${venueBranding ? ' public-display--venue' : ''}`}
       style={
         {
           ...(venueBranding?.primaryColor ? { '--venue-primary': venueBranding.primaryColor } : {}),
@@ -5127,6 +5200,17 @@ const PublicDisplay: React.FC = () => {
         } as React.CSSProperties
       }
     >
+      <div
+        style={{
+          position: 'fixed',
+          top: 10,
+          right: 12,
+          zIndex: 50,
+          opacity: 0.85,
+        }}
+      >
+        {themeToggle}
+      </div>
       <AnimatePresence>
         {winnerCardModal && (
           <motion.div

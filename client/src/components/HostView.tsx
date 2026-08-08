@@ -3956,11 +3956,17 @@ const HostView: React.FC = () => {
           setGameState('ended');
           setIsPlaying(false);
           setGamePaused(false);
+        } else if (data.continued) {
+          addLog(
+            `Bingo awarded to ${data.playerName} — round continues (winning card disqualified)`,
+            'info',
+          );
+          setGamePaused(false);
         } else {
-          addLog(`? Bingo approved for ${data.playerName}`, 'info');
+          addLog(`Bingo approved for ${data.playerName}`, 'info');
         }
       } else {
-        addLog(`? Bingo rejected for ${data.playerName}: ${data.reason || 'Invalid pattern'}`, 'warn');
+        addLog(`Bingo rejected for ${data.playerName}: ${data.reason || 'Invalid pattern'}`, 'warn');
         setGamePaused(false);
       }
     });
@@ -8651,6 +8657,30 @@ const HostView: React.FC = () => {
     verificationTimeoutRef.current = setTimeout(() => {
       verificationTimeoutRef.current = null;
       addLog('Reject timed out — clearing verification modal', 'warn');
+      setPendingVerification(null);
+      setGamePaused(false);
+      setIsProcessingVerification(false);
+    }, 15000);
+  }, [socket, roomId, pendingVerification, addLog]);
+
+  /** Award the bingo, DQ that card, and keep the same round playing. */
+  const approveBingoAndContinue = useCallback(() => {
+    if (!socket || !pendingVerification) return;
+    if (verificationTimeoutRef.current) {
+      clearTimeout(verificationTimeoutRef.current);
+      verificationTimeoutRef.current = null;
+    }
+    setIsProcessingVerification(true);
+    socket.emit('verify-bingo', {
+      roomId,
+      playerId: pendingVerification.playerId,
+      playerName: pendingVerification.playerName,
+      approved: true,
+      continueRound: true,
+    });
+    verificationTimeoutRef.current = setTimeout(() => {
+      verificationTimeoutRef.current = null;
+      addLog('Award & continue timed out — clearing verification modal', 'warn');
       setPendingVerification(null);
       setGamePaused(false);
       setIsProcessingVerification(false);
@@ -14333,43 +14363,86 @@ const HostView: React.FC = () => {
             </div>
 
             {/* Verification Buttons */}
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                  <button
+            <div
+              style={{
+                display: 'flex',
+                gap: '12px',
+                justifyContent: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              <button
+                type="button"
                 onClick={approveBingo}
                 disabled={isProcessingVerification}
-                    style={{
-                      background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
+                title="Award the bingo and end this round"
+                style={{
+                  background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
                   color: '#000',
-                      border: 'none',
-                      padding: '12px 24px',
+                  border: 'none',
+                  padding: '12px 24px',
                   borderRadius: '8px',
                   fontSize: '1rem',
                   fontWeight: 'bold',
                   cursor: isProcessingVerification ? 'not-allowed' : 'pointer',
-                  opacity: isProcessingVerification ? 0.6 : 1
+                  opacity: isProcessingVerification ? 0.6 : 1,
                 }}
               >
-                {isProcessingVerification ? '? Processing...' : '? APPROVE BINGO'}
-                  </button>
-                  
-                  <button
+                {isProcessingVerification ? 'Processing…' : 'Approve & end round'}
+              </button>
+
+              <button
+                type="button"
+                onClick={approveBingoAndContinue}
+                disabled={isProcessingVerification}
+                title="Award the bingo, disqualify this card, and keep playing for another winner"
+                style={{
+                  background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  fontWeight: 'bold',
+                  cursor: isProcessingVerification ? 'not-allowed' : 'pointer',
+                  opacity: isProcessingVerification ? 0.6 : 1,
+                }}
+              >
+                {isProcessingVerification ? 'Processing…' : 'Award & keep playing'}
+              </button>
+
+              <button
+                type="button"
                 onClick={() => void rejectBingo()}
                 disabled={isProcessingVerification}
-                    style={{
-                      background: 'linear-gradient(135deg, #ff4444, #cc3333)',
+                style={{
+                  background: 'linear-gradient(135deg, #ff4444, #cc3333)',
                   color: '#fff',
-                      border: 'none',
-                      padding: '12px 24px',
+                  border: 'none',
+                  padding: '12px 24px',
                   borderRadius: '8px',
                   fontSize: '1rem',
                   fontWeight: 'bold',
                   cursor: isProcessingVerification ? 'not-allowed' : 'pointer',
-                  opacity: isProcessingVerification ? 0.6 : 1
+                  opacity: isProcessingVerification ? 0.6 : 1,
                 }}
               >
-                {isProcessingVerification ? '? Processing...' : '? REJECT BINGO'}
-                  </button>
-                </div>
+                {isProcessingVerification ? 'Processing…' : 'Reject'}
+              </button>
+            </div>
+            <p
+              style={{
+                margin: '10px 0 0',
+                textAlign: 'center',
+                fontSize: '0.82rem',
+                opacity: 0.75,
+                maxWidth: 520,
+                marginLeft: 'auto',
+                marginRight: 'auto',
+              }}
+            >
+              Award & keep playing credits the win, disqualifies that card for another win, and resumes the same round.
+            </p>
 
                   </div>
               </div>

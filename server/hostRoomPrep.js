@@ -31,6 +31,40 @@ async function getHostRoomPrep(db, userId, roomId) {
   return { payload: row.payload, updatedAt: row.updated_at };
 }
 
+/**
+ * List cloud prep rows for a host (newest first) — powers Home “Your events”.
+ */
+async function listHostRoomPrep(db, userId, { limit = 40 } = {}) {
+  if (!db || userId == null) return [];
+  const lim = Math.min(100, Math.max(1, Number(limit) || 40));
+  const r = await db.query(
+    `SELECT room_id, payload, updated_at
+     FROM host_room_prep
+     WHERE user_id = $1
+     ORDER BY updated_at DESC
+     LIMIT $2`,
+    [userId, lim],
+  );
+  return r.rows.map((row) => {
+    const payload = row.payload && typeof row.payload === 'object' ? row.payload : {};
+    const rounds = Array.isArray(payload.rounds) ? payload.rounds : [];
+    const savedRounds = rounds.filter((round) => round && round.savedMixSnapshot).length;
+    const names = rounds
+      .map((round) => (typeof round?.name === 'string' ? round.name.trim() : ''))
+      .filter(Boolean)
+      .slice(0, 4);
+    return {
+      roomId: String(row.room_id),
+      updatedAt: row.updated_at,
+      roundCount: rounds.length,
+      savedRoundCount: savedRounds,
+      roundNames: names,
+      currentRoundIndex:
+        typeof payload.currentRoundIndex === 'number' ? payload.currentRoundIndex : -1,
+    };
+  });
+}
+
 async function upsertHostRoomPrep(db, userId, roomId, payloadObject) {
   if (!db || userId == null || !roomId) throw new Error('upsertHostRoomPrep: missing db, userId, or roomId');
   const r = await db.query(
@@ -82,6 +116,7 @@ async function getOrgMemberPrepByRoomId(db, organizationId, roomId) {
 module.exports = {
   ensureHostRoomPrepTable,
   getHostRoomPrep,
+  listHostRoomPrep,
   upsertHostRoomPrep,
   deleteHostRoomPrep,
   getOrgMemberPrepByRoomId,

@@ -284,9 +284,7 @@ const PlayerView: React.FC = () => {
     } catch {
       /* ignore */
     }
-    if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches) {
-      return 'light';
-    }
+    // Dark by default (outdoor/sun hosts can switch to Light on the join gate or in settings).
     return 'dark';
   });
 
@@ -2431,6 +2429,8 @@ const PlayerView: React.FC = () => {
       {/* Name prompt overlay if no name provided */}
       {!joinReady ? (
         <PlayerAccountGate
+          theme={cardTheme}
+          onThemeChange={chooseCardTheme}
           onGuestContinue={(name) => {
             finishGuestOrAccountJoin(name);
             if (socket && socket.connected) {

@@ -2561,12 +2561,25 @@ function clearPlayerBingoCallState(room) {
   });
 }
 
-/** Clear official win flags (any_round mode / end of event). */
+/** Clear official win flags and per-card DQs (any_round mode / end of event / next round). */
 function clearPlayerSessionBingoWins(room) {
   if (!room?.players) return;
   room.players.forEach((player) => {
     player.hasOfficialBingoWin = false;
+    player.disqualifiedCardIds = [];
   });
+  room.liveNightBoardRoundNumber = null;
+}
+
+function playerDisqualifiedCardIds(player) {
+  return Array.isArray(player?.disqualifiedCardIds) ? player.disqualifiedCardIds : [];
+}
+
+function disqualifyPlayerBingoCard(player, cardId) {
+  if (!player || !cardId) return;
+  if (!Array.isArray(player.disqualifiedCardIds)) player.disqualifiedCardIds = [];
+  const id = String(cardId);
+  if (!player.disqualifiedCardIds.includes(id)) player.disqualifiedCardIds.push(id);
 }
 
 /**
@@ -4971,6 +4984,9 @@ io.on('connection', (socket) => {
       isHost: effectiveIsHost,
       hasBingo: priorPlayer?.hasBingo === true,
       hasOfficialBingoWin: priorPlayer?.hasOfficialBingoWin === true,
+      disqualifiedCardIds: Array.isArray(priorPlayer?.disqualifiedCardIds)
+        ? [...priorPlayer.disqualifiedCardIds]
+        : [],
       clientId: clientId || null,
       /** false = joined as remote/online when host enables hybrid mode */
       inPerson,
@@ -6166,6 +6182,16 @@ io.on('connection', (socket) => {
       playerCards.length ? playerCards : [bingoCard],
       bingoCard.cardId || null,
     );
+
+    const claimCardId = bingoCard.cardId ? String(bingoCard.cardId) : null;
+    if (claimCardId && playerDisqualifiedCardIds(player).includes(claimCardId)) {
+      socket.emit('bingo-result', {
+        success: false,
+        reason: 'This card already won — it cannot win again this round. Switch cards or wait for the next round.',
+        cardDisqualified: true,
+      });
+      return;
+    }
     
     if (player.hasBingo) {
       socket.emit('bingo-result', { success: false, reason: 'You have already called bingo!' });
@@ -6479,7 +6505,7 @@ io.on('connection', (socket) => {
 
   // Host approves or rejects bingo verification
   socket.on('verify-bingo', (data) => {
-    const { roomId, playerId, approved, reason, playerName: bodyPlayerName } = data || {};
+    const { roomId, playerId, approved, reason, playerName: bodyPlayerName, continueRound } = data || {};
     const room = rooms.get(roomId);
     if (!room) {
       socket.emit('bingo-verified', {
@@ -6552,25 +6578,36 @@ io.on('connection', (socket) => {
       );
     }
     if (approved) {
-      // APPROVED: Confirm the win and resume/end game
-      routineServerLog(`✅ Host approved bingo for ${player.name}`);
-      player.hasOfficialBingoWin = true;
+      // APPROVED: Confirm the win — either end the round or award & keep playing
+      const keepPlayingEarly = continueRound === true;
+      routineServerLog(
+        `✅ Host approved bingo for ${player.name}${keepPlayingEarly ? ' (continue round)' : ''}`,
+      );
+      // End-round always marks a session win; continue only does so under one_win policy
+      // (set again after card DQ below). For any_round + continue, other cards can still win.
+      if (!keepPlayingEarly) {
+        player.hasOfficialBingoWin = true;
+      }
       
       // Current song already marked as played during bingo call
       
       // Notify the winner (use resolved socket id — may differ after player reconnect)
       io.to(resolvedPlayerId).emit('bingo-result', {
         success: true,
-        message: 'BINGO CONFIRMED! You win!',
+        message: keepPlayingEarly
+          ? 'BINGO CONFIRMED! You win — the round continues.'
+          : 'BINGO CONFIRMED! You win!',
         isWinner: true,
-        verified: true
+        verified: true,
+        continueRound: keepPlayingEarly,
       });
       
       // Notify all players of confirmed win
       io.to(roomId).emit('bingo-confirmed', {
         playerId: resolvedPlayerId,
         playerName: player.name,
-        verified: true
+        verified: true,
+        continueRound: keepPlayingEarly,
       });
       
       // Serialize winning card + pattern positions for public display modal.
@@ -6624,18 +6661,24 @@ io.on('connection', (socket) => {
       const winnerRoundName =
         sanitizeRoundNameText(room.currentRoundName || '') ||
         `Round ${(room.roundWinners.length || 0) + 1}`;
+      // Keep one board round number for award-and-continue (multiple winners, same round).
+      if (typeof room.liveNightBoardRoundNumber !== 'number') {
+        room.liveNightBoardRoundNumber = (room.roundWinners.length || 0) + 1;
+      }
       const roundWinnerEntry = {
-        roundNumber: (room.roundWinners.length || 0) + 1,
+        roundNumber: room.liveNightBoardRoundNumber,
         playerName: player.name,
         playerId: resolvedPlayerId,
         timestamp: new Date().toISOString(),
+        continued: keepPlayingEarly === true,
         ...(winnerPrize ? { prize: winnerPrize } : {}),
         ...(winnerRoundName ? { roundName: winnerRoundName } : {}),
       };
       room.roundWinners.push(roundWinnerEntry);
-      room.showNightBoard = true;
+      room.showNightBoard = keepPlayingEarly !== true;
 
       // NOW emit the actual winner event for public display
+      const keepPlaying = continueRound === true;
       const bingoCalledPayload = { 
         playerId: resolvedPlayerId, 
         playerName: player.name, 
@@ -6651,11 +6694,82 @@ io.on('connection', (socket) => {
         roundName: winnerRoundName || null,
         roundNumber: roundWinnerEntry.roundNumber,
         roundWinners: room.roundWinners,
-        showNightBoard: true,
+        showNightBoard: !keepPlaying,
+        continueRound: keepPlaying,
       };
       storeLastDisplayWinnerFromBingoCalled(room, bingoCalledPayload);
       io.to(roomId).emit('bingo-called', bingoCalledPayload);
-      
+
+      if (player.playerUserId != null) {
+        void playerAccountsStore.recordBingoWon(db, player.playerUserId, playerStatsContext(room, player));
+      }
+
+      // Award & keep playing: celebrate, DQ that card, resume (do not end the round).
+      if (keepPlaying) {
+        const dqCardId =
+          claimedCardId ||
+          (sourceCard && sourceCard.cardId ? String(sourceCard.cardId) : null);
+        disqualifyPlayerBingoCard(player, dqCardId);
+        // Session one-win policy still blocks this player from another official pause/win.
+        if (bingoWinPolicyForRoom(room) === 'one_win') {
+          player.hasOfficialBingoWin = true;
+        }
+        // Free the player to mark other cards; this card stays DQ'd.
+        player.hasBingo = false;
+        player.patternComplete = false;
+
+        if (Array.isArray(room.bingoVerificationQueue) && room.bingoVerificationQueue.length > 0) {
+          room.bingoVerificationQueue.shift();
+        }
+
+        const hostPayload = {
+          approved: true,
+          playerName: player.name,
+          gameEnded: false,
+          roundComplete: false,
+          continued: true,
+          disqualifiedCardId: dqCardId,
+          roundNumber: room.roundWinners.length,
+          message: `${player.name} wins — round continues (winning card disqualified).`,
+        };
+        let hostsNotified = 0;
+        room.players.forEach((playerData, hostSocketId) => {
+          if (!playerData.isHost) return;
+          const hostSocket = io.sockets.sockets.get(hostSocketId);
+          if (!hostSocket) return;
+          hostSocket.emit('bingo-verified', hostPayload);
+          hostsNotified++;
+        });
+        if (hostsNotified === 0) {
+          io.to(roomId).emit('bingo-verified', hostPayload);
+        }
+
+        io.to(roomId).emit('bingo-verification-cleared', { reason: 'bingo_awarded_continue' });
+        routineServerLog(
+          `✅ Awarded bingo for ${player.name} and continuing round (DQ card ${dqCardId || 'n/a'})`,
+        );
+
+        if (Array.isArray(room.bingoVerificationQueue) && room.bingoVerificationQueue.length > 0) {
+          // Stay paused; show next claim in the FIFO queue.
+          if (room.gameState === 'playing') {
+            beginBingoVerificationPause(roomId, room, 'next-claim');
+          } else if (room.gameState !== 'paused_for_verification') {
+            room.gameState = 'paused_for_verification';
+          }
+          emitBingoVerificationToHosts(io, room, roomId, room.bingoVerificationQueue[0].verificationData);
+        } else {
+          room.bingoVerificationQueue = [];
+          if (room.gameState === 'paused_for_verification') {
+            resumeGameAfterVerificationQueueEmpty(
+              roomId,
+              room,
+              'Bingo awarded — round continues',
+            );
+          } else {
+            io.to(roomId).emit('game-resumed', { reason: 'Bingo awarded — round continues' });
+          }
+        }
+      } else {
       // PAUSE GAME for host to decide: next round or end completely
       room.gameState = 'round_complete';
       clearRoomTimer(roomId);
@@ -6675,9 +6789,6 @@ io.on('connection', (socket) => {
       })();
       
       routineServerLog(`🏁 Round complete - ${player.name} wins! Waiting for host decision...`);
-      if (player.playerUserId != null) {
-        void playerAccountsStore.recordBingoWon(db, player.playerUserId, playerStatsContext(room, player));
-      }
       
       // Notify ALL hosts with next round options (not just the approving host)
       // This ensures modal appears even if host reconnected or multiple hosts exist
@@ -6765,6 +6876,7 @@ io.on('connection', (socket) => {
         room.bingoVerificationQueue.shift();
       }
       supersedeRemainingBingoQueue(room, roomId, io);
+      }
       
     } else {
       // REJECTED: Remove from winners, notify player, resume game
@@ -6923,6 +7035,7 @@ io.on('connection', (socket) => {
     room.calledSongIds = [];
     room.bingoVerificationQueue = [];
     room.roundWinners = []; // Reset round winners
+    room.liveNightBoardRoundNumber = null;
     room.currentRoundName = '';
     room.currentRoundPrize = '';
     room.currentRoundPlaylistNames = [];
@@ -7435,7 +7548,13 @@ io.on('connection', (socket) => {
         clearPlayerBingoCallState(room);
         if (bingoWinPolicyForRoom(room) === 'any_round') {
           clearPlayerSessionBingoWins(room);
+        } else {
+          // Keep session one-win flags; still reset per-card DQs for the new round's cards.
+          room.players.forEach((p) => {
+            p.disqualifiedCardIds = [];
+          });
         }
+        room.liveNightBoardRoundNumber = (Array.isArray(room.roundWinners) ? room.roundWinners.length : 0) + 1;
         clearPublicDisplaySessionState(room);
         room.currentSongIndex = 0;
         room.currentSong = null;
@@ -14091,6 +14210,34 @@ function sanitizeHostPrepRoomId(raw) {
     return null;
   }
 }
+
+/** List this host's cloud-saved events/rooms (newest first). */
+app.get('/api/host/rooms/prep', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required for cloud prep.' });
+    const rows = await hostRoomPrepStore.listHostRoomPrep(db, uid, { limit: 40 });
+    const events = rows.map((row) => ({
+      roomId: row.roomId,
+      updatedAt:
+        row.updatedAt instanceof Date
+          ? row.updatedAt.toISOString()
+          : row.updatedAt != null
+            ? String(row.updatedAt)
+            : null,
+      roundCount: row.roundCount,
+      savedRoundCount: row.savedRoundCount,
+      roundNames: row.roundNames,
+      currentRoundIndex: row.currentRoundIndex,
+      live: rooms.has(row.roomId),
+    }));
+    res.json({ events });
+  } catch (e) {
+    console.error('GET /api/host/rooms/prep:', e?.message || e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed to list events' });
+  }
+});
 
 /** Load persisted prep rounds for this host + room (survives browser clearing site data). */
 app.get('/api/host/rooms/:roomId/prep', async (req, res) => {
