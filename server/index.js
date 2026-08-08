@@ -3095,15 +3095,28 @@ function computeSnippetRandomStartMs(room, song) {
 }
 
 /**
+ * Normalize track duration to milliseconds.
+ * Some playlist merges store Spotify `duration` in seconds (~180–600); treat small values as seconds.
+ */
+function normalizeTrackDurationMs(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  // Values under 10s-as-ms are almost certainly seconds (e.g. 210 → 3:30).
+  if (n < 10000) return Math.round(n * 1000);
+  return Math.round(n);
+}
+
+/**
  * Spotify rows in room.playlistSongs often omit `duration` after ID-only finalized reorder merges.
  * Use duration_ms when present, then duration, then the same fallback as YouTube snippet math.
  */
 function resolveSpotifyTrackDurationMsForRandomStart(song, contextLabel) {
-  const raw = song && (song.duration_ms != null ? song.duration_ms : song.duration);
-  const n = Number(raw);
-  if (Number.isFinite(n) && n > 0) return n;
+  const fromMs = normalizeTrackDurationMs(song?.duration_ms);
+  if (fromMs != null) return fromMs;
+  const fromSecOrMs = normalizeTrackDurationMs(song?.duration);
+  if (fromSecOrMs != null) return fromSecOrMs;
   routineServerLog(
-    `⚠️ Random start (${contextLabel || 'spotify'}): missing/zero duration on "${song?.name || song?.id || '?'}" (raw=${raw}) — using ${YOUTUBE_FALLBACK_DURATION_MS}ms fallback for offset math`
+    `⚠️ Random start (${contextLabel || 'spotify'}): missing/zero duration on "${song?.name || song?.id || '?'}" (raw=${song?.duration_ms ?? song?.duration}) — using ${YOUTUBE_FALLBACK_DURATION_MS}ms fallback for offset math`
   );
   return YOUTUBE_FALLBACK_DURATION_MS;
 }
@@ -3134,34 +3147,36 @@ function computeSpotifySnippetRandomStartMs(room, song, contextLabel) {
 function computeBumpSnippetStartMs(room, song, { avoidMs = null, contextLabel = 'bump' } = {}) {
   const snippetMs = (room.snippetLength || 30) * 1000;
   const bufferMs = 1500;
-  const durationMs =
-    Number.isFinite(song?.duration_ms) && Number(song.duration_ms) > 0
-      ? Math.max(0, Number(song.duration_ms))
-      : Number.isFinite(song?.duration) && Number(song.duration) > 0
-        ? Math.max(0, Number(song.duration))
-        : resolveSpotifyTrackDurationMsForRandomStart(song, contextLabel);
+  // Always normalize via the shared resolver — seconds-vs-ms mixups collapse the window to 0
+  // and make bump replay the same intro (startMs = 0).
+  const durationMs = resolveSpotifyTrackDurationMsForRandomStart(song, contextLabel);
 
   const safeWindow = Math.max(0, durationMs - snippetMs - bufferMs - 30000);
+  const avoid = Number.isFinite(Number(avoidMs)) ? Math.max(0, Number(avoidMs)) : null;
+  const minDeltaMs = 12000;
+
+  const pickAwayFromAvoid = (windowMs) => {
+    if (windowMs <= 3000) return 0;
+    let startMs = Math.floor(Math.random() * windowMs);
+    if (avoid == null || windowMs <= minDeltaMs + 1000) return startMs;
+    for (let i = 0; i < 16; i++) {
+      const candidate = Math.floor(Math.random() * windowMs);
+      if (Math.abs(candidate - avoid) >= minDeltaMs) return candidate;
+    }
+    // Deterministic escape when RNG keeps landing near the same intro.
+    if (avoid < windowMs / 2) {
+      return Math.min(windowMs - 1, avoid + minDeltaMs);
+    }
+    return Math.max(0, avoid - minDeltaMs);
+  };
+
   if (safeWindow <= 3000) {
     // Short tracks: fall back to early window (or 0).
     const earlyWindow = Math.min(90000, Math.max(0, durationMs - snippetMs - bufferMs));
-    if (earlyWindow <= 3000) return 0;
-    return Math.floor(Math.random() * earlyWindow);
+    return pickAwayFromAvoid(earlyWindow);
   }
 
-  const avoid = Number.isFinite(Number(avoidMs)) ? Math.max(0, Number(avoidMs)) : null;
-  const minDeltaMs = 8000;
-  let startMs = Math.floor(Math.random() * safeWindow);
-  if (avoid != null && safeWindow > minDeltaMs + 1000) {
-    for (let i = 0; i < 10; i++) {
-      const candidate = Math.floor(Math.random() * safeWindow);
-      if (Math.abs(candidate - avoid) >= minDeltaMs) {
-        startMs = candidate;
-        break;
-      }
-    }
-  }
-  return startMs;
+  return pickAwayFromAvoid(safeWindow);
 }
 
 function normalizeSnippetLengthSec(value, fallback = 30) {
@@ -4541,32 +4556,103 @@ function supersedeRemainingBingoQueue(room, roomId, io) {
   }
 }
 
-function resumeGameAfterVerificationQueueEmpty(roomId, room) {
+/**
+ * Pause transport for bingo verification. Freezes the snippet clock and bumps a generation
+ * counter so a late Spotify pause cannot overwrite a completed resume.
+ */
+function beginBingoVerificationPause(roomId, room, reasonLabel) {
+  if (!room || room.gameState !== 'playing') return;
+  room.gameState = 'paused_for_verification';
+  clearRoomTimer(roomId);
+  if (room.snippetPausedElapsedMs == null) {
+    room.snippetPausedElapsedMs = snippetElapsedMsForRoom(room);
+    room.snippetPausedAtMs = Date.now();
+  }
+  room._bingoPauseGen = (room._bingoPauseGen || 0) + 1;
+  const pauseGen = room._bingoPauseGen;
+  routineServerLog(`🛑 Game auto-paused for bingo verification (${reasonLabel || 'claim'})`);
+  (async () => {
+    try {
+      const live = rooms.get(roomId);
+      if (!live || live._bingoPauseGen !== pauseGen) return;
+      if (live.gameState !== 'paused_for_verification') return;
+      await pauseSpotifyForRoom(roomId, live);
+      if (live._bingoPauseGen !== pauseGen) return;
+      routineServerLog(`⏸️ Spotify paused for bingo verification (${reasonLabel || 'claim'})`);
+    } catch (error) {
+      routineServerLog(`⚠️ Failed to pause Spotify during bingo verification: ${error?.message || error}`);
+    }
+  })();
+}
+
+/**
+ * Resume after the bingo verification queue is empty (or host manual resume).
+ * Always clears the projector verifying overlay via game-resumed — even if Spotify fails.
+ */
+function resumeGameAfterVerificationQueueEmpty(roomId, room, reason = 'Bingo verification queue cleared') {
   if (room.gameState !== 'paused_for_verification') return;
   (async () => {
     const live = rooms.get(roomId);
     if (!live || live.gameState !== 'paused_for_verification') {
       routineServerLog('⏹️ Skipping bingo resume — no longer paused for verification');
+      io.to(roomId).emit('bingo-verification-cleared', { reason: 'state_changed' });
       return;
     }
+    // Invalidate any in-flight pause so it cannot re-pause after we resume.
+    live._bingoPauseGen = (live._bingoPauseGen || 0) + 1;
     live.gameState = 'playing';
+
+    const pausedElapsedMs =
+      live.snippetPausedElapsedMs != null && Number.isFinite(live.snippetPausedElapsedMs)
+        ? Math.max(0, live.snippetPausedElapsedMs)
+        : null;
+    const deviceId = live.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
+
     try {
-      const deviceId = live.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
       if (deviceId && roomStillPlaying(roomId)) {
+        const seekPositionMs =
+          pausedElapsedMs != null
+            ? Math.max(0, Number(live.currentSongStartMs) || 0) + pausedElapsedMs
+            : null;
         await spotifyFor(roomId).resumePlayback(deviceId);
-        routineServerLog(`▶️ Spotify resumed — bingo verification queue empty`);
+        if (seekPositionMs != null) {
+          try {
+            await spotifyFor(roomId).seekToPosition(seekPositionMs, deviceId);
+          } catch (seekErr) {
+            routineServerLog(`⚠️ Seek after bingo resume failed: ${seekErr?.message || seekErr}`);
+          }
+        }
+        routineServerLog(`▶️ Spotify resumed — ${reason}`);
       } else if (!deviceId) {
         routineServerLog(`⚠️ No device ID available for resuming after bingo verification`);
       }
-      if (!roomStillPlaying(roomId)) return;
-      startSimpleProgression(roomId, live.selectedDeviceId, live.snippetLength || 30);
-      io.to(roomId).emit('game-resumed', { reason: 'Bingo verification queue cleared' });
     } catch (error) {
-      routineServerLog(`⚠️ Failed to resume Spotify after bingo verification: ${error.message}`);
-      if (!roomStillPlaying(roomId)) return;
-      startSimpleProgression(roomId, live.selectedDeviceId, live.snippetLength || 30);
-      io.to(roomId).emit('game-resumed', { reason: 'Bingo verification queue cleared' });
+      routineServerLog(`⚠️ Failed to resume Spotify after bingo verification: ${error?.message || error}`);
     }
+
+    if (!roomStillPlaying(roomId)) {
+      io.to(roomId).emit('bingo-verification-cleared', { reason: 'room_not_playing' });
+      return;
+    }
+
+    if (pausedElapsedMs != null) {
+      live.songStartAtMs = Date.now() - pausedElapsedMs;
+      live.snippetPausedElapsedMs = null;
+      live.snippetPausedAtMs = null;
+      const remainingMs = remainingSnippetMsForRoom(live);
+      if (remainingMs > 1500) {
+        scheduleSimpleProgressionRemaining(roomId, live.selectedDeviceId, remainingMs);
+      } else {
+        // Clip already spent during verification — advance rather than restart a full snippet.
+        clearRoomTimer(roomId);
+        void playNextSongSimple(roomId, live.selectedDeviceId);
+      }
+    } else {
+      startSimpleProgression(roomId, live.selectedDeviceId, live.snippetLength || 30);
+    }
+
+    io.to(roomId).emit('bingo-verification-cleared', { reason });
+    io.to(roomId).emit('game-resumed', { reason });
   })();
 }
 
@@ -6142,25 +6228,7 @@ io.on('connection', (socket) => {
     if (validationResult.valid) {
       // AUTO-PAUSE the game for host verification
       if (room.gameState === 'playing') {
-        room.gameState = 'paused_for_verification';
-        clearRoomTimer(roomId);
-        
-        // Pause Spotify playback during verification
-        (async () => {
-          try {
-            const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
-            if (deviceId) {
-              await spotifyFor(roomId).pausePlayback(deviceId);
-              routineServerLog(`⏸️ Spotify paused for bingo verification by ${player.name}`);
-            } else {
-              routineServerLog(`⚠️ No device ID available for pausing during bingo verification`);
-            }
-          } catch (error) {
-            routineServerLog(`⚠️ Failed to pause Spotify during bingo verification: ${error.message}`);
-          }
-        })();
-        
-        routineServerLog(`🛑 Game auto-paused for bingo verification by ${player.name}`);
+        beginBingoVerificationPause(roomId, room, player.name);
       }
       
       // Current song already added to calledSongIds before validation above
@@ -6320,23 +6388,7 @@ io.on('connection', (socket) => {
       
       // AUTO-PAUSE the game for host verification even if invalid
       if (room.gameState === 'playing') {
-        room.gameState = 'paused_for_verification';
-        clearRoomTimer(roomId);
-        
-        // Pause Spotify playback during verification
-        (async () => {
-          try {
-            const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
-            if (deviceId) {
-              await spotifyFor(roomId).pausePlayback(deviceId);
-              routineServerLog(`⏸️ Spotify paused for invalid bingo verification by ${player.name}`);
-            }
-          } catch (error) {
-            routineServerLog(`⚠️ Failed to pause Spotify during bingo verification: ${error.message}`);
-          }
-        })();
-        
-        routineServerLog(`🛑 Game auto-paused for invalid bingo verification by ${player.name}`);
+        beginBingoVerificationPause(roomId, room, `invalid:${player.name}`);
       }
       
       // Build played songs list
@@ -6693,6 +6745,9 @@ io.on('connection', (socket) => {
         }
       }
       
+      // Clear verifying overlay before/with round-complete so the projector never sticks.
+      io.to(roomId).emit('bingo-verification-cleared', { reason: 'bingo_approved' });
+
       // Notify all clients that round is complete (not game ended)
       io.to(roomId).emit('round-complete', { 
         roomId, 
@@ -6762,32 +6817,26 @@ io.on('connection', (socket) => {
     // Only resume if game is paused for verification
     if (room.gameState === 'paused_for_verification') {
       routineServerLog(`▶️ Host manually resuming game from paused_for_verification state`);
+      // Clear any stale queue entries so Resume is never blocked after a reject race.
+      room.bingoVerificationQueue = [];
+      resumeGameAfterVerificationQueueEmpty(roomId, room, 'Host manually resumed game');
+    } else if (room.gameState === 'playing') {
+      // Host hit Resume while already playing (e.g. reject auto-resume partially applied).
+      io.to(roomId).emit('bingo-verification-cleared', { reason: 'already_playing' });
+      io.to(roomId).emit('game-resumed', { reason: 'Host manually resumed game' });
       (async () => {
-        const live = rooms.get(roomId);
-        if (!live || live.gameState !== 'paused_for_verification') {
-          routineServerLog('⏹️ Manual resume skipped — no longer paused for verification');
-          return;
-        }
-        live.gameState = 'playing';
         try {
-          const deviceId = live.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
-          if (deviceId && roomStillPlaying(roomId)) {
-            await spotifyFor(roomId).resumePlayback(deviceId);
-            routineServerLog(`▶️ Spotify resumed after manual resume`);
-          }
-          if (!roomStillPlaying(roomId)) return;
-          startSimpleProgression(roomId, live.selectedDeviceId, live.snippetLength || 30);
-          io.to(roomId).emit('game-resumed', { reason: 'Host manually resumed game' });
-          routineServerLog(`✅ Game manually resumed by host`);
-        } catch (error) {
-          routineServerLog(`⚠️ Failed to resume Spotify: ${error.message}`);
-          if (!roomStillPlaying(roomId)) return;
-          startSimpleProgression(roomId, live.selectedDeviceId, live.snippetLength || 30);
-          io.to(roomId).emit('game-resumed', { reason: 'Host manually resumed game' });
+          const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
+          if (deviceId) await spotifyFor(roomId).resumePlayback(deviceId);
+        } catch (e) {
+          routineServerLog(`⚠️ Manual resume nudge (already playing) failed: ${e?.message || e}`);
         }
       })();
     } else {
       routineServerLog(`⚠️ Cannot manually resume: game state is ${room.gameState}, expected paused_for_verification`);
+      socket.emit('error', {
+        message: `Cannot resume — game is ${room.gameState || 'idle'}, not paused for verification.`,
+      });
     }
   });
 
@@ -6802,24 +6851,10 @@ io.on('connection', (socket) => {
     if (!isHost) return;
     
     if (action === 'continue') {
-      // Resume the game
       if (room.gameState === 'paused_for_verification') {
-        (async () => {
-          const live = rooms.get(roomId);
-          if (!live || live.gameState !== 'paused_for_verification') return;
-          live.gameState = 'playing';
-          if (!roomStillPlaying(roomId)) return;
-          try {
-            const deviceId = live.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
-            if (deviceId) await spotifyFor(roomId).resumePlayback(deviceId);
-          } catch (e) {
-            routineServerLog(`⚠️ Spotify resume on continue-after-bingo failed: ${e?.message || e}`);
-          }
-          if (!roomStillPlaying(roomId)) return;
-          startSimpleProgression(roomId, live.selectedDeviceId, live.snippetLength || 30);
-          routineServerLog(`▶️ Host chose to continue game after bingo verification`);
-          io.to(roomId).emit('game-resumed', { reason: 'Host continued after bingo' });
-        })();
+        room.bingoVerificationQueue = [];
+        routineServerLog(`▶️ Host chose to continue game after bingo verification`);
+        resumeGameAfterVerificationQueueEmpty(roomId, room, 'Host continued after bingo');
       }
     } else if (action === 'end') {
       stopLiveRoundTimers(roomId, room);
@@ -8086,6 +8121,19 @@ io.on('connection', (socket) => {
           routineServerLog(
             `▶️ Auto resume nudge ignored — playback is paused (${room.gameState}) in room: ${roomId}`,
           );
+          return;
+        }
+        // Transport Resume during bingo pause: clear verification and use the shared resume path
+        // (freeze/seek/remaining timer) instead of a bare Spotify resume that often errors mid-race.
+        if (auto !== true && room.gameState === 'paused_for_verification') {
+          if (Array.isArray(room.bingoVerificationQueue) && room.bingoVerificationQueue.length > 0) {
+            socket.emit('error', {
+              message: `Finish bingo verification first (${room.bingoVerificationQueue.length} pending).`,
+            });
+            return;
+          }
+          routineServerLog('▶️ Transport resume during paused_for_verification — clearing bingo pause');
+          resumeGameAfterVerificationQueueEmpty(roomId, room, 'Host resumed after bingo pause');
           return;
         }
         routineServerLog('▶️ Resuming song in room:', roomId);

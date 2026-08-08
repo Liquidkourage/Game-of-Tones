@@ -845,22 +845,33 @@
   flex: 0 1 auto;
 }
 
-/* Call log soaks up the column height; Up next stays pinned at the bottom. */
+/* Call log soaks leftover height and scrolls; Up next stays pinned (never shrinks away). */
 .host-glass-theme .host-r4-track-feed__section--log {
   flex: 1 1 auto;
+  min-height: 0;
 }
 
 .host-glass-theme .host-r4-track-feed__section--log .host-r4-track-feed__list {
   flex: 1 1 auto;
   max-height: none;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .host-glass-theme .host-r4-track-feed__section--log .host-call-log__title {
   margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.host-glass-theme .host-r4-track-feed__section--queue {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  min-height: calc(var(--host-track-row-height) * 4 + 48px);
 }
 
 .host-glass-theme .host-r4-track-feed__section--queue .host-r4-card__head {
   margin-bottom: 6px;
+  flex-shrink: 0;
 }
 
 .host-glass-theme .host-r4-track-feed__list {

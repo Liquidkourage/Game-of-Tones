@@ -2289,11 +2289,8 @@ const PublicDisplay: React.FC = () => {
             }
           }
 
-          if (payload.bingoVerificationPending) {
-            setIsVerificationPending(true);
-          } else if (payload.gameState !== 'paused_for_verification') {
-            setIsVerificationPending(false);
-          }
+          // Server is source of truth — never keep the verifying overlay after the queue clears.
+          setIsVerificationPending(!!payload.bingoVerificationPending);
 
           const lw = payload.lastDisplayWinner;
           if (
@@ -2944,6 +2941,10 @@ const PublicDisplay: React.FC = () => {
       console.log(`${data.playerName} called BINGO - awaiting verification`);
     });
 
+    newSocket.on('bingo-verification-cleared', () => {
+      setIsVerificationPending(false);
+    });
+
     // Handle confirmed bingo wins (after host verification)
     newSocket.on('bingo-called', (data: any) => {
       // Only show winner if this is a verified/confirmed bingo
@@ -3000,6 +3001,7 @@ const PublicDisplay: React.FC = () => {
     });
 
     newSocket.on('round-complete', (data: any) => {
+      setIsVerificationPending(false);
       if (Array.isArray(data?.roundWinners)) setRoundWinnersBoard(data.roundWinners);
       if (data?.showNightBoard !== undefined) setShowNightBoard(!!data.showNightBoard);
       else setShowNightBoard(true);
