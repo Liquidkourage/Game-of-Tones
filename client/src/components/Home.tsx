@@ -62,6 +62,7 @@ const Home: React.FC = () => {
     }> | null
   >(null);
   const [hostEventsError, setHostEventsError] = useState<string | null>(null);
+  const [deletingEventRoomId, setDeletingEventRoomId] = useState<string | null>(null);
 
   /** Player / QR links: ?join, ?mode=player, ?player=1 — hide host path unless explicitly opened */
   const joinOnly = useMemo(() => {
@@ -280,6 +281,43 @@ const Home: React.FC = () => {
     q.set('name', displayName);
     if (opts?.tab && opts.tab !== 'game') q.set('tab', opts.tab);
     navigate(`/host/${encodeURIComponent(rid)}?${q.toString()}`);
+  };
+
+  const deleteSavedEvent = async (rid: string, isLive?: boolean) => {
+    const liveNote = isLive
+      ? '\n\nThis room is still live — deleting only removes cloud-saved rounds, not the active game.'
+      : '';
+    const ok = window.confirm(
+      `Delete saved event for room ${rid}?\n\nThis removes cloud-saved rounds for this room. It cannot be undone.${liveNote}`,
+    );
+    if (!ok) return;
+    setDeletingEventRoomId(rid);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/host/rooms/${encodeURIComponent(rid)}/prep`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const raw = await res.text().catch(() => '');
+        let msg = 'Could not delete saved event.';
+        try {
+          const j = raw ? JSON.parse(raw) : {};
+          if (j?.message) msg = String(j.message);
+        } catch {
+          /* ignore */
+        }
+        alert(msg);
+        return;
+      }
+      try {
+        localStorage.removeItem(`event-rounds-${rid}`);
+        localStorage.removeItem(`event-rounds-cloud-ack-${rid}`);
+      } catch {
+        /* ignore */
+      }
+      setHostEvents((prev) => (prev ? prev.filter((e) => e.roomId !== rid) : prev));
+    } finally {
+      setDeletingEventRoomId(null);
+    }
   };
 
   const startHosting = async (opts?: { forceNewRoom?: boolean; tab?: HostGlassNavId }) => {
@@ -741,16 +779,27 @@ const Home: React.FC = () => {
                                 {names ? ` · ${names}` : ''}
                               </div>
                             </div>
-                            <button
-                              type="button"
-                              className="btn btn-secondary"
-                              style={{ flexShrink: 0, padding: '8px 12px' }}
-                              onClick={() =>
-                                goToHostRoom(ev.roomId, hostDisplayName, { tab: 'rounds' })
-                              }
-                            >
-                              Open
-                            </button>
+                            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                style={{ padding: '8px 12px' }}
+                                onClick={() =>
+                                  goToHostRoom(ev.roomId, hostDisplayName, { tab: 'rounds' })
+                                }
+                              >
+                                Open
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                style={{ padding: '8px 12px' }}
+                                disabled={deletingEventRoomId === ev.roomId}
+                                onClick={() => void deleteSavedEvent(ev.roomId, ev.live)}
+                              >
+                                {deletingEventRoomId === ev.roomId ? 'Deleting…' : 'Delete'}
+                              </button>
+                            </div>
                           </li>
                         );
                       })}

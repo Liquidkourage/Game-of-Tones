@@ -14294,6 +14294,22 @@ app.put('/api/host/rooms/:roomId/prep', async (req, res) => {
   }
 });
 
+/** Delete cloud-saved prep for this host + room (removes from Your saved events). */
+app.delete('/api/host/rooms/:roomId/prep', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required for cloud prep.' });
+    const roomId = sanitizeHostPrepRoomId(req.params.roomId);
+    if (!roomId) return res.status(400).json({ error: 'invalid_room_id' });
+    await hostRoomPrepStore.deleteHostRoomPrep(db, uid, roomId);
+    res.json({ ok: true, roomId });
+  } catch (e) {
+    console.error('DELETE /api/host/rooms/:roomId/prep:', e?.message || e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed to delete event prep' });
+  }
+});
+
 /** Load saved host preferences for this account (cross-device defaults). */
 app.get('/api/host/preferences', async (req, res) => {
   try {
