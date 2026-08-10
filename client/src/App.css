@@ -6457,18 +6457,18 @@ button.conn-chip.conn-chip-compact {
   hyphens: none;
 }
 
-/* Narrow / fold cover: title-only cells — artist via long-press tooltip */
+/* Narrow / fold cover: slightly tighter type; artists shown unless hide-artists is on */
 .player-container--v2.player-container--compact-cells {
   --player-v2-title-size: clamp(13px, 5.2cqi, 18px);
   --player-v2-artist-size: clamp(11px, 4.2cqi, 13px);
 }
 
-.player-container--v2.player-container--compact-cells .player-square-artist {
+.player-container--v2.player-container--compact-cells.player-container--hide-artists .player-square-artist {
   display: none;
 }
 
 /* B: same-card duplicate titles keep artist visible so twins aren’t identical. */
-.player-container--v2.player-container--compact-cells .bingo-square--title-collision .player-square-artist {
+.player-container--v2.player-container--compact-cells.player-container--hide-artists .bingo-square--title-collision .player-square-artist {
   display: block;
 }
 

@@ -5506,6 +5506,9 @@ const HostView: React.FC = () => {
     songListOverride?: Song[];
     /** Server free-center flag for this finalize (defaults to host free-center toggle). */
     freeSpace?: boolean;
+    /** When loading a saved round — commit card identity so Start Game keeps dealt cards. */
+    savedRoundId?: string;
+    lockedPlayOrder?: Song[];
   }): Promise<boolean> => {
     let playlists = opts?.playlists ?? mixPlaylistSelection;
     /** Column alignment: when finalizing the prep round's selection, send playlists in the
@@ -5711,6 +5714,12 @@ const HostView: React.FC = () => {
             playlists: playlistsForServer,
             songList: listToSend,
             freeSpace: freeSpaceForPayload,
+            ...(opts?.savedRoundId
+              ? {
+                  savedRoundId: opts.savedRoundId,
+                  lockedPlayOrder: opts.lockedPlayOrder?.map(cloneSongForSnapshot),
+                }
+              : {}),
           });
         });
       } catch (error) {
@@ -9495,10 +9504,15 @@ const HostView: React.FC = () => {
             if (pending) await pending;
             const fs =
               round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : freeSpaceEnabled;
+            const snap = round.savedMixSnapshot!;
             await finalizeMix({
               playlists: mixRows,
-              songListOverride: round.savedMixSnapshot!.songs.map(cloneSongForSnapshot),
+              songListOverride: snap.songs.map(cloneSongForSnapshot),
               freeSpace: fs,
+              savedRoundId: round.id,
+              lockedPlayOrder: snapshotHasLockedPlayOrder(snap)
+                ? snap.playOrder.map(cloneSongForSnapshot)
+                : undefined,
             });
           } finally {
             setSavedRoundRoomSyncBusy(false);
@@ -9927,10 +9941,15 @@ const HostView: React.FC = () => {
           if (pending) await pending;
           const fs =
             round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : freeSpaceEnabled;
+          const snap = round.savedMixSnapshot!;
           await finalizeMix({
             playlists: mixRows,
-            songListOverride: round.savedMixSnapshot!.songs.map(cloneSongForSnapshot),
+            songListOverride: snap.songs.map(cloneSongForSnapshot),
             freeSpace: fs,
+            savedRoundId: round.id,
+            lockedPlayOrder: snapshotHasLockedPlayOrder(snap)
+              ? snap.playOrder.map(cloneSongForSnapshot)
+              : undefined,
           });
         } finally {
           setSavedRoundRoomSyncBusy(false);
@@ -10007,6 +10026,13 @@ const HostView: React.FC = () => {
     return true;
   }, [socket, roomId]);
 
+  /** Restart Round: keep card assignments + mix; only clear marks/progress/playback. */
+  const emitRoundRestartKeepCards = useCallback(() => {
+    if (!socket || !roomId) return false;
+    socket.emit('restart-game', { roomId, stopPlayback: true });
+    return true;
+  }, [socket, roomId]);
+
   const handleRestartRound = useCallback(() => {
     if (
       !window.confirm(
@@ -10015,14 +10041,14 @@ const HostView: React.FC = () => {
     ) {
       return;
     }
-    if (!emitRoundPlaybackReset()) {
+    if (!emitRoundRestartKeepCards()) {
       showToast('Not connected — cannot restart round', 'error');
       return;
     }
     setRoundComplete(null);
     setRoundWinners([]);
-    addLog('Restart round requested', 'info');
-  }, [emitRoundPlaybackReset, addLog, showToast]);
+    addLog('Restart round requested (cards kept)', 'info');
+  }, [emitRoundRestartKeepCards, addLog, showToast]);
 
   const handleEndRound = useCallback(() => {
     if (
@@ -10841,10 +10867,15 @@ const HostView: React.FC = () => {
         if (pending) await pending;
         const fs =
           round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : freeSpaceEnabled;
+        const snap = round.savedMixSnapshot!;
         const ok = await finalizeMix({
           playlists: mixRows,
-          songListOverride: round.savedMixSnapshot!.songs.map(cloneSongForSnapshot),
+          songListOverride: snap.songs.map(cloneSongForSnapshot),
           freeSpace: fs,
+          savedRoundId: round.id,
+          lockedPlayOrder: snapshotHasLockedPlayOrder(snap)
+            ? snap.playOrder.map(cloneSongForSnapshot)
+            : undefined,
         });
         if (!ok) {
           showToast('Could not push cards to the room — try again or use Build song pool.', 'warn');

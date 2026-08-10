@@ -276,6 +276,7 @@ const PlayerView: React.FC = () => {
 
   type PlayerCardTheme = 'dark' | 'light';
   const CARD_THEME_STORAGE_KEY = 'player_card_theme';
+  const SHOW_ARTISTS_STORAGE_KEY = 'player_show_artists';
 
   const [cardTheme, setCardTheme] = useState<PlayerCardTheme>(() => {
     try {
@@ -288,10 +289,31 @@ const PlayerView: React.FC = () => {
     return 'dark';
   });
 
+  /** Narrow phones: show artist under title by default (was title-only; long-press still works). */
+  const [showArtists, setShowArtists] = useState(() => {
+    try {
+      const stored = localStorage.getItem(SHOW_ARTISTS_STORAGE_KEY);
+      if (stored === '0' || stored === 'false') return false;
+      if (stored === '1' || stored === 'true') return true;
+    } catch {
+      /* ignore */
+    }
+    return true;
+  });
+
   const chooseCardTheme = (theme: PlayerCardTheme) => {
     setCardTheme(theme);
     try {
       localStorage.setItem(CARD_THEME_STORAGE_KEY, theme);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const chooseShowArtists = (next: boolean) => {
+    setShowArtists(next);
+    try {
+      localStorage.setItem(SHOW_ARTISTS_STORAGE_KEY, next ? '1' : '0');
     } catch {
       /* ignore */
     }
@@ -1243,9 +1265,11 @@ const PlayerView: React.FC = () => {
       // CRITICAL: Reset playedSongIds to empty array (server will sync via room-state)
       setPlayedSongIds([]);
       
-      // For new round: clear card entirely (will be regenerated with new playlists)
-      // For restart: reset marks but keep card structure
-      if (data.message && data.message.includes('New round starting')) {
+      // clearCard / "New round" → wipe; Restart Round keeps assignments and only clears marks
+      const wipeCards =
+        data?.clearCard === true ||
+        (typeof data?.message === 'string' && data.message.includes('New round starting'));
+      if (wipeCards) {
         setBingoCards([]);
         setActiveCardIndex(0);
         try {
@@ -1418,7 +1442,7 @@ const PlayerView: React.FC = () => {
     let pendingRefit = false;
 
     /** Title leads. Artist uses its own scale (not × titleScale); hierarchy enforced after fit. */
-    const titleOnlyCells = compactCardCells;
+    const titleOnlyCells = compactCardCells && !showArtists;
     const TITLE_SCALE_MAX = titleOnlyCells ? 1.08 : 1.16;
     const TITLE_SCALE_PREFERRED_MIN = titleOnlyCells ? 0.7 : 0.88;
     const TITLE_SCALE_ABSOLUTE_MIN = titleOnlyCells ? 0.5 : 0.64;
@@ -1678,7 +1702,7 @@ const PlayerView: React.FC = () => {
       resizeObserver.disconnect();
       gridEl.closest<HTMLElement>('.player-container')?.removeAttribute('data-fit-measuring');
     };
-  }, [cardTextFitSignature, visualViewportHeightPx, compactCardCells, cardGridEl, titleCollisionPositions]);
+  }, [cardTextFitSignature, visualViewportHeightPx, compactCardCells, showArtists, cardGridEl, titleCollisionPositions]);
 
   // Keep screen awake during game using Wake Lock API
   useEffect(() => {
@@ -2415,7 +2439,7 @@ const PlayerView: React.FC = () => {
   return (
     <>
     <div
-      className={`player-container player-container--v2 ${bingoCard ? 'has-card' : ''}${venueBranding ? ' player-container--venue' : ''}${compactCardCells ? ' player-container--compact-cells' : ''}${cardTheme === 'light' ? ' player-container--light' : ''}`}
+      className={`player-container player-container--v2 ${bingoCard ? 'has-card' : ''}${venueBranding ? ' player-container--venue' : ''}${compactCardCells ? ' player-container--compact-cells' : ''}${compactCardCells && !showArtists ? ' player-container--hide-artists' : ''}${cardTheme === 'light' ? ' player-container--light' : ''}`}
       style={{
         '--player-card-font-scale': cardFontPercent / 100,
         '--player-visual-bottom-gap': `${visualBottomGapPx}px`,
@@ -3092,6 +3116,30 @@ const PlayerView: React.FC = () => {
                       onClick={() => chooseCardTheme('light')}
                     >
                       Light
+                    </button>
+                  </div>
+                </div>
+
+                <div className="player-v2-sheet-row">
+                  <div className="player-v2-sheet-copy">
+                    <div className="player-v2-sheet-label">Show artists</div>
+                  </div>
+                  <div className="player-v2-theme-toggle" role="group" aria-label="Show artists on card">
+                    <button
+                      type="button"
+                      className={`player-v2-theme-btn${showArtists ? ' player-v2-theme-btn--active' : ''}`}
+                      aria-pressed={showArtists}
+                      onClick={() => chooseShowArtists(true)}
+                    >
+                      On
+                    </button>
+                    <button
+                      type="button"
+                      className={`player-v2-theme-btn${!showArtists ? ' player-v2-theme-btn--active' : ''}`}
+                      aria-pressed={!showArtists}
+                      onClick={() => chooseShowArtists(false)}
+                    >
+                      Off
                     </button>
                   </div>
                 </div>

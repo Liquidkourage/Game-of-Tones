@@ -578,6 +578,24 @@ async function restoreAndEmitBingoCardForJoiner(room, socket, clientIdOpt) {
     }
   }
 
+  if (room.activeSavedRoundCardKey) {
+    const cached = savedRoundCardsForPlayer(
+      room,
+      room.activeSavedRoundCardKey,
+      socket.id,
+      player,
+    );
+    if (
+      cached.length &&
+      cached.every((c) => bingoCardMatchesCurrentRoundPool(room, c))
+    ) {
+      storePlayerBingoCards(room, socket.id, player, cached);
+      emitBingoCardsToSocket(socket.id, cached, { isNewCard: false, room });
+      void persistPlayerDataCard(room, player, cached);
+      return true;
+    }
+  }
+
   if (clientId && db) {
     const dbCards = await tryRestorePlayerCardFromDb(room, clientId);
     if (dbCards) {
@@ -2959,14 +2977,55 @@ async function ensureActivePlayersHaveCards(roomId, room) {
     (Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5);
   if (!hasPool) return 0;
 
+  rebindBingoCardsToActivePlayers(room);
+
   let dealt = 0;
   for (const [playerId, player] of room.players.entries()) {
     if (!player || player.isHost || player.name === 'Display') continue;
-    const have = resolveActivePlayerCards(room, player, playerId);
+    let have = resolveActivePlayerCards(room, player, playerId);
     if (have.length >= maxPlayerBingoCardsForRoom(room)) {
       clearCardRecoveryCooldown(room, player, playerId);
       continue;
     }
+
+    // Prefer restore (saved-round cache / clientCards / DB) over dealing a new card mid-round.
+    if (room.activeSavedRoundCardKey) {
+      const prior = savedRoundCardsForPlayer(
+        room,
+        room.activeSavedRoundCardKey,
+        playerId,
+        player,
+      );
+      if (
+        prior.length &&
+        prior.every((c) => bingoCardMatchesCurrentRoundPool(room, c))
+      ) {
+        storePlayerBingoCards(room, playerId, player, prior);
+        emitBingoCardsToSocket(playerId, prior, { isNewCard: false, room });
+        clearCardRecoveryCooldown(room, player, playerId);
+        continue;
+      }
+    }
+
+    const sock = typeof io !== 'undefined' ? io.sockets?.sockets?.get(playerId) : null;
+    if (sock) {
+      try {
+        const restored = await restoreAndEmitBingoCardForJoiner(room, sock, player.clientId);
+        if (restored) {
+          clearCardRecoveryCooldown(room, player, playerId);
+          continue;
+        }
+      } catch (e) {
+        console.error(`❌ Restore before recovery deal failed for ${player.name}:`, e?.message || e);
+      }
+    }
+
+    have = resolveActivePlayerCards(room, player, playerId);
+    if (have.length >= maxPlayerBingoCardsForRoom(room)) {
+      clearCardRecoveryCooldown(room, player, playerId);
+      continue;
+    }
+
     if (shouldSkipCardRecovery(room, player, playerId)) continue;
     try {
       routineServerLog(`🔄 Dealing missing card for ${player.name} (active player recovery)`);
@@ -4553,11 +4612,34 @@ function hostFinalizeNeedsPlaylistRefinal(room, playlists, freeSpace) {
 
 /** True when start-game should build a new deck (not when prep finalize already dealt cards). */
 function shouldRegenerateBingoCardsOnStartGame(room, playlists, freeSpace, opts = {}) {
-  const { useSavedRoundPlayback = false, deckSourceIds = null } = opts;
-  if (useSavedRoundPlayback) return true;
+  const { useSavedRoundPlayback = false, deckSourceIds = null, savedRoundCardKey = null } = opts;
   if (!room?.bingoCards || room.bingoCards.size === 0) return true;
   if (!room.mixFinalized) return true;
   if (hostFinalizeNeedsPlaylistRefinal(room, playlists, freeSpace)) return true;
+
+  // Saved-round Start: keep prep-dealt cards when they still match this round's song set.
+  // (Previously always regenerated, which dealt new grids after Load for prep.)
+  if (useSavedRoundPlayback) {
+    if (
+      savedRoundCardKey &&
+      room.activeSavedRoundCardKey &&
+      room.activeSavedRoundCardKey !== savedRoundCardKey
+    ) {
+      return true;
+    }
+    for (const [playerId, raw] of room.bingoCards.entries()) {
+      const player = room.players?.get(playerId);
+      if (!player || player.isHost || player.name === 'Display' || isDisplayConnectionPlayer(player)) {
+        continue;
+      }
+      const list = playerBingoCards.asBingoCardList(raw);
+      if (!list.length || !list.every((c) => bingoCardMatchesCurrentRoundPool(room, c))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   if (Array.isArray(deckSourceIds) && deckSourceIds.length > 0) {
     const newKey = deckSourceIds.filter(Boolean).join('|');
     const oldOrder = Array.isArray(room.finalizedSongOrder) ? room.finalizedSongOrder : [];
@@ -5498,7 +5580,7 @@ io.on('connection', (socket) => {
 
   // Start game
   socket.on('finalize-mix', async (data) => {
-    const { roomId, playlists, songList, freeSpace } = data;
+    const { roomId, playlists, songList, freeSpace, savedRoundId, lockedPlayOrder } = data || {};
     routineServerLog('🎵 Finalizing mix for room:', roomId);
     
     const room = rooms.get(roomId);
@@ -5506,6 +5588,23 @@ io.on('connection', (socket) => {
       routineServerLog('❌ Room not found for mix finalization');
       return;
     }
+
+    /** Commit round card identity BEFORE dealing so storePlayerBingoCards caches cards. */
+    const commitSavedRoundCardKey = (songsForKey) => {
+      const rid = savedRoundId != null ? String(savedRoundId).trim() : '';
+      if (!rid) {
+        room.activeSavedRoundCardKey = null;
+        return null;
+      }
+      const order =
+        Array.isArray(lockedPlayOrder) && lockedPlayOrder.length > 0 ? lockedPlayOrder : [];
+      const key = savedRoundCardIdentity(rid, songsForKey, order, !!freeSpace);
+      room.activeSavedRoundCardKey = key;
+      if (key) {
+        routineServerLog(`🃏 Committed saved-round card key at finalize (${rid})`);
+      }
+      return key;
+    };
 
     // Enhanced host validation with detailed logging
     const player = room.players.get(socket.id);
@@ -5577,6 +5676,7 @@ io.on('connection', (socket) => {
           room.finalizedSongs = rebuiltCapped;
           routineServerLog(`📝 Refinalize rebuild (${rebuiltCapped.length} tracks) — same playlists, build pool (shuffle at Start Game)`);
           if (!(await requireEventCreditGate(room, roomId, socket, 'finalize-mix-failed'))) return;
+          commitSavedRoundCardKey(rebuiltCapped);
           const bingoOk = await generateBingoCards(roomId, playlists, rebuiltCapped);
           if (!bingoOk) {
             socket.emit('finalize-mix-failed', {
@@ -5681,6 +5781,7 @@ io.on('connection', (socket) => {
 
       if (!(await requireEventCreditGate(room, roomId, socket, 'finalize-mix-failed'))) return;
 
+      commitSavedRoundCardKey(poolForCards);
       const bingoOk = await generateBingoCards(roomId, playlists, poolForCards);
       if (
         Array.isArray(playlists) &&
@@ -7157,9 +7258,9 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('emergency-stopped', { message: 'Emergency stop activated by host' });
   });
 
-  // Host restarts the game completely
-  socket.on('restart-game', (data) => {
-    const { roomId } = data || {};
+  // Host restarts the round: stop playback + clear marks/progress, keep card assignments + mix.
+  socket.on('restart-game', async (data) => {
+    const { roomId, stopPlayback = true } = data || {};
     const room = rooms.get(roomId);
     if (!room) return;
     
@@ -7167,25 +7268,31 @@ io.on('connection', (socket) => {
     const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
     if (!isHost) return;
     
-    routineServerLog(`🔄 Host restarting game for room ${roomId}`);
+    routineServerLog(`🔄 Host restarting round (keep cards) for room ${roomId}`);
     
     // Stop any current playback
     clearRoomTimer(roomId);
+    stopLiveRoundTimers(roomId, room);
+    if (stopPlayback) {
+      try {
+        await pauseSpotifyForRoom(roomId, room);
+      } catch (e) {
+        routineServerLog('restart-game: Spotify pause failed (continuing)');
+      }
+    }
     
-    // Reset game state
+    // Reset live progress; keep mixFinalized, pool, and player cards
     room.gameState = 'waiting';
     room.currentSong = null;
     room.currentSongIndex = 0;
     room.currentSongStartMs = 0;
+    room.songStartAtMs = null;
     room.winners = [];
     room.playedSongs = [];
     room.calledSongIds = [];
     room.bingoVerificationQueue = [];
-    room.roundWinners = []; // Reset round winners
+    room.roundWinners = [];
     room.liveNightBoardRoundNumber = null;
-    room.currentRoundName = '';
-    room.currentRoundPrize = '';
-    room.currentRoundPlaylistNames = [];
     room.showNightBoard = false;
     clearPublicDisplaySessionState(room);
     
@@ -7194,9 +7301,10 @@ io.on('connection', (socket) => {
     clearPlayerSessionBingoWins(room);
     playerBingoCards.forEachBingoCardInRoomMaps(room, resetBingoCardMarks);
     
-    // Notify all clients of the restart
+    // Notify all clients of the restart (do NOT emit game-reset — that wipes cards)
     io.to(roomId).emit('game-restarted', {
       message: 'Game has been restarted by the host',
+      clearCard: false,
       roomState: {
         gameState: room.gameState,
         currentSong: null,
@@ -7204,12 +7312,12 @@ io.on('connection', (socket) => {
         playedSongs: [],
         roundWinners: [],
         showNightBoard: false,
-        currentRoundName: null,
-        currentRoundPrize: null,
+        currentRoundName: room.currentRoundName || null,
+        currentRoundPrize: room.currentRoundPrize || null,
       }
     });
     
-    routineServerLog(`✅ Game restarted successfully for room ${roomId}`);
+    routineServerLog(`✅ Round restarted (cards kept) for room ${roomId}`);
   });
 
   // NEW: Host starts next round after a bingo win (FULL RESET to setup)
@@ -7822,9 +7930,9 @@ io.on('connection', (socket) => {
           room,
           playlists,
           freeSpace,
-          { useSavedRoundPlayback, deckSourceIds },
+          { useSavedRoundPlayback, deckSourceIds, savedRoundCardKey },
         );
-        if (forceRegenerateCards || useSavedRoundPlayback) {
+        if (forceRegenerateCards) {
           io.to(roomId).emit('round-pool-cleared', { roomId });
         }
         if (forceRegenerateCards) {
@@ -7924,12 +8032,6 @@ io.on('connection', (socket) => {
             }
           }
 
-          // CRITICAL: Auto-set pattern to 'full_card' for 1x75 mode if pattern wasn't explicitly set
-          if (room.oneBySeventyFivePool && room.oneBySeventyFivePool.length === 75 && !incomingPattern) {
-            routineServerLog('🎯 1x75 mode detected: Auto-setting pattern to full_card');
-            room.pattern = 'full_card';
-            room.patternComposite = undefined;
-          }
         } else {
           routineServerLog(
             '🛑 Skipping full card regeneration (mix finalized, cards already exist — same playlists/free-center as prep)',
@@ -7985,6 +8087,13 @@ io.on('connection', (socket) => {
           room.fiveByFifteenColumns = null;
           room.fiveByFifteenPlaylistNames = null;
           room.fiveByFifteenMeta = null;
+        }
+
+        // CRITICAL: Auto-set pattern to 'full_card' for 1x75 mode if pattern wasn't explicitly set
+        if (room.oneBySeventyFivePool && room.oneBySeventyFivePool.length === 75 && !incomingPattern) {
+          routineServerLog('🎯 1x75 mode detected: Auto-setting pattern to full_card');
+          room.pattern = 'full_card';
+          room.patternComposite = undefined;
         }
 
         routineServerLog(

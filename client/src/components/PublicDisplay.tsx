@@ -1484,6 +1484,12 @@ const PublicDisplay: React.FC = () => {
 
   const isFullTitleRevealMode =
     titleRevealMode === 'track_start' || titleRevealMode === 'track_end';
+  /**
+   * Full Card + letter-reveal: keep the 5-row height lock / measured fitter.
+   * Only uncap auto-height stacks when titles are plain (track_start / track_end).
+   */
+  const uncapFullCardCallLayout =
+    (pattern === 'full_card' || pattern === 'blackout') && titleRevealMode !== 'letter';
 
   /** Corner call # badge — text must clear this (not overlay under it). */
   const CALL_BADGE_TEXT_GAP_PX = 4;
@@ -3851,16 +3857,21 @@ const PublicDisplay: React.FC = () => {
     fullCard: boolean,
     layout: '5x15' | 'carousel' = '5x15',
   ): CallCardTypography => {
-    if (!fullCard && isFullTitleRevealMode && unifiedFullTitleCallTypography) {
-      return unifiedFullTitleCallTypography;
-    }
     const ui = getCallSongRevealUi(songId);
     const masked = ui.kind === 'masked';
     const plainFullTitle = ui.kind === 'plain';
+    /** Letter-masked titles never use the uncapped Full Card typography shortcut. */
+    const layoutFullCard = fullCard && uncapFullCardCallLayout && !masked;
+    if (!layoutFullCard && isFullTitleRevealMode && unifiedFullTitleCallTypography) {
+      return unifiedFullTitleCallTypography;
+    }
     const titleForFit = formatCallCardTitle(meta.name);
-    let typo = computeCallCardTypography(titleForFit, meta.artist, { fullCard, masked });
+    let typo = computeCallCardTypography(titleForFit, meta.artist, {
+      fullCard: layoutFullCard,
+      masked,
+    });
 
-    if (!fullCard) {
+    if (!layoutFullCard) {
       // Measured fit is ground truth: grow into empty card space or shrink to fit.
       // Do not min() with char heuristics — those were capping short titles too small.
       const fitBox = callCardFitBox(layout, plainFullTitle);
@@ -3886,7 +3897,7 @@ const PublicDisplay: React.FC = () => {
     }
 
     const rowPx = layout === '5x15' ? fiveBy15CardRowPx : carouselCardRowPx;
-    if (rowPx > 0 && !fullCard) {
+    if (rowPx > 0 && !layoutFullCard) {
       typo = {
         ...typo,
         plainFullTitle,
@@ -3904,6 +3915,7 @@ const PublicDisplay: React.FC = () => {
     kind: 'title' | 'artist',
     fullCard: boolean,
   ): React.CSSProperties => {
+    const layoutFullCard = fullCard && uncapFullCardCallLayout;
     const basePx =
       kind === 'title' ? PUBLIC_DISPLAY_CALL_TITLE_BASE_PX : PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX;
     const lhScale = typo.lineHeightScale ?? 1;
@@ -3913,7 +3925,7 @@ const PublicDisplay: React.FC = () => {
         : PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT) * lhScale;
     let fontSize = Math.round(basePx * displayFontScale * typo.textScale);
     const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
-    if (rowPx > 0 && !fullCard) {
+    if (rowPx > 0 && !layoutFullCard) {
       const titleFrac = typo.plainFullTitle ? 0.4 : 0.46;
       const artistFrac = typo.plainFullTitle ? 0.22 : 0.26;
       // Caps scale with the host zoom so the failsafe slider stays a uniform
@@ -3966,6 +3978,7 @@ const PublicDisplay: React.FC = () => {
   ): React.CSSProperties => {
     // Full claimable area — no standing gutters. Only the two corner notches
     // (floated) are reserved; every other pixel is available to title/artist.
+    const layoutFullCard = fullCard && uncapFullCardCallLayout;
     const base: React.CSSProperties = {
       minWidth: 0,
       maxWidth: '100%',
@@ -3977,7 +3990,7 @@ const PublicDisplay: React.FC = () => {
       zIndex: 1,
       boxSizing: 'border-box' as const,
     };
-    if (fullCard || !typo.clampContentHeight) {
+    if (layoutFullCard || !typo.clampContentHeight) {
       return base;
     }
     const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
@@ -4131,6 +4144,7 @@ const PublicDisplay: React.FC = () => {
       motionKeySuffix = '',
     } = opts;
     const typo = typographyForCallCard(songId, meta, isFullCardPattern, layout);
+    const uncapThisCard = isFullCardPattern && uncapFullCardCallLayout;
     const { title, artist } = renderCallSongLines(songId, meta, (t, s, h) =>
       renderMaskedText(t, s, h, typo.letterBoxScale),
     );
@@ -4153,15 +4167,15 @@ const PublicDisplay: React.FC = () => {
           maxWidth: '100%',
           minWidth: 0,
           boxSizing: 'border-box',
-          height: isFullCardPattern ? 'auto' : rowPx > 0 ? `${rowPx}px` : undefined,
-          minHeight: isFullCardPattern
+          height: uncapThisCard ? 'auto' : rowPx > 0 ? `${rowPx}px` : undefined,
+          minHeight: uncapThisCard
             ? rowPx > 0
               ? rowPx
               : undefined
             : rowPx > 0
               ? rowPx
               : 44,
-          overflow: isFullCardPattern ? 'visible' : 'hidden',
+          overflow: uncapThisCard ? 'visible' : 'hidden',
         }}
       >
         {renderCallNumberOverlay(callNum, isFullCardPattern)}
@@ -4787,6 +4801,7 @@ const PublicDisplay: React.FC = () => {
 
     /** Full-card (blackout) mode: show full song titles without line-clamp truncation. */
     const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
+    const uncapColumn = isFullCardPattern && uncapFullCardCallLayout;
 
     return (
       <div className="call-list-content call-list-content--5x15">
@@ -4798,7 +4813,7 @@ const PublicDisplay: React.FC = () => {
               className="call-list-column"
               style={{
                 position: 'relative',
-                overflow: isFullCardPattern ? 'auto' : 'hidden',
+                overflow: uncapColumn ? 'auto' : 'hidden',
                 height: '100%',
                 minHeight: 0,
                 WebkitOverflowScrolling: 'touch'
@@ -4806,7 +4821,7 @@ const PublicDisplay: React.FC = () => {
               {...(ci === 0 ? { ref: vertViewportRef as any } : {})}
             >
               {(() => {
-                const shouldScroll = !isFullCardPattern && col.length > 5 && fiveBy15CardRowPx > 0;
+                const shouldScroll = !uncapColumn && col.length > 5 && fiveBy15CardRowPx > 0;
                 const useAbsoluteTrack = shouldScroll;
                 const displayItems = shouldScroll ? [...col, ...col] : col;
                 const currentSongId = gameState.currentSong?.id;
@@ -4829,7 +4844,7 @@ const PublicDisplay: React.FC = () => {
                   <div
                     className="call-vert-track"
                     style={{
-                      position: isFullCardPattern || !useAbsoluteTrack ? 'relative' : 'absolute',
+                      position: uncapColumn || !useAbsoluteTrack ? 'relative' : 'absolute',
                       left: 0,
                       right: 0,
                       top: 0,
@@ -4879,8 +4894,9 @@ const PublicDisplay: React.FC = () => {
     Array.from({ length: 5 }, (_, rowIdx) => {
       const id = group[rowIdx];
       if (!id) {
-        // Full-card stacks only real songs (like 5×15); empty 1fr slots would steal space.
-        if (isFullCardPattern) return null;
+        // Uncapped Full Card stacks only real songs; letter-reveal keeps empty 1fr slots
+        // so early columns don't let one masked tile eat the stage.
+        if (isFullCardPattern && uncapFullCardCallLayout) return null;
         return (
           <div
             key={`empty-${gi}-${rowIdx}`}
@@ -4938,11 +4954,15 @@ const PublicDisplay: React.FC = () => {
             {columnSlots.map((group, gi) => (
             <div
               key={`played-fb-${gi}`}
-              className={`call-carousel-col-static${isFullCardPattern ? ' call-carousel-col--full-card' : ''}`}
+              className={`call-carousel-col-static${
+                isFullCardPattern && uncapFullCardCallLayout ? ' call-carousel-col--full-card' : ''
+              }`}
             >
               <div
                 className={`call-carousel-col-inner call-carousel-col-inner--played-order${
-                  isFullCardPattern ? ' call-carousel-col-inner--full-card' : ''
+                  isFullCardPattern && uncapFullCardCallLayout
+                    ? ' call-carousel-col-inner--full-card'
+                    : ''
                 }`}
               >
                 {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
@@ -5018,11 +5038,15 @@ const PublicDisplay: React.FC = () => {
             {staticSlots.map((group, gi) => (
               <div
                 key={`slot-${gi}`}
-                className={`call-carousel-col-static${isFullCardPattern ? ' call-carousel-col--full-card' : ''}`}
+                className={`call-carousel-col-static${
+                  isFullCardPattern && uncapFullCardCallLayout ? ' call-carousel-col--full-card' : ''
+                }`}
               >
                 <div
                   className={`call-carousel-col-inner${
-                    isFullCardPattern ? ' call-carousel-col-inner--full-card' : ''
+                    isFullCardPattern && uncapFullCardCallLayout
+                      ? ' call-carousel-col-inner--full-card'
+                      : ''
                   }`}
                 >
                   {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
@@ -5056,12 +5080,16 @@ const PublicDisplay: React.FC = () => {
             {scrollGroups.map((group, gi) => (
               <div
                 key={`scroll-${gi}`}
-                className={`call-carousel-col${isFullCardPattern ? ' call-carousel-col--full-card' : ''}`}
+                className={`call-carousel-col${
+                  isFullCardPattern && uncapFullCardCallLayout ? ' call-carousel-col--full-card' : ''
+                }`}
                 style={colStyle}
               >
                 <div
                   className={`call-carousel-col-inner${
-                    isFullCardPattern ? ' call-carousel-col-inner--full-card' : ''
+                    isFullCardPattern && uncapFullCardCallLayout
+                      ? ' call-carousel-col-inner--full-card'
+                      : ''
                   }`}
                 >
                   {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
