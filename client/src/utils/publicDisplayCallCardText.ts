@@ -29,8 +29,8 @@ export const CALL_CARD_ARTIST_LETTER_SPACING_EM = 0.02;
 export const CALL_CARD_TITLE_ARTIST_GAP_PX = 4;
 /** Tiny canvas↔DOM slack only — gap between title/artist is a full title line. */
 export const CALL_CARD_STACK_PAD_PX = 4;
-/** Single canvas↔DOM height slack used by fit + paint clamp. */
-export const CALL_CARD_FIT_HEIGHT_SAFETY_PX = 3;
+/** Canvas↔DOM slack — keep artist from being clipped when paint runs slightly taller. */
+export const CALL_CARD_FIT_HEIGHT_SAFETY_PX = 10;
 
 /** Box is the only lid — high enough that short titles can fill a tall card. */
 const FIT_MAX_SCALE = 12;
@@ -47,14 +47,22 @@ export function callCardArtistPxForScale(titlePx: number, textScale: number): nu
   return Math.min(Math.max(fromBase, relMin), relMax);
 }
 
-/** Vertical gap between title and artist ≈ one title line (aesthetic breathing room). */
+/**
+ * Vertical gap between title and artist ≈ one artist line.
+ * (A full title-line gap grew with type and shoved artists off the card.)
+ */
 export function callCardTitleArtistGapPx(
-  titlePx: number,
+  _titlePx: number,
   lineHeightScale: number,
   masked: boolean,
   tileScale = 1,
+  artistPx?: number,
 ): number {
-  return callCardLineHeightEm('title', lineHeightScale, masked, tileScale) * titlePx;
+  const ap =
+    Number.isFinite(artistPx) && (artistPx as number) > 0
+      ? (artistPx as number)
+      : PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX;
+  return callCardLineHeightEm('artist', lineHeightScale, masked, tileScale) * ap;
 }
 
 /**
@@ -117,7 +125,7 @@ export function typographyFromCallCardFit(
   return {
     textScale: fit.textScale,
     titleMaxLines: Math.max(1, fit.titleLines),
-    artistMaxLines: opts.hasArtist ? Math.max(0, fit.artistLines) : 0,
+    artistMaxLines: opts.hasArtist ? Math.max(1, fit.artistLines) : 0,
     letterBoxScale: 1,
     clampContentHeight: true,
     plainFullTitle: opts.plainFullTitle,
@@ -329,12 +337,19 @@ export function callCardStackHeightPx(opts: {
   const ts = opts.tileScale ?? 1;
   const titleLh = callCardLineHeightEm('title', opts.lineHeightScale, opts.masked, ts);
   const artistLh = callCardLineHeightEm('artist', opts.lineHeightScale, opts.masked, ts);
+  const artistLines = opts.hasArtist ? Math.max(1, opts.artistLines) : 0;
   const gap = opts.hasArtist
-    ? callCardTitleArtistGapPx(opts.titlePx, opts.lineHeightScale, opts.masked, ts)
+    ? callCardTitleArtistGapPx(
+        opts.titlePx,
+        opts.lineHeightScale,
+        opts.masked,
+        ts,
+        opts.artistPx,
+      )
     : 0;
   return (
     opts.titleLines * titleLh * opts.titlePx +
-    (opts.hasArtist ? opts.artistLines * artistLh * opts.artistPx + gap : 0) +
+    (opts.hasArtist ? artistLines * artistLh * opts.artistPx + gap : 0) +
     CALL_CARD_STACK_PAD_PX
   );
 }
@@ -600,9 +615,11 @@ export function fitCallCardText(
         )
       : { lines: 0, overflowsWidth: false };
 
+    // Artist is mandatory when present — always budget ≥1 line so it cannot be omitted.
+    const artistLines = hasArtist ? Math.max(1, a.lines) : 0;
     const heightPx = callCardStackHeightPx({
       titleLines: Math.max(1, t.lines),
-      artistLines: a.lines,
+      artistLines,
       titlePx,
       artistPx,
       lineHeightScale,
@@ -616,7 +633,7 @@ export function fitCallCardText(
         !a.overflowsWidth &&
         heightPx <= opts.boxHeightPx - CALL_CARD_FIT_HEIGHT_SAFETY_PX,
       titleLines: Math.max(1, t.lines),
-      artistLines: a.lines,
+      artistLines,
       heightPx,
     };
   };

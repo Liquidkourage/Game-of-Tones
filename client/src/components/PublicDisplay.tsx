@@ -1415,10 +1415,11 @@ const PublicDisplay: React.FC = () => {
   const CALL_CARD_PAD_X_PX = 6;
   const CALL_CARD_PAD_Y_PX = 4;
   const callCardRowPxForBadge = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
+  // ~35% smaller than prior chip so call text gets more of the card.
   const callNumberBadgePx =
     callCardRowPxForBadge > 0
-      ? Math.max(22, Math.min(36, Math.round(callCardRowPxForBadge * 0.28)))
-      : 28;
+      ? Math.max(14, Math.min(24, Math.round(callCardRowPxForBadge * 0.18)))
+      : 18;
 
   /** Re-fit card text once webfonts load (pre-load canvas measurements use the fallback font). */
   const [fontsReadyNonce, setFontsReadyNonce] = useState(0);
@@ -3781,7 +3782,13 @@ const PublicDisplay: React.FC = () => {
       hostZoom,
     });
     const fontSize = kind === 'title' ? titlePx : artistPx;
-    const artistGapPx = callCardTitleArtistGapPx(titlePx, lhScale, masked, tileScale);
+    const artistGapPx = callCardTitleArtistGapPx(
+      titlePx,
+      lhScale,
+      masked,
+      tileScale,
+      artistPx,
+    );
     const common: React.CSSProperties = {
       fontFamily:
         kind === 'title'
@@ -3802,10 +3809,13 @@ const PublicDisplay: React.FC = () => {
       wordBreak: 'normal',
       overflowWrap: 'normal',
       display: 'block',
-      overflow: 'visible',
+      overflow: kind === 'title' ? 'hidden' : 'visible',
       textOverflow: 'clip',
       marginTop: kind === 'artist' ? (fullCard ? Math.max(6, artistGapPx * 0.5) : artistGapPx) : 0,
       paddingBottom: 0,
+      // Artist must remain visible — never shrink it away when the stack is tight.
+      flexShrink: kind === 'artist' ? 0 : 1,
+      minHeight: 0,
     };
     return common;
   };
@@ -3813,16 +3823,18 @@ const PublicDisplay: React.FC = () => {
   const callSongInfoStyles = (
     typo: CallCardTypography,
     fullCard: boolean,
-    _hasArtist: boolean,
+    hasArtist: boolean,
   ): React.CSSProperties => {
-    // Full claimable area — no standing gutters. Only the two corner notches
-    // (floated) are reserved; every other pixel is available to title/artist.
+    // Column stack: title may clip; artist (flex-shrink 0) always keeps its space.
     const layoutFullCard = fullCard && uncapFullCardCallLayout;
     const base: React.CSSProperties = {
       minWidth: 0,
       maxWidth: '100%',
       width: '100%',
-      display: 'block',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'stretch',
       overflow: 'hidden',
       textAlign: 'center',
       position: 'relative',
@@ -3834,13 +3846,15 @@ const PublicDisplay: React.FC = () => {
     }
     const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
     const boxH = rowPx > 0 ? Math.max(24, rowPx - 2 * CALL_CARD_PAD_Y_PX) : 0;
-    // Clamp to the card box (same budget the fitter used), not a tighter content guess.
     const maxH =
       boxH > 0 ? Math.max(24, boxH - CALL_CARD_FIT_HEIGHT_SAFETY_PX) : undefined;
     return maxH != null
       ? {
           ...base,
           maxHeight: `${maxH}px`,
+          height: `${maxH}px`,
+          // Keep a little room for the artist row when present.
+          paddingBottom: hasArtist ? 0 : 0,
         }
       : base;
   };
@@ -3851,7 +3865,7 @@ const PublicDisplay: React.FC = () => {
   const renderCallNumberOverlay = (callNum: number | '', fullCard: boolean): React.ReactNode => {
     if (callNum === '' || callNum <= 0) return null;
     void fullCard;
-    const badgeFontPx = Math.max(11, Math.round(callNumberBadgePx * 0.48));
+    const badgeFontPx = Math.max(9, Math.round(callNumberBadgePx * 0.5));
     return (
       <div
         className="call-number call-number--corner"
