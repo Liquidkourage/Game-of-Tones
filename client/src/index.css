@@ -2017,11 +2017,11 @@ code {
     grid-template-columns: 1fr;
     gap: 10px;
   }
-  
-  .bottom-row {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
+
+  /*
+   * Do NOT stack .bottom-row here — landscape projectors (e.g. 1024×768 XGA)
+   * need pattern + call board side-by-side. Portrait stacking is below / App.css.
+   */
   
   .quick-stats {
     flex-direction: column;
@@ -2036,6 +2036,14 @@ code {
   
   .stat-label {
     margin-left: 0;
+  }
+}
+
+/* Phone / portrait only: stack pattern above calls */
+@media (max-width: 900px) and (orientation: portrait) {
+  .bottom-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
   }
 }
 

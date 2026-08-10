@@ -344,21 +344,82 @@ body {
 /* Public Display overrides (source of truth). The .App prefix increases specificity
    so these rules reliably win over any legacy duplicates in index.css. */
 
-.App .public-display { padding-top: 0; height: 100vh; display: flex; flex-direction: column; }
+/* Lock the app shell to the viewport on /display so XGA projectors don't grow a page scroll. */
+.App:has(.public-display) {
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+.App:has(.public-display) .app-container,
+.App:has(.public-display) .app-main {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.App .public-display {
+  padding-top: 0;
+  height: 100%;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
 .App .display-content {
   height: 100%;
   min-height: 0;
   /* Keep pattern title / prize clear of the viewport edge (and absolute TEMPO lockup). */
   padding: max(22px, calc(env(safe-area-inset-top, 0px) + 10px)) 14px 12px;
   box-sizing: border-box;
+  overflow: hidden;
 }
-.App .bottom-row { height: 100%; min-height: 0; }
+.App .bottom-row {
+  height: 100%;
+  min-height: 0;
+  /* Always side-by-side on the projector (pattern rail + call board). */
+  grid-template-columns: minmax(160px, 0.42fr) minmax(0, 1.58fr);
+  gap: clamp(8px, 1.1vw, 15px);
+}
 .App .call-col, .App .left-col { height: 100%; min-height: 0; }
 .App .left-col {
   display: flex;
   flex-direction: column;
   gap: 12px;
   overflow: hidden;
+}
+
+/* XGA / short landscape projectors (1024×768): tighten chrome so 5 call rows fit. */
+@media (max-height: 820px) and (orientation: landscape) {
+  .App .display-content {
+    padding: max(8px, env(safe-area-inset-top, 0px)) 8px 6px;
+  }
+  .App .left-col {
+    gap: 6px;
+  }
+  .App .left-col .bingo-card-display.public-pattern-panel {
+    padding: 8px 8px 6px;
+  }
+  .App .left-col .info-grid {
+    max-height: 32vh;
+  }
+  .App .call-columns-header {
+    margin-bottom: 4px;
+  }
+  .App .public-display-theme-toggle {
+    transform: scale(0.85);
+    transform-origin: top right;
+  }
+}
+
+/* Narrow portrait only — never collapse landscape XGA. */
+@media (max-width: 900px) and (orientation: portrait) {
+  .App .public-display .bottom-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
 }
 .App .left-col .bingo-card-display.public-pattern-panel {
   flex: 1 1 auto;
@@ -4269,8 +4330,10 @@ button.conn-chip.conn-chip-compact {
 
 /* Public Display Styles */
 .public-display {
-  height: 100vh;
-  width: 100vw;
+  height: 100%;
+  max-height: 100%;
+  width: 100%;
+  max-width: 100vw;
   background: var(--gradient-bg);
   display: flex;
   flex-direction: column;
@@ -4284,9 +4347,10 @@ button.conn-chip.conn-chip-compact {
 .app-main .public-display {
   margin: 0;
   width: 100%;
-  height: 100vh;
+  height: 100%;
+  max-height: 100%;
   max-width: 100vw;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .display-header {
