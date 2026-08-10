@@ -832,7 +832,7 @@ body {
 .App .public-display .call-list-content--5x15 .call-item {
   margin-bottom: 0 !important;
   /* Keep bottom pad aligned with inline CALL_CARD_PAD_Y (fitter uses the same). */
-  padding-bottom: 4px !important;
+  padding-bottom: 6px !important;
   transition: opacity 0.35s ease, filter 0.35s ease;
 }
 

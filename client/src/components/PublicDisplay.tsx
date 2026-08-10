@@ -1409,17 +1409,10 @@ const PublicDisplay: React.FC = () => {
   const uncapFullCardCallLayout =
     (pattern === 'full_card' || pattern === 'blackout') && titleRevealMode !== 'letter';
 
-  /** Corner call # badge — text must clear this (not overlay under it). */
-  const CALL_BADGE_TEXT_GAP_PX = 4;
-  /** Matches renderUnifiedCallCard padding — notches sit in the true card corners. */
+  /** Matches renderUnifiedCallCard padding. */
   const CALL_CARD_PAD_X_PX = 6;
-  const CALL_CARD_PAD_Y_PX = 4;
-  const callCardRowPxForBadge = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
-  // ~35% smaller than prior chip so call text gets more of the card.
-  const callNumberBadgePx =
-    callCardRowPxForBadge > 0
-      ? Math.max(14, Math.min(24, Math.round(callCardRowPxForBadge * 0.18)))
-      : 18;
+  /** Extra bottom air so the artist row never kisses the card border. */
+  const CALL_CARD_PAD_Y_PX = 6;
 
   /** Re-fit card text once webfonts load (pre-load canvas measurements use the fallback font). */
   const [fontsReadyNonce, setFontsReadyNonce] = useState(0);
@@ -1437,8 +1430,7 @@ const PublicDisplay: React.FC = () => {
 
   /**
    * Pixel box available for title+artist text inside one call card (measured layout
-   * minus card padding and corner call-number badge).
-   * Hoisted function so earlier memos can use it. Returns null until measured.
+   * minus card padding). No call-# chip — full width on every line.
    */
   function callCardFitBox(
     layout: '5x15' | 'carousel',
@@ -1452,17 +1444,13 @@ const PublicDisplay: React.FC = () => {
     const rowPx = layout === '5x15' ? fiveBy15CardRowPx : carouselCardRowPx;
     const colWidthPx = layout === '5x15' ? fiveBy15ColWidthPx : carouselColWidthPx;
     if (rowPx <= 0 || colWidthPx <= 0) return null;
-    const notchW = callNumberBadgePx + CALL_BADGE_TEXT_GAP_PX;
     // Col clientWidth is border-box (includes column pad). Match DOM content width.
     const innerColW = Math.max(32, colWidthPx - 2 * CALL_CARD_COLUMN_PAD_X_PX);
     const contentW = Math.max(32, innerColW - 2 * CALL_CARD_PAD_X_PX);
-    // Call # lives top-left only — reserve one notch on the first line (not both sides).
-    const firstLineW = Math.max(24, contentW - notchW);
-    // Title + artist share one card — height matches claimable area inside padding.
     const boxHeightPx = Math.max(20, rowPx - 2 * CALL_CARD_PAD_Y_PX);
     return {
       boxWidthPx: contentW,
-      firstLineWidthPx: firstLineW,
+      firstLineWidthPx: contentW,
       boxHeightPx,
     };
   }
@@ -3820,21 +3808,19 @@ const PublicDisplay: React.FC = () => {
     return common;
   };
 
-  const callSongInfoStyles = (
+  /** Title-only region — may clip. Artist is rendered as a sibling so it cannot be guillotined. */
+  const callSongTitleRegionStyles = (
     typo: CallCardTypography,
     fullCard: boolean,
-    hasArtist: boolean,
   ): React.CSSProperties => {
-    // Column stack: title may clip; artist (flex-shrink 0) always keeps its space.
     const layoutFullCard = fullCard && uncapFullCardCallLayout;
     const base: React.CSSProperties = {
       minWidth: 0,
       maxWidth: '100%',
       width: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'center',
-      alignItems: 'stretch',
+      flex: '1 1 auto',
+      minHeight: 0,
+      display: 'block',
       overflow: 'hidden',
       textAlign: 'center',
       position: 'relative',
@@ -3844,85 +3830,15 @@ const PublicDisplay: React.FC = () => {
     if (layoutFullCard || !typo.clampContentHeight) {
       return base;
     }
-    const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
-    const boxH = rowPx > 0 ? Math.max(24, rowPx - 2 * CALL_CARD_PAD_Y_PX) : 0;
-    const maxH =
-      boxH > 0 ? Math.max(24, boxH - CALL_CARD_FIT_HEIGHT_SAFETY_PX) : undefined;
-    return maxH != null
-      ? {
-          ...base,
-          maxHeight: `${maxH}px`,
-          height: `${maxH}px`,
-          // Keep a little room for the artist row when present.
-          paddingBottom: hasArtist ? 0 : 0,
-        }
-      : base;
+    return base;
   };
 
-  /**
-   * Visible # chip in the upper-left corner (outside the text flow).
-   */
-  const renderCallNumberOverlay = (callNum: number | '', fullCard: boolean): React.ReactNode => {
-    if (callNum === '' || callNum <= 0) return null;
-    void fullCard;
-    const badgeFontPx = Math.max(9, Math.round(callNumberBadgePx * 0.5));
-    return (
-      <div
-        className="call-number call-number--corner"
-        aria-hidden
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          width: callNumberBadgePx,
-          height: callNumberBadgePx,
-          borderRadius: '12px 0 8px 0',
-          background: 'linear-gradient(145deg, rgba(0, 255, 136, 0.98) 0%, rgba(0, 190, 100, 0.88) 100%)',
-          boxShadow: '2px 2px 10px rgba(0, 255, 136, 0.28)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#001b10',
-          fontWeight: 900,
-          fontSize: `${badgeFontPx}px`,
-          letterSpacing: '-0.02em',
-          lineHeight: 1,
-          pointerEvents: 'none',
-          userSelect: 'none',
-          zIndex: 2,
-        }}
-      >
-        {callNum}
-      </div>
-    );
-  };
+  /** Call-# corner chip removed from public display. */
+  const renderCallNumberOverlay = (_callNum: number | '', _fullCard: boolean): React.ReactNode =>
+    null;
 
-  /**
-   * Two corner notches cut out of the card: UL = # chip zone, UR = balance mirror.
-   * Height matches the chip only so lines below reclaim full width. Width is chip
-   * + a hair of gap (~few % of a typical call card). Pulled into card padding so
-   * notches sit on the true corners with the visible chip.
-   */
-  const renderCallCardCornerNotches = (callNum: number | ''): React.ReactNode => {
-    if (callNum === '' || callNum <= 0) return null;
-    const notchW = callNumberBadgePx + CALL_BADGE_TEXT_GAP_PX;
-    const notchH = callNumberBadgePx; // exact chip height — do not extend the pinch band
-    const shared: React.CSSProperties = {
-      width: notchW,
-      height: notchH,
-      marginTop: -CALL_CARD_PAD_Y_PX,
-      pointerEvents: 'none',
-      userSelect: 'none',
-    };
-    // Left notch only (call #) — a right float was stealing first-line width for no chip.
-    return (
-      <span
-        className="call-card-corner-notch call-card-corner-notch--left"
-        aria-hidden
-        style={{ ...shared, float: 'left', marginLeft: -CALL_CARD_PAD_X_PX }}
-      />
-    );
-  };
+  /** Corner notches removed with the call-# chip — text uses full card width. */
+  const renderCallCardCornerNotches = (_callNum: number | ''): React.ReactNode => null;
 
   const renderCallSongLines = (
     songId: string,
@@ -3989,6 +3905,7 @@ const PublicDisplay: React.FC = () => {
     } = opts;
     const typo = typographyForCallCard(songId, meta, isFullCardPattern, layout);
     const uncapThisCard = isFullCardPattern && uncapFullCardCallLayout;
+    const hasArtist = !!meta.artist?.trim();
     const { title, artist } = renderCallSongLines(songId, meta, (t, s, h, weight) =>
       renderMaskedText(t, s, h, typo.letterBoxScale, weight),
     );
@@ -4002,8 +3919,8 @@ const PublicDisplay: React.FC = () => {
           ...recencyStyle,
           position: 'relative',
           display: 'flex',
-          alignItems: 'center',
-          gap: 10,
+          alignItems: 'stretch',
+          gap: 0,
           padding: `${CALL_CARD_PAD_Y_PX}px ${CALL_CARD_PAD_X_PX}px`,
           borderRadius: 12,
           marginBottom: 0,
@@ -4023,10 +3940,26 @@ const PublicDisplay: React.FC = () => {
         }}
       >
         {renderCallNumberOverlay(callNum, isFullCardPattern)}
-        <div style={{ display: 'block', width: '100%', minWidth: 0 }}>
+        <div
+          className="call-song-info"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            width: '100%',
+            minWidth: 0,
+            minHeight: 0,
+            height: '100%',
+            boxSizing: 'border-box',
+            textAlign: 'center',
+            position: 'relative',
+            zIndex: 1,
+          }}
+        >
+          {/* Title may clip; artist is a sibling below so it cannot be cut off. */}
           <div
-            className="call-song-info"
-            style={callSongInfoStyles(typo, isFullCardPattern, !!meta.artist?.trim())}
+            className="call-song-title-region"
+            style={callSongTitleRegionStyles(typo, isFullCardPattern)}
           >
             {renderCallCardCornerNotches(callNum)}
             <AnimatePresence mode="popLayout" initial={false}>
@@ -4041,6 +3974,10 @@ const PublicDisplay: React.FC = () => {
               >
                 {title}
               </motion.div>
+            </AnimatePresence>
+          </div>
+          {hasArtist && artist ? (
+            <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
                 key={(meta?.artist || '') + '-a' + motionKeySuffix}
                 initial={{ opacity: 0, y: 4 }}
@@ -4053,7 +3990,7 @@ const PublicDisplay: React.FC = () => {
                 {artist}
               </motion.div>
             </AnimatePresence>
-          </div>
+          ) : null}
         </div>
       </motion.div>
     );
