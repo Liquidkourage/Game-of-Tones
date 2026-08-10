@@ -5192,9 +5192,17 @@ io.on('connection', (socket) => {
               reason: 'room_has_host',
               message: 'This room already has a host. Use the player link to join, or wait for the host to leave.'
             });
+            // Do not seat a denied host claim as a normal player — that left Host UI able to
+            // emit finalize-mix and get "Only the host can finalize the mix".
+            return;
           }
         }
       }
+    }
+
+    if (wantsHost && !effectiveIsHost) {
+      // Other denial paths (secret/owner) already emitted host-join-denied above.
+      return;
     }
     
     const inPerson = data.inPerson !== false;
@@ -5607,18 +5615,60 @@ io.on('connection', (socket) => {
     };
 
     // Enhanced host validation with detailed logging
-    const player = room.players.get(socket.id);
+    let player = room.players.get(socket.id);
     const roomHostId = room.host;
     const currentSocketId = socket.id;
-    const playerIsHost = player && player.isHost;
-    const socketIsRoomHost = roomHostId === currentSocketId;
-    const isCurrentHost = socketIsRoomHost || playerIsHost;
+    let playerIsHost = !!(player && player.isHost);
+    let socketIsRoomHost = roomHostId === currentSocketId;
+    let isCurrentHost = socketIsRoomHost || playerIsHost;
+
+    // Room owner on a reconnected socket: reclaim host if claim was lost (common after
+    // socket reconnect / Strict Mode remount before join-room finishes reclaiming).
+    const ownerUid = room.ownerUserId != null ? Number(room.ownerUserId) : null;
+    const socketUid = socket.hostUserId != null ? Number(socket.hostUserId) : null;
+    if (
+      !isCurrentHost &&
+      ownerUid != null &&
+      socketUid != null &&
+      ownerUid === socketUid
+    ) {
+      if (room.host && room.host !== socket.id && room.players.has(room.host)) {
+        const prior = room.players.get(room.host);
+        if (prior) prior.isHost = false;
+      }
+      room.host = socket.id;
+      socket.join(roomId);
+      if (!player) {
+        player = {
+          id: socket.id,
+          name: 'Host',
+          isHost: true,
+          clientId: null,
+          inPerson: true,
+        };
+        room.players.set(socket.id, player);
+      } else {
+        player.isHost = true;
+      }
+      playerIsHost = true;
+      socketIsRoomHost = true;
+      isCurrentHost = true;
+      routineServerLog(`✅ finalize-mix: reclaimed host for room owner (uid ${ownerUid})`);
+    }
     
-    routineServerLog(`🔍 Host validation - Room: ${roomId}, Socket: ${currentSocketId}, Room Host: ${roomHostId}, Player Found: ${!!player}, Player isHost: ${!!playerIsHost}, Valid: ${isCurrentHost}`);
+    routineServerLog(`🔍 Host validation - Room: ${roomId}, Socket: ${currentSocketId}, Room Host: ${room.host}, Player Found: ${!!player}, Player isHost: ${!!playerIsHost}, Valid: ${isCurrentHost}`);
     
     if (!isCurrentHost) {
       routineServerLog('❌ Only host can finalize mix');
-      socket.emit('error', { message: 'Only the host can finalize the mix' });
+      socket.emit('finalize-mix-failed', {
+        code: 'not_host',
+        message:
+          'Only the host can finalize the mix. Your host session may have dropped — refresh the host page or re-open this room from Home.',
+      });
+      socket.emit('error', {
+        message:
+          'Only the host can finalize the mix. Refresh the host page or re-open this room from Home.',
+      });
       return;
     }
 

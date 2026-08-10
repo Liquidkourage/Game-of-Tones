@@ -4850,6 +4850,18 @@ const HostView: React.FC = () => {
       const msg = data?.message || 'Unknown server error';
       console.error('Socket error:', msg);
       setIsStartingGame(false);
+      const lostHost =
+        typeof msg === 'string' && msg.toLowerCase().includes('only the host can finalize');
+      if (lostHost) {
+        addLog(`Server error: ${msg}`, 'error');
+        showToast(
+          'Host session out of sync — re-joining the room. Try finalize again in a moment.',
+          'warn',
+        );
+        hostJoinEmitted = false;
+        emitHostJoinImpl();
+        return;
+      }
       alert(`Server error: ${msg}`);
       addLog(`Server error: ${msg}`, 'error');
     });
@@ -5657,6 +5669,12 @@ const HostView: React.FC = () => {
             const msg =
               payload?.message ||
               'Finalize failed. Check playlist loading (YouTube Music / Spotify), connection, or wait if the service is rate-limiting.';
+            if (payload?.code === 'not_host') {
+              showToast(
+                'Host session out of sync — re-joining. Try again in a moment.',
+                'warn',
+              );
+            }
             showHostAckNotification({
               id: 'finalize-mix-failed',
               title: 'Could not finalize mix',
