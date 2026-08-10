@@ -1,7 +1,7 @@
 /**
- * Host font % is a pure multiplier on per-card fitted sizes.
- * Viewport “optimal” is no longer the primary size driver — call cards binary-search
- * the largest type that fits each card at host 100% (see fitCallCardText).
+ * Host font % is a multiplier passed into per-card fit (and render).
+ * Call cards binary-search the largest type where title+artist both fit at that zoom.
+ * Host 100% = that max size (no separate px ceiling that undercuts the fit).
  */
 
 /** Soft upper seed for binary-search maxScale only (not applied as a global dfs). */
@@ -13,7 +13,7 @@ export function computeOptimalPublicDisplayFontMultiplier(
 }
 
 /**
- * Host slider only. 1.0 = 100% = per-card fitted size (no viewport inflation).
+ * Host slider only. 1.0 = 100% = per-card fitted size at this zoom.
  */
 export function effectivePublicDisplayFontScale(
   _viewportWidth: number,

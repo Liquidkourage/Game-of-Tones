@@ -48,6 +48,7 @@ import {
   PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX,
   PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY,
   PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT,
+  callCardLineHeightEm,
   callLetterSlotStyle,
   unrevealedLetterFillStyle,
   type CallCardTypography,
@@ -1088,8 +1089,8 @@ const PublicDisplay: React.FC = () => {
   const [headerToastTopPx, setHeaderToastTopPx] = useState<number>(78);
 
   /**
-   * Host slider only (1 = 100% = per-card fitted size). Viewport inflation removed —
-   * fitCallCardText always searches at dfs=1; render multiplies by hostZoom.
+   * Host slider (1 = 100%). Fit runs at this zoom so title+artist stay one unit;
+   * 100% = largest combined size that fits the card with no post-fit px ceiling.
    */
   const hostZoom = Math.max(
     0.5,
@@ -1513,8 +1514,8 @@ const PublicDisplay: React.FC = () => {
     const contentW = Math.max(32, innerColW - 2 * CALL_CARD_PAD_X_PX);
     // Float notches narrow the *first* line of each text block; later lines use full width.
     const firstLineW = Math.max(24, contentW - 2 * notchW);
-    // Title + artist share one card — leave slack for gap, pad, and letter-slot height.
-    const boxHeightPx = Math.max(20, rowPx - 2 * CALL_CARD_PAD_Y_PX - 6);
+    // Title + artist share one card — height matches claimable area inside padding.
+    const boxHeightPx = Math.max(20, rowPx - 2 * CALL_CARD_PAD_Y_PX);
     return {
       boxWidthPx: contentW,
       firstLineWidthPx: firstLineW,
@@ -1540,12 +1541,13 @@ const PublicDisplay: React.FC = () => {
     let lineHeightScale = unified.lineHeightScale ?? 1;
     const fitBox = callCardFitBox(columnCallListLayout ? '5x15' : 'carousel', true);
     if (fitBox) {
-      // Shared board scale = min of per-card fits (dfs=1); hostZoom applies at render.
+      // Shared board scale = min of per-card fits at current hostZoom.
       for (const id of playedOrderForDisplay) {
         const meta = idMetaRef.current[id] || { name: '', artist: '' };
         const fit = fitCallCardTextBest(formatCallCardTitle(meta.name), meta.artist, {
           ...fitBox,
           masked: false,
+          hostZoom,
         });
         if (fit) {
           textScale = Math.min(textScale, fit.textScale);
@@ -3864,13 +3866,14 @@ const PublicDisplay: React.FC = () => {
     });
 
     if (!layoutFullCard) {
-      // Per-card max fit at dfs=1; hostZoom multiplies only at render.
+      // Per-card max fit at hostZoom — title+artist as one unit; no post-fit blow-up.
       const fitBox = callCardFitBox(layout, plainFullTitle, masked);
       const fit = fitBox
         ? fitCallCardTextBest(titleForFit, meta.artist, {
             ...fitBox,
             masked,
-            maxScale: 2.2,
+            hostZoom,
+            maxScale: 2.8,
           })
         : null;
       if (fit) {
@@ -3909,16 +3912,14 @@ const PublicDisplay: React.FC = () => {
   ): React.CSSProperties => {
     const layoutFullCard = fullCard && uncapFullCardCallLayout;
     const lhScale = typo.lineHeightScale ?? 1;
-    const lh =
-      (kind === 'title'
-        ? PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT
-        : PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT) * lhScale;
+    const masked = !!typo.clampContentHeight && !typo.plainFullTitle;
+    const lh = callCardLineHeightEm(kind, lhScale, masked);
     const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
     const { titlePx, artistPx } = resolveCallCardFontSizes({
       textScale: typo.textScale,
       hostZoom,
       plainFullTitle: !!typo.plainFullTitle,
-      masked: !!typo.clampContentHeight && !typo.plainFullTitle,
+      masked,
     });
     const fontSize = kind === 'title' ? titlePx : artistPx;
     /** Small nudge only — large negative margin was helping text escape the clip box. */
@@ -3981,16 +3982,19 @@ const PublicDisplay: React.FC = () => {
     const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
     const boxH = rowPx > 0 ? Math.max(24, rowPx - 2 * CALL_CARD_PAD_Y_PX) : 0;
     const lhScale = typo.lineHeightScale ?? 1;
+    const masked = !typo.plainFullTitle;
     const { titlePx, artistPx } = resolveCallCardFontSizes({
       textScale: typo.textScale,
       hostZoom,
       plainFullTitle: !!typo.plainFullTitle,
-      masked: !typo.plainFullTitle,
+      masked,
     });
-    const titleBlock =
-      typo.titleMaxLines * PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT * lhScale * titlePx;
+    // Same line-box math as fitCallCardText (letter tiles taller than plain lh).
+    const titleLh = callCardLineHeightEm('title', lhScale, masked);
+    const artistLh = callCardLineHeightEm('artist', lhScale, masked);
+    const titleBlock = typo.titleMaxLines * titleLh * titlePx;
     const artistBlock = hasArtist
-      ? typo.artistMaxLines * PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT * lhScale * artistPx + 4
+      ? typo.artistMaxLines * artistLh * artistPx + 4
       : 0;
     const contentH = Math.round(
       titleBlock + artistBlock + PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX,

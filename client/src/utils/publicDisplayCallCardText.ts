@@ -15,8 +15,9 @@ export const PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT = 1.28;
 export const PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX = 10;
 
 /**
- * Soft absolute ceilings after fit (hostZoom applied). Fit owns the real size;
- * these only stop absurd host >100% blow-ups.
+ * Legacy soft ceilings — do NOT clamp fitted call-card sizes with these.
+ * Clamping at 56/40px made host 100% look tiny while 140% raised the ceiling
+ * and then clipped artists. Fit owns the size; hostZoom is part of the fit.
  */
 export const PUBLIC_DISPLAY_CALL_TITLE_MAX_PX = 56;
 export const PUBLIC_DISPLAY_CALL_ARTIST_MAX_PX = 40;
@@ -39,12 +40,13 @@ export function callCardArtistPxForScale(titlePx: number, textScale: number): nu
 }
 
 /**
- * Render sizes from a per-card fit at dfs=1.
- * `textScale` is relative to TITLE/ARTIST base px; hostZoom multiplies only.
+ * Render sizes from a per-card fit.
+ * `textScale` is relative to TITLE/ARTIST base px; hostZoom multiplies.
+ * Fit must be run with the same hostZoom so title+artist still fit.
  */
 export function resolveCallCardFontSizes(opts: {
   textScale: number;
-  /** @deprecated Ignored — fit is always at dfs=1; use hostZoom. */
+  /** @deprecated Ignored — use hostZoom. */
   displayFontScale?: number;
   hostZoom?: number;
   rowPx?: number;
@@ -57,15 +59,12 @@ export function resolveCallCardFontSizes(opts: {
   );
   const scale = Number.isFinite(opts.textScale) && opts.textScale > 0 ? opts.textScale : 1;
 
-  let titlePx = PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * scale;
-  let artistPx = callCardArtistPxForScale(titlePx, scale);
-  titlePx = Math.round(titlePx * zoom);
-  artistPx = Math.round(artistPx * zoom);
-
-  titlePx = Math.min(titlePx, Math.round(PUBLIC_DISPLAY_CALL_TITLE_MAX_PX * zoom));
-  artistPx = Math.min(artistPx, Math.round(PUBLIC_DISPLAY_CALL_ARTIST_MAX_PX * zoom));
-
-  return { titlePx, artistPx };
+  const titleUnzoomed = PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * scale;
+  const artistUnzoomed = callCardArtistPxForScale(titleUnzoomed, scale);
+  return {
+    titlePx: Math.round(titleUnzoomed * zoom),
+    artistPx: Math.round(artistUnzoomed * zoom),
+  };
 }
 
 /** ~how many letter-box characters fit per row in a narrow 5×15 call column. */
@@ -393,11 +392,26 @@ export function callLetterSlotStyle(
 const TITLE_ARTIST_GAP_PX = 4;
 /** callCardLineStyles paddingBottom on clamped cards (title 3 + artist 4). */
 const CLAMPED_LINE_PADDING_PX = 7;
-/** Vertical safety — letter tiles + dual text blocks need more slack than plain. */
-const FIT_HEIGHT_SAFETY_PX = 16;
-const FIT_HEIGHT_SAFETY_MASKED_PX = 22;
+/** Vertical safety — small DOM/canvas slack only (was over-padding and starving 100%). */
+const FIT_HEIGHT_SAFETY_PX = 6;
+const FIT_HEIGHT_SAFETY_MASKED_PX = 8;
 /** Absolute floor — only hit by absurd single-word titles/artists (e.g. 30+ char words). */
 const FIT_MIN_SCALE = 0.22;
+
+/** Line-height em used for fit + clamp — letter tiles are taller than plain lh. */
+export function callCardLineHeightEm(
+  kind: 'title' | 'artist',
+  lineHeightScale: number,
+  masked: boolean,
+): number {
+  const base =
+    kind === 'title'
+      ? PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT
+      : PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT;
+  const lh = base * lineHeightScale;
+  if (!masked) return lh;
+  return Math.max(lh, getCallTitleCapMetrics().heightEm * 1.08);
+}
 
 let fitCtxCached: CanvasRenderingContext2D | null | undefined;
 function getFitCtx(): CanvasRenderingContext2D | null {
@@ -540,9 +554,14 @@ export type CallCardFitOpts = {
   /** Available text height inside the card (after vertical padding). */
   boxHeightPx: number;
   /**
-   * @deprecated Fit always runs at dfs=1. Host zoom multiplies at render only.
+   * @deprecated Use hostZoom — fit evaluates the same zoom used at render.
    */
   displayFontScale?: number;
+  /**
+   * Host font % as a multiplier (1 = 100%). Must match resolveCallCardFontSizes
+   * so title+artist are fitted as one unit at the size that will actually paint.
+   */
+  hostZoom?: number;
   /** Letter-tile mode (title reveal "by letter"). */
   masked: boolean;
   /**
@@ -554,7 +573,7 @@ export type CallCardFitOpts = {
   firstLineWidthPx?: number;
   /** Smallest acceptable scale before we give up and let it clip. */
   minScale?: number;
-  /** Largest scale to try so short titles can fill empty card space (default 2.2). */
+  /** Largest scale to try so short titles can fill empty card space (default 2.8). */
   maxScale?: number;
 };
 
@@ -572,8 +591,8 @@ export type CallCardFitResult = {
 const FIT_LINE_HEIGHT_SCALE_MIN = 0.9;
 
 /**
- * Largest textScale (at dfs=1) where title + artist measurably fit the card box.
- * Host 100% = this size; hostZoom multiplies only at render.
+ * Largest textScale where title + artist measurably fit the card box at hostZoom.
+ * Host 100% (zoom=1) = biggest combined size that does not spill.
  */
 export function fitCallCardText(
   title: string,
@@ -585,8 +604,12 @@ export function fitCallCardText(
     Number.isFinite(opts.tileScale) && (opts.tileScale as number) > 0
       ? (opts.tileScale as number)
       : 1;
+  const hostZoom = Math.max(
+    0.5,
+    Math.min(3, Number.isFinite(opts.hostZoom) ? (opts.hostZoom as number) : 1),
+  );
   const minScale = opts.minScale ?? FIT_MIN_SCALE;
-  const maxScale = opts.maxScale ?? 2.2;
+  const maxScale = opts.maxScale ?? 2.8;
   const titleText = formatCallCardTitle((title || '').trim() || 'Unknown');
   const artistText = formatCallCardArtist((artist || '').trim());
   const hasArtist = artistText.length > 0;
@@ -601,15 +624,14 @@ export function fitCallCardText(
   );
 
   const heightSafety = opts.masked ? FIT_HEIGHT_SAFETY_MASKED_PX : FIT_HEIGHT_SAFETY_PX;
-  const tileHeightEm = getCallTitleCapMetrics().heightEm;
 
   const evaluate = (
     s: number,
     lineHeightScale: number,
   ): { fits: boolean; titleLines: number; artistLines: number } => {
-    // Always dfs=1 — host % is applied in resolveCallCardFontSizes.
-    const titlePx = PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * s;
-    const artistPx = callCardArtistPxForScale(titlePx, s);
+    // Evaluate at the same zoomed px that resolveCallCardFontSizes will paint.
+    const titlePx = PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * s * hostZoom;
+    const artistPx = callCardArtistPxForScale(PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * s, s) * hostZoom;
 
     const t = measuredWrapLines(
       titleText,
@@ -636,15 +658,8 @@ export function fitCallCardText(
         )
       : { lines: 0, overflowsWidth: false };
 
-    // Letter slots use cap-height boxes — line box must clear the taller of lh vs tile.
-    const titleLh = Math.max(
-      PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT * lineHeightScale,
-      opts.masked ? tileHeightEm * 1.08 : 0,
-    );
-    const artistLh = Math.max(
-      PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT * lineHeightScale,
-      opts.masked ? tileHeightEm * 1.08 : 0,
-    );
+    const titleLh = callCardLineHeightEm('title', lineHeightScale, opts.masked);
+    const artistLh = callCardLineHeightEm('artist', lineHeightScale, opts.masked);
     const heightPx =
       t.lines * titleLh * titlePx +
       (hasArtist ? a.lines * artistLh * artistPx + TITLE_ARTIST_GAP_PX : 0) +
