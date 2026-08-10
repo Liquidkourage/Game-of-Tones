@@ -23,29 +23,23 @@ export function computeOptimalPublicDisplayFontMultiplier(
   const playlistHeaderPx = Math.min(56, Math.max(28, h * 0.042));
   /**
    * Short landscape (XGA 1024×768, etc.): use more of the viewport for the call
-   * region estimate so auto-fit doesn't oversize titles past 5 rows.
+   * region estimate. Do not apply an extra shrink penalty — letter-reveal fitting
+   * densifies tiles instead of crushing host 100% type.
    */
-  const callFrac = h <= 820 ? 0.68 : h <= 920 ? 0.62 : 0.56;
+  const callFrac = h <= 820 ? 0.72 : h <= 920 ? 0.64 : 0.56;
   const callRegionH = h * callFrac - playlistHeaderPx;
-  const rowH = Math.max(44, callRegionH / 5);
-  /** Letter-reveal tiles are taller than plain lines; 100% host slider should fit one card. */
-  const LETTER_REVEAL_LINE_FACTOR = h <= 820 ? 1.08 : 1.02;
+  const rowH = Math.max(48, callRegionH / 5);
+  const LETTER_REVEAL_LINE_FACTOR = 1.02;
   const targetTitlePx = Math.min(
-    52,
-    Math.max(18, (rowH * 0.46) / LETTER_REVEAL_LINE_FACTOR),
+    56,
+    Math.max(22, (rowH * 0.5) / LETTER_REVEAL_LINE_FACTOR),
   );
   const fromHeight = targetTitlePx / PUBLIC_DISPLAY_CALL_TITLE_BASE_PX;
-  const fromWidth = Math.min(1.35, Math.max(0.72, w / REF_WIDTH));
-  const refBlend = Math.min(1.25, Math.max(0.82, (w / REF_WIDTH + h / REF_HEIGHT) / 2));
-  /** Extra shrink on classic 4:3 / XGA so letter boxes stay inside the card. */
-  const shortLandscapePenalty = h <= 820 && w / h < 1.45 ? 0.9 : h <= 820 ? 0.94 : 1;
+  const fromWidth = Math.min(1.35, Math.max(0.78, w / REF_WIDTH));
+  const refBlend = Math.min(1.25, Math.max(0.88, (w / REF_WIDTH + h / REF_HEIGHT) / 2));
   const raw =
-    fromHeight *
-    Math.pow(fromWidth, 0.12) *
-    refBlend *
-    DISPLAY_AUTO_FIT_CALIBRATION *
-    shortLandscapePenalty;
-  return Math.max(0.55, Math.min(1.65, raw));
+    fromHeight * Math.pow(fromWidth, 0.12) * refBlend * DISPLAY_AUTO_FIT_CALIBRATION;
+  return Math.max(0.7, Math.min(1.65, raw));
 }
 
 /** Effective render multiplier: optimal fit × host percent (1.0 = 100% = best fit). */

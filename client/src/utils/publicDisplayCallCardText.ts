@@ -297,6 +297,11 @@ const CLAMPED_LINE_PADDING_PX = 7;
 const FIT_HEIGHT_SAFETY_PX = 8;
 /** Absolute floor — only hit by absurd single-word titles/artists (e.g. 30+ char words). */
 const FIT_MIN_SCALE = 0.22;
+/**
+ * Letter-reveal floor: never shrink projector type below this at host 100%.
+ * Prefer denser tiles (tileScale) over microscopic glyphs on XGA / 5-col boards.
+ */
+const FIT_MIN_SCALE_MASKED = 0.68;
 
 let fitCtxCached: CanvasRenderingContext2D | null | undefined;
 function getFitCtx(): CanvasRenderingContext2D | null {
@@ -321,12 +326,19 @@ function fontsLoadedFlag(): string {
 }
 
 /** Width of one word at FIT_REF_PX (cached). Masked = worst of tile vs revealed glyph per char. */
-function wordWidthUnits(word: string, weight: number, masked: boolean, fontFamily: string): number {
-  const key = `${fontsLoadedFlag()}|${masked ? 'm' : 'p'}|${weight}|${fontFamily}|${word}`;
+function wordWidthUnits(
+  word: string,
+  weight: number,
+  masked: boolean,
+  fontFamily: string,
+  tileScale = 1,
+): number {
+  const ts = Number.isFinite(tileScale) && tileScale > 0 ? tileScale : 1;
+  const key = `${fontsLoadedFlag()}|${masked ? 'm' : 'p'}|${ts.toFixed(2)}|${weight}|${fontFamily}|${word}`;
   const hit = wordUnitsCache.get(key);
   if (hit !== undefined) return hit;
   const ctx = getFitCtx();
-  const tileAdvancePx = getCallTitleCapMetrics().advanceEm * FIT_REF_PX;
+  const tileAdvancePx = getCallTitleCapMetrics().advanceEm * FIT_REF_PX * ts;
   let units: number;
   if (!ctx) {
     units = word.length * (masked ? tileAdvancePx : 0.55 * FIT_REF_PX);
@@ -337,7 +349,7 @@ function wordWidthUnits(word: string, weight: number, masked: boolean, fontFamil
       for (const ch of Array.from(word)) {
         const glyph = ctx.measureText(ch).width;
         // Tile sized ≈ average capital; never narrower than the real glyph (W, M, …).
-        units += /[A-Za-z0-9]/.test(ch) ? Math.max(tileAdvancePx, glyph) : glyph;
+        units += /[A-Za-z0-9]/.test(ch) ? Math.max(tileAdvancePx, glyph * ts) : glyph;
       }
     } else {
       units = ctx.measureText(word).width;
@@ -366,6 +378,7 @@ function measuredWrapLines(
   masked: boolean,
   maxWidthPx: number,
   fontFamily: string,
+  tileScale = 1,
 ): MeasuredWrap {
   const trimmed = (text || '').trim();
   if (!trimmed || maxWidthPx <= 0 || fontPx <= 0) return { lines: 0, overflowsWidth: false };
@@ -376,7 +389,7 @@ function measuredWrapLines(
   let overflowsWidth = false;
   for (const word of trimmed.split(/\s+/)) {
     if (!word) continue;
-    const w = wordWidthUnits(word, weight, masked, fontFamily) * scale;
+    const w = wordWidthUnits(word, weight, masked, fontFamily, tileScale) * scale;
     if (w > maxWidthPx) {
       if (masked && Array.from(word).length <= 18) {
         // Letter tiles render in a nowrap span — the word cannot break, only shrink.
@@ -413,6 +426,11 @@ export type CallCardFitOpts = {
   displayFontScale: number;
   /** Letter-tile mode (title reveal "by letter"). */
   masked: boolean;
+  /**
+   * Multiplier on masked letter-tile advance (1 = full cap width).
+   * Use &lt;1 on narrow projector columns so type can stay large.
+   */
+  tileScale?: number;
   /** Hard px ceilings from row-height fractions (optional). */
   titleCapPx?: number;
   artistCapPx?: number;
@@ -445,7 +463,12 @@ export function fitCallCardText(
 ): CallCardFitResult | null {
   const dfs = opts.displayFontScale > 0 ? opts.displayFontScale : 1;
   if (opts.boxWidthPx <= 8 || opts.boxHeightPx <= 8) return null;
-  const minScale = opts.minScale ?? FIT_MIN_SCALE;
+  const tileScale =
+    Number.isFinite(opts.tileScale) && (opts.tileScale as number) > 0
+      ? (opts.tileScale as number)
+      : 1;
+  const minScale =
+    opts.minScale ?? (opts.masked ? FIT_MIN_SCALE_MASKED : FIT_MIN_SCALE);
   const maxScale = opts.maxScale ?? 2.2;
   const titleText = formatCallCardTitle((title || '').trim() || 'Unknown');
   const artistText = formatCallCardArtist((artist || '').trim());
@@ -469,6 +492,7 @@ export function fitCallCardText(
       opts.masked,
       effWidthPx,
       PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY,
+      tileScale,
     );
     const a = hasArtist
       ? measuredWrapLines(
@@ -478,6 +502,7 @@ export function fitCallCardText(
           opts.masked,
           effWidthPx,
           PUBLIC_DISPLAY_CALL_ARTIST_FONT_FAMILY,
+          tileScale,
         )
       : { lines: 0, overflowsWidth: false };
 

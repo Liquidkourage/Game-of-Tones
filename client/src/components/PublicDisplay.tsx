@@ -1524,6 +1524,7 @@ const PublicDisplay: React.FC = () => {
   function callCardFitBox(
     layout: '5x15' | 'carousel',
     plainFullTitle: boolean,
+    masked = false,
   ): {
     boxWidthPx: number;
     boxHeightPx: number;
@@ -1534,14 +1535,14 @@ const PublicDisplay: React.FC = () => {
     const colWidthPx = layout === '5x15' ? fiveBy15ColWidthPx : carouselColWidthPx;
     if (rowPx <= 0 || colWidthPx <= 0) return null;
     const notchW = callNumberBadgePx + CALL_BADGE_TEXT_GAP_PX;
-    // Wrap against the *narrow* top band (between corner notches). That is the
-    // worst-case line count — fitting to full width undersizes line count, grows
-    // type too large, then the card clips top+bottom.
+    // Plain titles: wrap against the narrow top band between corner notches.
+    // Letter-reveal: notches overlay — reserving both sides crushed XGA type to ~min scale.
+    const notchReserve = masked ? notchW * 0.4 : 2 * notchW;
     return {
-      boxWidthPx: Math.max(24, colWidthPx - 2 * CALL_CARD_PAD_X_PX - 2 * notchW),
+      boxWidthPx: Math.max(48, colWidthPx - 2 * CALL_CARD_PAD_X_PX - notchReserve),
       boxHeightPx: Math.max(24, rowPx - 2 * CALL_CARD_PAD_Y_PX),
-      titleCapPx: Math.round(rowPx * (plainFullTitle ? 0.4 : 0.46)),
-      artistCapPx: Math.round(rowPx * (plainFullTitle ? 0.22 : 0.26)),
+      titleCapPx: Math.round(rowPx * (plainFullTitle ? 0.42 : masked ? 0.52 : 0.46)),
+      artistCapPx: Math.round(rowPx * (plainFullTitle ? 0.24 : masked ? 0.28 : 0.26)),
     };
   }
 
@@ -3509,6 +3510,7 @@ const PublicDisplay: React.FC = () => {
     const h = el.clientHeight || 0;
     if (h > 0) setCarouselViewportHeightPx(h);
     const colEl =
+      el.querySelector<HTMLElement>('.call-carousel-col-static') ||
       el.querySelector<HTMLElement>('.call-carousel-col') ||
       el.querySelector<HTMLElement>('.call-carousel-col-inner');
     const colW = colEl?.clientWidth || 0;
@@ -3614,6 +3616,7 @@ const PublicDisplay: React.FC = () => {
       setViewportWidth(el.clientWidth || 0);
       setCarouselViewportHeightPx(el.clientHeight || 0);
       const colEl =
+        el.querySelector<HTMLElement>('.call-carousel-col-static') ||
         el.querySelector<HTMLElement>('.call-carousel-col') ||
         el.querySelector<HTMLElement>('.call-carousel-col-inner');
       const colW = colEl?.clientWidth || 0;
@@ -3874,22 +3877,43 @@ const PublicDisplay: React.FC = () => {
     if (!layoutFullCard) {
       // Measured fit is ground truth: grow into empty card space or shrink to fit.
       // Do not min() with char heuristics — those were capping short titles too small.
-      const fitBox = callCardFitBox(layout, plainFullTitle);
-      const fit = fitBox
+      const fitBox = callCardFitBox(layout, plainFullTitle, masked);
+      const colWidthPx = layout === '5x15' ? fiveBy15ColWidthPx : carouselColWidthPx;
+      /** Narrow 5-col projectors: denser letter tiles unlock larger host-100% type. */
+      let usedTileScale =
+        masked && colWidthPx > 0 && colWidthPx < 220 ? 0.78 : masked ? 0.9 : 1;
+      let fit = fitBox
         ? fitCallCardText(titleForFit, meta.artist, {
             ...fitBox,
             displayFontScale: autoDisplayFontScale,
             masked,
+            tileScale: usedTileScale,
           })
         : null;
+      // If still cramped, try denser tiles once more before accepting a small scale.
+      if (masked && fitBox && fit && fit.textScale < 0.85) {
+        const denserScale = Math.min(usedTileScale, 0.72);
+        const denser = fitCallCardText(titleForFit, meta.artist, {
+          ...fitBox,
+          displayFontScale: autoDisplayFontScale,
+          masked,
+          tileScale: denserScale,
+        });
+        if (denser && denser.textScale > fit.textScale) {
+          fit = denser;
+          usedTileScale = denserScale;
+        }
+      }
       if (fit) {
         typo = {
           ...typo,
           plainFullTitle,
           textScale: fit.textScale,
-          titleMaxLines: Math.max(typo.titleMaxLines, fit.titleLines),
-          artistMaxLines: Math.max(typo.artistMaxLines, fit.artistLines),
+          // Use measured lines only — heuristic max() left empty cards with tiny type.
+          titleMaxLines: Math.max(1, fit.titleLines),
+          artistMaxLines: meta.artist?.trim() ? Math.max(1, fit.artistLines) : 0,
           lineHeightScale: fit.lineHeightScale,
+          letterBoxScale: masked ? usedTileScale : 1,
           clampContentHeight: true,
         };
         return typo;
@@ -3926,8 +3950,8 @@ const PublicDisplay: React.FC = () => {
     let fontSize = Math.round(basePx * displayFontScale * typo.textScale);
     const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
     if (rowPx > 0 && !layoutFullCard) {
-      const titleFrac = typo.plainFullTitle ? 0.4 : 0.46;
-      const artistFrac = typo.plainFullTitle ? 0.22 : 0.26;
+      const titleFrac = typo.plainFullTitle ? 0.42 : typo.clampContentHeight ? 0.52 : 0.46;
+      const artistFrac = typo.plainFullTitle ? 0.24 : typo.clampContentHeight ? 0.28 : 0.26;
       // Caps scale with the host zoom so the failsafe slider stays a uniform
       // multiplier — at 100% these are the same row-fraction caps the fitter saw.
       const maxPx =
