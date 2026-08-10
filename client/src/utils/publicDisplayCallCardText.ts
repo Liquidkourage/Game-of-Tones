@@ -38,11 +38,6 @@ const FIT_MAX_SCALE = 12;
 const FIT_MIN_SCALE = 0.22;
 /** Smallest line-height multiplier the fitter may apply (~10% tighter). */
 const FIT_LINE_HEIGHT_SCALE_MIN = 0.9;
-/**
- * Letter-reveal: densify tile advances down to this (blanks + letters same)
- * so width-bound cards can still grow type to fill leftover height.
- */
-const TILE_SCALE_MIN = 0.52;
 
 /** Artist px used by fitter + render (hierarchy baked in — no post-fit bump). */
 export function callCardArtistPxForScale(titlePx: number, textScale: number): number {
@@ -119,15 +114,11 @@ export function typographyFromCallCardFit(
   fit: CallCardFitResult,
   opts: { masked: boolean; plainFullTitle: boolean; hasArtist: boolean },
 ): CallCardTypography {
-  const tile =
-    Number.isFinite(fit.tileScale) && (fit.tileScale as number) > 0
-      ? (fit.tileScale as number)
-      : 1;
   return {
     textScale: fit.textScale,
     titleMaxLines: Math.max(1, fit.titleLines),
     artistMaxLines: opts.hasArtist ? Math.max(0, fit.artistLines) : 0,
-    letterBoxScale: tile,
+    letterBoxScale: 1,
     clampContentHeight: true,
     plainFullTitle: opts.plainFullTitle,
     lineHeightScale: fit.lineHeightScale,
@@ -422,11 +413,40 @@ function spaceWidthUnits(weight: number, fontFamily: string): number {
 
 type MeasuredWrap = {
   lines: number;
-  /** True when a word cannot fit a line even alone (masked words never mid-break). */
+  /** True when a single glyph/tile is wider than the line (cannot fit even alone). */
   overflowsWidth: boolean;
 };
 
-/** Greedy word wrap with real measured widths at the given font size. */
+/** Width of one masked character slot at fontPx (advance + optional letter-spacing after). */
+function maskedCharWidthPx(
+  ch: string,
+  fontPx: number,
+  weight: number,
+  fontFamily: string,
+  tileScale: number,
+  letterSpacingEm: number,
+  addSpacingAfter: boolean,
+): number {
+  const scale = fontPx / FIT_REF_PX;
+  let units: number;
+  if (/[A-Za-z0-9]/.test(ch)) {
+    units = getCallCharAdvanceEm(ch, weight, fontFamily) * FIT_REF_PX * tileScale;
+  } else {
+    const ctx = getFitCtx();
+    if (!ctx) {
+      units = CAP_METRICS_FALLBACK.widthEm * FIT_REF_PX * tileScale;
+    } else {
+      ctx.font = `${weight} ${FIT_REF_PX}px ${fontFamily}`;
+      units = ctx.measureText(ch).width;
+    }
+  }
+  if (addSpacingAfter && letterSpacingEm > 0) {
+    units += letterSpacingEm * FIT_REF_PX;
+  }
+  return units * scale;
+}
+
+/** Greedy wrap with real measured widths. Masked: break inside words at letter tiles. */
 function measuredWrapLines(
   text: string,
   fontPx: number,
@@ -451,17 +471,51 @@ function measuredWrapLines(
   let current = 0;
   let overflowsWidth = false;
   const lineWidth = () => (lines === 1 ? firstW : maxWidthPx);
+
+  const breakMaskedWord = (word: string) => {
+    const chars = Array.from(word);
+    if (current > 0) {
+      lines += 1;
+      current = 0;
+    }
+    for (let i = 0; i < chars.length; i++) {
+      const chW = maskedCharWidthPx(
+        chars[i],
+        fontPx,
+        weight,
+        fontFamily,
+        tileScale,
+        letterSpacingEm,
+        i < chars.length - 1,
+      );
+      const avail = lineWidth();
+      if (chW > avail) {
+        overflowsWidth = true;
+        if (current > 0) {
+          lines += 1;
+          current = 0;
+        }
+        current = avail;
+        continue;
+      }
+      if (current > 0 && current + chW > avail) {
+        lines += 1;
+        current = chW;
+      } else {
+        current += chW;
+      }
+    }
+  };
+
   for (const word of trimmed.split(/\s+/)) {
     if (!word) continue;
     const w =
       wordWidthUnits(word, weight, masked, fontFamily, tileScale, letterSpacingEm) * scale;
     const avail = lineWidth();
     if (w > avail) {
-      if (masked && Array.from(word).length <= 18) {
-        // Letter tiles render in a nowrap span — the word cannot break, only shrink.
-        overflowsWidth = true;
-        if (current > 0) lines += 1;
-        current = lineWidth();
+      if (masked) {
+        // Full kerning — wrap at letter boundaries instead of densifying tiles.
+        breakMaskedWord(word);
         continue;
       }
       // Plain text has overflow-wrap:anywhere — the word splits across lines.
@@ -660,47 +714,16 @@ export function fitCallCardText(
 }
 
 /**
- * Per-card max-fill fit.
- * Letter-reveal: search tile densify so width-bound bricks can still grow type
- * until title+artist use as much of the card as possible without spill.
- * Blanks and revealed letters share the same tileScale (stable on reveal).
+ * Per-card max-fill fit at full letter advances (no densify / kerning squash).
+ * Masked titles wrap at letter boundaries so horizontal pressure becomes lines,
+ * then type grows until title+artist fill the fixed card without spill.
  */
 export function fitCallCardTextBest(
   title: string,
   artist: string,
   opts: Omit<CallCardFitOpts, 'tileScale'>,
 ): CallCardFitResult | null {
-  const hostZoom = Math.max(
-    0.5,
-    Math.min(3, Number.isFinite(opts.hostZoom) ? (opts.hostZoom as number) : 1),
-  );
-
-  const scoreOf = (fit: CallCardFitResult): number => {
-    // Min-max title size; slight preference for less densify when equal.
-    const titlePx = PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * fit.textScale * hostZoom;
-    const ts = fit.tileScale ?? 1;
-    return titlePx * 1000 + ts;
-  };
-
-  if (!opts.masked) {
-    return fitCallCardText(title, artist, { ...opts, tileScale: 1 });
-  }
-
-  let best: CallCardFitResult | null = null;
-  let bestScore = -1;
-  // Sample densify range; pick the combo that yields the largest type.
-  const steps = 12;
-  for (let i = 0; i <= steps; i++) {
-    const ts = 1 - (i / steps) * (1 - TILE_SCALE_MIN);
-    const fit = fitCallCardText(title, artist, { ...opts, tileScale: ts });
-    if (!fit) continue;
-    const sc = scoreOf(fit);
-    if (sc > bestScore) {
-      bestScore = sc;
-      best = fit;
-    }
-  }
-  return best;
+  return fitCallCardText(title, artist, { ...opts, tileScale: 1 });
 }
 
 /** Bingo pattern / winner grid cells (vmin-based sizes get a scale multiplier). */

@@ -3619,21 +3619,16 @@ const PublicDisplay: React.FC = () => {
     const blankFill = unrevealedLetterFillStyle(letterBoxScale);
     const tokens = text.split(/(\s+)/); // keep whitespace tokens
     return (
-      <span>
+      <span style={{ whiteSpace: 'normal' }}>
         {tokens.map((token, ti) => {
           // Preserve whitespace exactly
           if (/^\s+$/.test(token)) {
             return <span key={`ws-${ti}`}>{token}</span>;
           }
           const chars = Array.from(token);
-          // Wrap each word in a no-wrap span so it never splits across lines.
-          // Monster words (>18 chars) are allowed to break — they can't fit one line.
-          const breakable = chars.length > 18;
+          // Full kerning tiles may wrap at letter boundaries (no densify, no nowrap squash).
           return (
-            <span
-              key={`w-${ti}`}
-              style={breakable ? undefined : { whiteSpace: 'nowrap', display: 'inline-block' }}
-            >
+            <span key={`w-${ti}`}>
               {chars.map((ch, ci) => {
                 const u = ch.toUpperCase();
                 if (/^[A-Z0-9]$/.test(u)) {
