@@ -832,15 +832,14 @@ body {
 .App .public-display .call-list-content--5x15 .call-item {
   margin-bottom: 0 !important;
   /* Keep bottom pad aligned with inline CALL_CARD_PAD_Y (fitter uses the same). */
-  padding-bottom: 7px !important;
+  padding-bottom: 4px !important;
   transition: opacity 0.35s ease, filter 0.35s ease;
 }
 
-/* Jeff: decade-block dimming — opacity/saturate set per card via --call-recency-* vars. */
+/* Recency dimming off — cards stay fully opaque (vars kept for easy re-enable). */
 .App .public-display .call-item {
-  opacity: var(--call-recency-opacity, 1);
-  filter: saturate(var(--call-recency-saturate, 1))
-    brightness(var(--call-recency-brightness, 1));
+  opacity: 1;
+  filter: none;
 }
 
 .App .public-display .call-item.call-item--current {

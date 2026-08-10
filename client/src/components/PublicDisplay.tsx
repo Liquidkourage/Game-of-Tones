@@ -42,8 +42,8 @@ import {
   CALL_CARD_ARTIST_LETTER_SPACING_EM,
   CALL_CARD_COLUMN_PAD_X_PX,
   CALL_CARD_FIT_HEIGHT_SAFETY_PX,
-  CALL_CARD_TITLE_ARTIST_GAP_PX,
   CALL_CARD_TITLE_LETTER_SPACING_EM,
+  callCardTitleArtistGapPx,
   PUBLIC_DISPLAY_CALL_ARTIST_FONT_FAMILY,
   PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY,
   callCardLineHeightEm,
@@ -1006,21 +1006,10 @@ function carouselDwellMsForLeftColumn(leftColumnIndex: number, totalPopulatedBan
   return Math.round(CAROUSEL_BASE_DWELL_MS / speed);
 }
 
-/**
- * Block dimming for call cards (Jeff):
- * Songs group in decades of 10 by play-order call # (1–10, 11–20, …).
- * Each time a decade completes (10, 20, 30… played), every *earlier* block
- * gains one dim step. Song #1 can pick up up to 7 dims by the end of a 75
- * (floors at 25% opacity). Current song stays full bright.
- */
-const CALL_DIM_BLOCK_SIZE = 10;
-const CALL_DIM_MAX_STEPS = 7; // song 1 after 70/75 played
-const CALL_DIM_OPACITY_FLOOR = 0.25;
-const CALL_DIM_OPACITY_CEILING = 1;
-
+/** Recency dimming disabled — every call card stays full opacity. */
 function callItemRecency(
   songId: string,
-  playedOrder: string[],
+  _playedOrder: string[],
   currentSongId: string | null | undefined,
 ): { className: string; style: React.CSSProperties } {
   const fullBright = {
@@ -1028,53 +1017,10 @@ function callItemRecency(
     ['--call-recency-saturate' as string]: 1,
     ['--call-recency-brightness' as string]: 1,
   };
-
   const isCurrent = !!(currentSongId && songId === currentSongId);
-  if (isCurrent) {
-    return { className: 'call-item--current', style: fullBright };
-  }
-
-  const playIdx = playedOrder.indexOf(songId);
-  if (playIdx < 0 || playedOrder.length === 0) {
-    // Not in played order — treat as fully dimmed block.
-    const t = 1;
-    return {
-      className: 'call-item--dim-7',
-      style: {
-        ['--call-recency-opacity' as string]: CALL_DIM_OPACITY_FLOOR,
-        ['--call-recency-saturate' as string]: Math.round((1 - t * 0.35) * 100) / 100,
-        ['--call-recency-brightness' as string]: Math.round((1 - t * 0.08) * 100) / 100,
-      },
-    };
-  }
-
-  const callNumber = playIdx + 1; // #1 = first played
-  const blockIndex = Math.floor((callNumber - 1) / CALL_DIM_BLOCK_SIZE); // 0 = calls 1–10
-  const completedDecades = Math.floor(playedOrder.length / CALL_DIM_BLOCK_SIZE);
-  // Dim steps = how many decade completions happened after this song's block.
-  const dimSteps = Math.max(
-    0,
-    Math.min(CALL_DIM_MAX_STEPS, completedDecades - blockIndex),
-  );
-
-  const t = dimSteps / CALL_DIM_MAX_STEPS;
-  const rawOpacity =
-    CALL_DIM_OPACITY_CEILING -
-    t * (CALL_DIM_OPACITY_CEILING - CALL_DIM_OPACITY_FLOOR);
-  const opacity = Math.max(
-    CALL_DIM_OPACITY_FLOOR,
-    Math.min(CALL_DIM_OPACITY_CEILING, Math.round(rawOpacity * 100) / 100),
-  );
-  const saturate = Math.round((1 - t * 0.35) * 100) / 100;
-  const brightness = Math.round((1 - t * 0.08) * 100) / 100;
-
   return {
-    className: `call-item--dim-${dimSteps}`,
-    style: {
-      ['--call-recency-opacity' as string]: opacity,
-      ['--call-recency-saturate' as string]: saturate,
-      ['--call-recency-brightness' as string]: brightness,
-    },
+    className: isCurrent ? 'call-item--current' : '',
+    style: fullBright,
   };
 }
 
@@ -1465,8 +1411,8 @@ const PublicDisplay: React.FC = () => {
   /** Corner call # badge — text must clear this (not overlay under it). */
   const CALL_BADGE_TEXT_GAP_PX = 4;
   /** Matches renderUnifiedCallCard padding — notches sit in the true card corners. */
-  const CALL_CARD_PAD_X_PX = 10;
-  const CALL_CARD_PAD_Y_PX = 7;
+  const CALL_CARD_PAD_X_PX = 6;
+  const CALL_CARD_PAD_Y_PX = 4;
   const callCardRowPxForBadge = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
   const callNumberBadgePx =
     callCardRowPxForBadge > 0
@@ -1508,8 +1454,8 @@ const PublicDisplay: React.FC = () => {
     // Col clientWidth is border-box (includes column pad). Match DOM content width.
     const innerColW = Math.max(32, colWidthPx - 2 * CALL_CARD_COLUMN_PAD_X_PX);
     const contentW = Math.max(32, innerColW - 2 * CALL_CARD_PAD_X_PX);
-    // Float notches narrow the *first* line of each text block; later lines use full width.
-    const firstLineW = Math.max(24, contentW - 2 * notchW);
+    // Call # lives top-left only — reserve one notch on the first line (not both sides).
+    const firstLineW = Math.max(24, contentW - notchW);
     // Title + artist share one card — height matches claimable area inside padding.
     const boxHeightPx = Math.max(20, rowPx - 2 * CALL_CARD_PAD_Y_PX);
     return {
@@ -3830,15 +3776,14 @@ const PublicDisplay: React.FC = () => {
   ): React.CSSProperties => {
     const lhScale = typo.lineHeightScale ?? 1;
     const masked = !!typo.clampContentHeight && !typo.plainFullTitle;
-    const lh = callCardLineHeightEm(kind, lhScale, masked);
+    const tileScale = typo.letterBoxScale > 0 ? typo.letterBoxScale : 1;
+    const lh = callCardLineHeightEm(kind, lhScale, masked, tileScale);
     const { titlePx, artistPx } = resolveCallCardFontSizes({
       textScale: typo.textScale,
       hostZoom,
     });
     const fontSize = kind === 'title' ? titlePx : artistPx;
-    /** Small nudge only — large negative margin was helping text escape the clip box. */
-    const titleTopNudgePx =
-      kind === 'title' ? Math.round(fontSize * (lh - 1) * 0.15) : 0;
+    const artistGapPx = callCardTitleArtistGapPx(titlePx, lhScale, masked, tileScale);
     const common: React.CSSProperties = {
       fontFamily:
         kind === 'title'
@@ -3860,22 +3805,8 @@ const PublicDisplay: React.FC = () => {
       display: 'block',
       overflow: 'visible',
       textOverflow: 'clip',
-      marginTop:
-        kind === 'title'
-          ? -titleTopNudgePx
-          : kind === 'artist'
-            ? fullCard
-              ? 6
-              : CALL_CARD_TITLE_ARTIST_GAP_PX
-            : 0,
-      paddingBottom:
-        !fullCard && typo.clampContentHeight
-          ? kind === 'title'
-            ? 3
-            : 4
-          : kind === 'artist' && !fullCard
-            ? 2
-            : 0,
+      marginTop: kind === 'artist' ? (fullCard ? Math.max(6, artistGapPx * 0.5) : artistGapPx) : 0,
+      paddingBottom: 0,
     };
     return common;
   };
@@ -3970,19 +3901,13 @@ const PublicDisplay: React.FC = () => {
       pointerEvents: 'none',
       userSelect: 'none',
     };
+    // Left notch only (call #) — a right float was stealing first-line width for no chip.
     return (
-      <>
-        <span
-          className="call-card-corner-notch call-card-corner-notch--left"
-          aria-hidden
-          style={{ ...shared, float: 'left', marginLeft: -CALL_CARD_PAD_X_PX }}
-        />
-        <span
-          className="call-card-corner-notch call-card-corner-notch--right"
-          aria-hidden
-          style={{ ...shared, float: 'right', marginRight: -CALL_CARD_PAD_X_PX }}
-        />
-      </>
+      <span
+        className="call-card-corner-notch call-card-corner-notch--left"
+        aria-hidden
+        style={{ ...shared, float: 'left', marginLeft: -CALL_CARD_PAD_X_PX }}
+      />
     );
   };
 
