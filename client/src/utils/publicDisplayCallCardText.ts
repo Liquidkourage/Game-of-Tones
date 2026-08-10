@@ -30,6 +30,14 @@ export const CALL_CARD_COLUMN_PAD_X_PX = 4;
 export const CALL_CARD_TITLE_LETTER_SPACING_EM = 0.04;
 export const CALL_CARD_ARTIST_LETTER_SPACING_EM = 0.02;
 
+/** Artist px used by fitter + render (hierarchy baked in — no post-fit bump). */
+export function callCardArtistPxForScale(titlePx: number, textScale: number): number {
+  const fromBase = PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX * textScale;
+  const relMin = titlePx * PUBLIC_DISPLAY_CALL_ARTIST_MIN_TITLE_RATIO;
+  const relMax = titlePx * PUBLIC_DISPLAY_CALL_ARTIST_MAX_TITLE_RATIO;
+  return Math.min(Math.max(fromBase, relMin), relMax);
+}
+
 /**
  * Render sizes from a per-card fit at dfs=1.
  * `textScale` is relative to TITLE/ARTIST base px; hostZoom multiplies only.
@@ -49,16 +57,13 @@ export function resolveCallCardFontSizes(opts: {
   );
   const scale = Number.isFinite(opts.textScale) && opts.textScale > 0 ? opts.textScale : 1;
 
-  let titlePx = Math.round(PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * scale * zoom);
-  let artistPx = Math.round(PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX * scale * zoom);
+  let titlePx = PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * scale;
+  let artistPx = callCardArtistPxForScale(titlePx, scale);
+  titlePx = Math.round(titlePx * zoom);
+  artistPx = Math.round(artistPx * zoom);
 
   titlePx = Math.min(titlePx, Math.round(PUBLIC_DISPLAY_CALL_TITLE_MAX_PX * zoom));
   artistPx = Math.min(artistPx, Math.round(PUBLIC_DISPLAY_CALL_ARTIST_MAX_PX * zoom));
-
-  const relMin = Math.round(titlePx * PUBLIC_DISPLAY_CALL_ARTIST_MIN_TITLE_RATIO);
-  const relMax = Math.round(titlePx * PUBLIC_DISPLAY_CALL_ARTIST_MAX_TITLE_RATIO);
-  artistPx = Math.max(artistPx, relMin);
-  artistPx = Math.min(artistPx, relMax, Math.round(PUBLIC_DISPLAY_CALL_ARTIST_MAX_PX * zoom));
 
   return { titlePx, artistPx };
 }
@@ -288,17 +293,46 @@ export type CallTitleCapMetrics = {
 
 /** Fallback when canvas / fonts unavailable (Archivo Narrow-ish condensed caps). */
 const CAP_METRICS_FALLBACK: CallTitleCapMetrics = {
-  widthEm: 0.426, // ~avg capital * 0.82
+  widthEm: 0.5,
   heightEm: 0.72,
-  marginXEm: 0.012,
-  advanceEm: 0.45,
+  marginXEm: 0,
+  advanceEm: 0.5,
 };
 
 let capMetricsCache: { key: string; value: CallTitleCapMetrics } | null = null;
+const charAdvanceCache = new Map<string, number>();
 
 /**
- * Measure title-font capital metrics so blank tiles ≈ letter size.
- * Re-measures after webfonts load (fontsReady flag in cache key).
+ * Advance width of one capital/digit in em — used for both blank tiles and revealed
+ * letters so a reveal never changes word length in px.
+ */
+export function getCallCharAdvanceEm(
+  ch: string,
+  weight: number = TITLE_FONT_WEIGHT,
+  fontFamily: string = PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY,
+): number {
+  const u = (ch || '').toUpperCase();
+  const key = `${fontsLoadedFlag()}|${weight}|${fontFamily}|${u}`;
+  const hit = charAdvanceCache.get(key);
+  if (hit !== undefined) return hit;
+
+  const ctx = getFitCtx();
+  let em: number;
+  if (!ctx || !u) {
+    em = CAP_METRICS_FALLBACK.widthEm;
+  } else {
+    ctx.font = `${weight} ${FIT_REF_PX}px ${fontFamily}`;
+    const w = ctx.measureText(u).width;
+    // Floor so "I" / "1" blanks stay visible; still char-specific so W≠I.
+    em = Math.min(1.1, Math.max(0.28, w / FIT_REF_PX));
+  }
+  if (charAdvanceCache.size > 500) charAdvanceCache.clear();
+  charAdvanceCache.set(key, em);
+  return em;
+}
+
+/**
+ * Cap-height metrics for blank tile visuals (height only — width is per-character).
  */
 export function getCallTitleCapMetrics(): CallTitleCapMetrics {
   const key = fontsLoadedFlag();
@@ -323,27 +357,45 @@ export function getCallTitleCapMetrics(): CallTitleCapMetrics {
       ? hMetrics.actualBoundingBoxAscent
       : FIT_REF_PX * 0.72;
 
-  // Slightly under average capital so letter-reveal blanks don’t force an extra
-  // wrap vs the same title in plain caps (e.g. "(500 Miles)" on one line).
-  const widthEm = (avgWidthPx / FIT_REF_PX) * 0.82;
+  const widthEm = avgWidthPx / FIT_REF_PX;
   const heightEm = ascent / FIT_REF_PX;
-  const marginXEm = 0.012;
   const value: CallTitleCapMetrics = {
     widthEm: Math.min(0.68, Math.max(0.34, widthEm)),
     heightEm: Math.min(0.85, Math.max(0.62, heightEm)),
-    marginXEm,
-    advanceEm: 0, // filled below
+    marginXEm: 0,
+    advanceEm: widthEm,
   };
-  value.advanceEm = value.widthEm + 2 * value.marginXEm;
   capMetricsCache = { key, value };
   return value;
+}
+
+/** Fixed-width slot for one letter — same px whether blank or revealed. */
+export function callLetterSlotStyle(
+  ch: string,
+  opts: { scale?: number; weight?: number; fontFamily?: string } = {},
+): CSSProperties {
+  const scale = opts.scale && opts.scale > 0 ? opts.scale : 1;
+  const weight = opts.weight ?? TITLE_FONT_WEIGHT;
+  const fontFamily = opts.fontFamily ?? PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY;
+  const advEm = getCallCharAdvanceEm(ch, weight, fontFamily) * scale;
+  const hEm = getCallTitleCapMetrics().heightEm * scale;
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: `${advEm}em`,
+    height: `${hEm}em`,
+    verticalAlign: 'baseline',
+    boxSizing: 'border-box',
+  };
 }
 /** Gap between title and artist blocks (callCardLineStyles artist marginTop). */
 const TITLE_ARTIST_GAP_PX = 4;
 /** callCardLineStyles paddingBottom on clamped cards (title 3 + artist 4). */
 const CLAMPED_LINE_PADDING_PX = 7;
-/** Vertical safety so descenders / notch-induced extra wraps never kiss the clip edge. */
-const FIT_HEIGHT_SAFETY_PX = 8;
+/** Vertical safety — letter tiles + dual text blocks need more slack than plain. */
+const FIT_HEIGHT_SAFETY_PX = 16;
+const FIT_HEIGHT_SAFETY_MASKED_PX = 22;
 /** Absolute floor — only hit by absurd single-word titles/artists (e.g. 30+ char words). */
 const FIT_MIN_SCALE = 0.22;
 
@@ -369,7 +421,10 @@ function fontsLoadedFlag(): string {
   }
 }
 
-/** Width of one word at FIT_REF_PX (cached). Masked = worst of tile vs revealed glyph per char. */
+/**
+ * Width of one word at FIT_REF_PX (cached).
+ * Masked uses per-char slot advances (same as revealed) so fit matches stable DOM slots.
+ */
 function wordWidthUnits(
   word: string,
   weight: number,
@@ -384,25 +439,26 @@ function wordWidthUnits(
   const hit = wordUnitsCache.get(key);
   if (hit !== undefined) return hit;
   const ctx = getFitCtx();
-  const tileAdvancePx = getCallTitleCapMetrics().advanceEm * FIT_REF_PX * ts;
   const chars = Array.from(word);
   let units: number;
   if (!ctx) {
-    units = chars.length * (masked ? tileAdvancePx : 0.55 * FIT_REF_PX);
+    units = chars.length * CAP_METRICS_FALLBACK.widthEm * FIT_REF_PX * ts;
+  } else if (masked) {
+    // Sum fixed per-char slots (identical whether blank or revealed).
+    units = 0;
+    for (const ch of chars) {
+      if (/[A-Za-z0-9]/.test(ch)) {
+        units += getCallCharAdvanceEm(ch, weight, fontFamily) * FIT_REF_PX * ts;
+      } else {
+        ctx.font = `${weight} ${FIT_REF_PX}px ${fontFamily}`;
+        units += ctx.measureText(ch).width;
+      }
+    }
   } else {
     ctx.font = `${weight} ${FIT_REF_PX}px ${fontFamily}`;
-    if (masked) {
-      units = 0;
-      for (const ch of chars) {
-        const glyph = ctx.measureText(ch).width;
-        // Tile sized ≈ average capital; never narrower than the real glyph (W, M, …).
-        units += /[A-Za-z0-9]/.test(ch) ? Math.max(tileAdvancePx, glyph * ts) : glyph;
-      }
-    } else {
-      units = ctx.measureText(word).width;
-    }
+    units = ctx.measureText(word).width;
   }
-  // CSS letter-spacing applies between glyphs / inline-block tiles.
+  // CSS letter-spacing applies between glyphs / inline-block slots.
   if (ls > 0 && chars.length > 1) {
     units += ls * (chars.length - 1) * FIT_REF_PX;
   }
@@ -544,13 +600,16 @@ export function fitCallCardText(
       : opts.boxWidthPx) - 2,
   );
 
+  const heightSafety = opts.masked ? FIT_HEIGHT_SAFETY_MASKED_PX : FIT_HEIGHT_SAFETY_PX;
+  const tileHeightEm = getCallTitleCapMetrics().heightEm;
+
   const evaluate = (
     s: number,
     lineHeightScale: number,
   ): { fits: boolean; titleLines: number; artistLines: number } => {
     // Always dfs=1 — host % is applied in resolveCallCardFontSizes.
     const titlePx = PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * s;
-    const artistPx = PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX * s;
+    const artistPx = callCardArtistPxForScale(titlePx, s);
 
     const t = measuredWrapLines(
       titleText,
@@ -577,8 +636,15 @@ export function fitCallCardText(
         )
       : { lines: 0, overflowsWidth: false };
 
-    const titleLh = PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT * lineHeightScale;
-    const artistLh = PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT * lineHeightScale;
+    // Letter slots use cap-height boxes — line box must clear the taller of lh vs tile.
+    const titleLh = Math.max(
+      PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT * lineHeightScale,
+      opts.masked ? tileHeightEm * 1.08 : 0,
+    );
+    const artistLh = Math.max(
+      PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT * lineHeightScale,
+      opts.masked ? tileHeightEm * 1.08 : 0,
+    );
     const heightPx =
       t.lines * titleLh * titlePx +
       (hasArtist ? a.lines * artistLh * artistPx + TITLE_ARTIST_GAP_PX : 0) +
@@ -587,7 +653,7 @@ export function fitCallCardText(
       fits:
         !t.overflowsWidth &&
         !a.overflowsWidth &&
-        heightPx <= opts.boxHeightPx - FIT_HEIGHT_SAFETY_PX,
+        heightPx <= opts.boxHeightPx - heightSafety,
       titleLines: Math.max(1, t.lines),
       artistLines: a.lines,
     };
@@ -646,29 +712,15 @@ export function fitCallCardText(
 }
 
 /**
- * Per-card fit: try denser letter tiles when that unlocks a larger textScale.
- * Prefer larger type over denser tiles when both fit.
+ * Per-card fit. Letter slots are per-character (stable on reveal), so tileScale
+ * stays 1 — densifying blanks would desync fit from DOM width.
  */
 export function fitCallCardTextBest(
   title: string,
   artist: string,
   opts: Omit<CallCardFitOpts, 'tileScale'>,
 ): CallCardFitResult | null {
-  const tileScales = opts.masked ? [1, 0.9, 0.78, 0.72] : [1];
-  let best: CallCardFitResult | null = null;
-  for (const ts of tileScales) {
-    const fit = fitCallCardText(title, artist, { ...opts, tileScale: ts });
-    if (!fit) continue;
-    if (
-      !best ||
-      fit.textScale > best.textScale + 0.01 ||
-      (Math.abs(fit.textScale - best.textScale) <= 0.01 &&
-        (fit.tileScale ?? 1) > (best.tileScale ?? 1))
-    ) {
-      best = fit;
-    }
-  }
-  return best;
+  return fitCallCardText(title, artist, { ...opts, tileScale: 1 });
 }
 
 /** Bingo pattern / winner grid cells (vmin-based sizes get a scale multiplier). */
@@ -685,21 +737,26 @@ export function maxHeightEm(lineHeight: number, lines: number): string {
   return `calc(${lineHeight}em * ${lines})`;
 }
 
-/** Unrevealed letter tile — sized from measured Archivo Narrow caps (≈ real letter). */
+/**
+ * @deprecated Prefer callLetterSlotStyle — average-width blanks shift words on reveal.
+ */
 export function unrevealedLetterBoxStyle(scale = 1): CSSProperties {
-  const m = getCallTitleCapMetrics();
-  const w = m.widthEm * scale;
-  const h = m.heightEm * scale;
-  const mx = m.marginXEm * scale;
   return {
-    display: 'inline-block',
-    width: `${w}em`,
-    height: `${h}em`,
+    ...callLetterSlotStyle('H', { scale }),
     border: `${0.04 * scale}em solid rgba(255, 255, 255, 0.5)`,
     borderRadius: `${0.055 * scale}em`,
-    // Sit on the text baseline like a capital glyph.
-    verticalAlign: 'baseline',
-    margin: `0 ${mx}em`,
+    background: 'rgba(255, 255, 255, 0.08)',
+  };
+}
+
+/** Empty blank that fills a fixed per-character slot (width set by parent). */
+export function unrevealedLetterFillStyle(scale = 1): CSSProperties {
+  return {
+    display: 'block',
+    width: '100%',
+    height: '100%',
+    border: `${0.04 * scale}em solid rgba(255, 255, 255, 0.5)`,
+    borderRadius: `${0.055 * scale}em`,
     boxSizing: 'border-box',
     background: 'rgba(255, 255, 255, 0.08)',
   };

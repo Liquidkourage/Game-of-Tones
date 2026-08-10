@@ -48,7 +48,8 @@ import {
   PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX,
   PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY,
   PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT,
-  unrevealedLetterBoxStyle,
+  callLetterSlotStyle,
+  unrevealedLetterFillStyle,
   type CallCardTypography,
 } from '../utils/publicDisplayCallCardText';
 import type { PatternCompositeSpec, PatternCompositeClause } from '../patternDefinitions';
@@ -1512,10 +1513,12 @@ const PublicDisplay: React.FC = () => {
     const contentW = Math.max(32, innerColW - 2 * CALL_CARD_PAD_X_PX);
     // Float notches narrow the *first* line of each text block; later lines use full width.
     const firstLineW = Math.max(24, contentW - 2 * notchW);
+    // Title + artist share one card — leave slack for gap, pad, and letter-slot height.
+    const boxHeightPx = Math.max(20, rowPx - 2 * CALL_CARD_PAD_Y_PX - 6);
     return {
       boxWidthPx: contentW,
       firstLineWidthPx: firstLineW,
-      boxHeightPx: Math.max(24, rowPx - 2 * CALL_CARD_PAD_Y_PX),
+      boxHeightPx,
     };
   }
 
@@ -3723,15 +3726,17 @@ const PublicDisplay: React.FC = () => {
     });
   };
 
-  // Shared helper: render masked text with per-song reveal baseline and optional highlight
+  // Shared helper: render masked text with per-song reveal baseline and optional highlight.
+  // Each A–Z / 0–9 sits in a fixed-width slot (glyph advance) so reveals never resize the word.
   const renderMaskedText = (
     text: string,
     set: Set<string>,
     highlightChar: string | null,
     letterBoxScale = 1,
+    fontWeight = 700,
   ) => {
     if (!text) return null;
-    const boxStyle = unrevealedLetterBoxStyle(letterBoxScale);
+    const blankFill = unrevealedLetterFillStyle(letterBoxScale);
     const tokens = text.split(/(\s+)/); // keep whitespace tokens
     return (
       <span>
@@ -3753,13 +3758,25 @@ const PublicDisplay: React.FC = () => {
                 const u = ch.toUpperCase();
                 if (/^[A-Z0-9]$/.test(u)) {
                   const revealed = set.has(u);
-                  if (revealed) {
-                    const isHighlight = !!highlightChar && u === highlightChar;
-                    return (
-                      <span key={`c-${ti}-${ci}`} style={isHighlight ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' } : undefined}>{ch}</span>
-                    );
-                  }
-                  return <span key={`c-${ti}-${ci}`} style={boxStyle} />;
+                  const isHighlight = revealed && !!highlightChar && u === highlightChar;
+                  const slot = callLetterSlotStyle(u, { scale: letterBoxScale, weight: fontWeight });
+                  return (
+                    <span key={`c-${ti}-${ci}`} style={slot}>
+                      {revealed ? (
+                        <span
+                          style={
+                            isHighlight
+                              ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' }
+                              : undefined
+                          }
+                        >
+                          {ch}
+                        </span>
+                      ) : (
+                        <span style={blankFill} />
+                      )}
+                    </span>
+                  );
                 }
                 return <span key={`c-${ti}-${ci}`}>{ch}</span>;
               })}
@@ -3864,7 +3881,7 @@ const PublicDisplay: React.FC = () => {
           titleMaxLines: Math.max(1, fit.titleLines),
           artistMaxLines: meta.artist?.trim() ? Math.max(1, fit.artistLines) : 0,
           lineHeightScale: fit.lineHeightScale,
-          letterBoxScale: masked ? fit.tileScale ?? 1 : 1,
+          letterBoxScale: 1,
           clampContentHeight: true,
         };
         return typo;
@@ -4060,7 +4077,12 @@ const PublicDisplay: React.FC = () => {
   const renderCallSongLines = (
     songId: string,
     meta: { name: string; artist: string },
-    maskFn: (text: string, set: Set<string>, highlightChar: string | null) => React.ReactNode,
+    maskFn: (
+      text: string,
+      set: Set<string>,
+      highlightChar: string | null,
+      fontWeight: number,
+    ) => React.ReactNode,
   ): { title: React.ReactNode; artist: React.ReactNode | null } => {
     const ui = getCallSongRevealUi(songId);
     const titleCaps = formatCallCardTitle(meta.name || 'Unknown');
@@ -4080,8 +4102,8 @@ const PublicDisplay: React.FC = () => {
       };
     }
     return {
-      title: maskFn(titleCaps || 'UNKNOWN', ui.revealedSet, revealToast),
-      artist: artistCaps ? maskFn(artistCaps, ui.revealedSet, revealToast) : null,
+      title: maskFn(titleCaps || 'UNKNOWN', ui.revealedSet, revealToast, 700),
+      artist: artistCaps ? maskFn(artistCaps, ui.revealedSet, revealToast, 800) : null,
     };
   };
 
@@ -4117,8 +4139,8 @@ const PublicDisplay: React.FC = () => {
     } = opts;
     const typo = typographyForCallCard(songId, meta, isFullCardPattern, layout);
     const uncapThisCard = isFullCardPattern && uncapFullCardCallLayout;
-    const { title, artist } = renderCallSongLines(songId, meta, (t, s, h) =>
-      renderMaskedText(t, s, h, typo.letterBoxScale),
+    const { title, artist } = renderCallSongLines(songId, meta, (t, s, h, weight) =>
+      renderMaskedText(t, s, h, typo.letterBoxScale, weight),
     );
     return (
       <motion.div
