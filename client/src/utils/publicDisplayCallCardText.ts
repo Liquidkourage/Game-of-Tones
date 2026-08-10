@@ -1,8 +1,8 @@
 import type { CSSProperties } from 'react';
 
 /**
- * Per-card typography for public display call rows / bingo cells.
- * Prefer wrapping + optional smaller type over ellipsis (line-clamp).
+ * Per-card call-list typography: one measure → binary-search → paint algorithm.
+ * Host 100% = largest title+artist that fits this card’s box (no fake px / maxScale lid).
  */
 
 /** Title size on call cards; artist is intentionally smaller for hierarchy. */
@@ -11,16 +11,7 @@ export const PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX = 25;
 /** Line-height for title/artist (room for descenders + masked letter tiles). */
 export const PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT = 1.34;
 export const PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT = 1.28;
-/** Slack added to call-song-info max-height budget so glyphs are not clipped. */
-export const PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX = 10;
 
-/**
- * Legacy soft ceilings — do NOT clamp fitted call-card sizes with these.
- * Clamping at 56/40px made host 100% look tiny while 140% raised the ceiling
- * and then clipped artists. Fit owns the size; hostZoom is part of the fit.
- */
-export const PUBLIC_DISPLAY_CALL_TITLE_MAX_PX = 56;
-export const PUBLIC_DISPLAY_CALL_ARTIST_MAX_PX = 40;
 /** Artist size as a fraction of the resolved title size (readable hierarchy). */
 export const PUBLIC_DISPLAY_CALL_ARTIST_MIN_TITLE_RATIO = 0.62;
 export const PUBLIC_DISPLAY_CALL_ARTIST_MAX_TITLE_RATIO = 0.8;
@@ -30,6 +21,20 @@ export const CALL_CARD_COLUMN_PAD_X_PX = 4;
 /** Matches inline / CSS letter-spacing on call title & artist. */
 export const CALL_CARD_TITLE_LETTER_SPACING_EM = 0.04;
 export const CALL_CARD_ARTIST_LETTER_SPACING_EM = 0.02;
+
+/** Gap between title and artist blocks (matches callCardLineStyles artist marginTop). */
+export const CALL_CARD_TITLE_ARTIST_GAP_PX = 4;
+/** Title/artist paddingBottom on clamped cards (3 + 4). */
+export const CALL_CARD_STACK_PAD_PX = 7;
+/** Single canvas↔DOM height slack used by fit + paint clamp. */
+export const CALL_CARD_FIT_HEIGHT_SAFETY_PX = 4;
+
+/** Box is the only lid — high enough that short titles can fill a tall card. */
+const FIT_MAX_SCALE = 12;
+/** Absolute floor — only hit by absurd single-word titles/artists. */
+const FIT_MIN_SCALE = 0.22;
+/** Smallest line-height multiplier the fitter may apply (~10% tighter). */
+const FIT_LINE_HEIGHT_SCALE_MIN = 0.9;
 
 /** Artist px used by fitter + render (hierarchy baked in — no post-fit bump). */
 export function callCardArtistPxForScale(titlePx: number, textScale: number): number {
@@ -41,17 +46,11 @@ export function callCardArtistPxForScale(titlePx: number, textScale: number): nu
 
 /**
  * Render sizes from a per-card fit.
- * `textScale` is relative to TITLE/ARTIST base px; hostZoom multiplies.
  * Fit must be run with the same hostZoom so title+artist still fit.
  */
 export function resolveCallCardFontSizes(opts: {
   textScale: number;
-  /** @deprecated Ignored — use hostZoom. */
-  displayFontScale?: number;
   hostZoom?: number;
-  rowPx?: number;
-  plainFullTitle?: boolean;
-  masked?: boolean;
 }): { titlePx: number; artistPx: number } {
   const zoom = Math.max(
     0.5,
@@ -67,24 +66,14 @@ export function resolveCallCardFontSizes(opts: {
   };
 }
 
-/** ~how many letter-box characters fit per row in a narrow 5×15 call column. */
-const MASKED_CHARS_PER_LINE_TITLE = 12;
-const MASKED_CHARS_PER_LINE_ARTIST = 12;
-/** Plain revealed text wraps wider in the same column (narrow ALL CAPS titles). */
-const PLAIN_CHARS_PER_LINE_TITLE = 22;
-const PLAIN_CHARS_PER_LINE_ARTIST = 22;
-/** Target visible text rows inside one call card (title + artist combined). */
-const CALL_CARD_TOTAL_LINE_BUDGET = 4;
-
 export type CallCardTypography = {
-  /** Scale factor applied to base title/artist sizes (1 = host display % only). */
+  /** Scale factor applied to base title/artist sizes (hostZoom multiplies at paint). */
   textScale: number;
-  dense: boolean;
   titleMaxLines: number;
   artistMaxLines: number;
   /** Scales unrevealed letter-box tiles (em-based). */
   letterBoxScale: number;
-  /** When true, call-song-info uses a computed max-height (masked tiles only). */
+  /** When true, call-song-info clamps to the card box. */
   clampContentHeight: boolean;
   /** Full title at clip start/end (plain text, not letter boxes). */
   plainFullTitle?: boolean;
@@ -95,163 +84,67 @@ export type CallCardTypography = {
   lineHeightScale?: number;
 };
 
-function combinedLength(title: string, artist: string): number {
-  return (title || '').length + (artist || '').length;
-}
-
-/** Estimate wrapped lines for nowrap-per-word masked layout. */
-export function estimateMaskedWrapLines(text: string, charsPerLine: number): number {
-  const trimmed = (text || '').trim();
-  if (!trimmed) return 0;
-  let lines = 1;
-  let current = 0;
-  for (const word of trimmed.split(/\s+/)) {
-    const w = word.length;
-    if (w === 0) continue;
-    if (current === 0) {
-      current = w;
-      continue;
-    }
-    if (current + 1 + w <= charsPerLine) {
-      current += 1 + w;
-    } else {
-      lines += 1;
-      current = w;
-    }
-  }
-  return lines;
-}
-
-/**
- * Shrink type on text-heavy call cards so more fits before hard clip (no …).
- */
-export function computeCallCardTypography(
-  title: string,
-  artist: string,
-  opts: { fullCard: boolean; masked?: boolean },
-): CallCardTypography {
-  if (opts.fullCard) {
-    return {
-      textScale: 1,
-      dense: false,
-      titleMaxLines: 8,
-      artistMaxLines: 6,
-      letterBoxScale: 1,
-      clampContentHeight: false,
-    };
-  }
-
-  const tLen = (title || '').length;
-  const aLen = (artist || '').length;
-  const total = tLen + aLen;
-  const hasArtist = !!(artist || '').trim();
-
-  let textScale = 1;
-  if (total > 64) textScale = 0.88;
-  else if (total > 50) textScale = 0.93;
-  else if (total > 36) textScale = 0.97;
-
-  if (tLen > 52) textScale = Math.min(textScale, 0.78);
-  else if (tLen > 42) textScale = Math.min(textScale, 0.84);
-  if (aLen > 40) textScale = Math.min(textScale, 0.88);
-
-  let titleMaxLines = 3;
-  let artistMaxLines = hasArtist ? 2 : 0;
-
-  if (opts.masked) {
-    const tLines = estimateMaskedWrapLines(title, MASKED_CHARS_PER_LINE_TITLE);
-    /** Letter tiles are wider than plain chars — budget extra lines for short titles like "Big Balls". */
-    const tileLines = tLen > 0 ? Math.ceil(tLen / 7) : 0;
-    const aLines = hasArtist ? estimateMaskedWrapLines(artist, MASKED_CHARS_PER_LINE_ARTIST) : 0;
-    const totalLines = Math.max(tLines, tileLines) + aLines;
-
-    // Only shrink when the line budget is clearly exceeded — never shrink short
-    // titles "because they're short" (that left empty card space on the projector).
-    if (totalLines > CALL_CARD_TOTAL_LINE_BUDGET) {
-      const fit = CALL_CARD_TOTAL_LINE_BUDGET / totalLines;
-      textScale = Math.min(textScale, Math.max(0.52, fit));
-    } else if (totalLines >= 6) textScale = Math.min(textScale, 0.9);
-    else if (totalLines >= 5) textScale = Math.min(textScale, 0.95);
-
-    titleMaxLines = Math.min(Math.max(tLines, tileLines, 2), 5);
-    const titleBudget = Math.min(titleMaxLines, 3);
-    artistMaxLines = hasArtist
-      ? Math.min(Math.max(aLines, 1), Math.max(1, CALL_CARD_TOTAL_LINE_BUDGET - titleBudget + 1))
-      : 0;
-  } else {
-    const tLines = estimateMaskedWrapLines(title, PLAIN_CHARS_PER_LINE_TITLE);
-    const aLines = hasArtist ? estimateMaskedWrapLines(artist, PLAIN_CHARS_PER_LINE_ARTIST) : 0;
-    titleMaxLines = Math.min(Math.max(tLines, 1), 4);
-    artistMaxLines = hasArtist ? Math.min(Math.max(aLines, 1), 2) : 0;
-    if (tLines + aLines >= 6) textScale = Math.min(textScale, 0.88);
-    else if (tLines + aLines >= 5) textScale = Math.min(textScale, 0.93);
-  }
-
-  const dense = textScale < 0.97 || (opts.masked === true && titleMaxLines + artistMaxLines >= 4);
-  /** Tiles use em on the title line — keep at 1 so boxes match revealed letter size. */
-  const letterBoxScale = 1;
-  const clampContentHeight = opts.masked === true;
-
-  return { textScale, dense, titleMaxLines, artistMaxLines, letterBoxScale, clampContentHeight };
-}
-
-/** One typography profile for the whole call board so card-to-card type does not jump. */
-export function unifyCallListTypography(typographies: CallCardTypography[]): CallCardTypography {
-  if (typographies.length === 0) {
-    return {
-      textScale: 1,
-      dense: false,
-      titleMaxLines: 3,
-      artistMaxLines: 2,
-      letterBoxScale: 1,
-      clampContentHeight: true,
-    };
-  }
+/** Uncapped Full Card / blackout (plain titles only) — base × hostZoom, no row lock. */
+export function uncappedFullCardTypography(): CallCardTypography {
   return {
-    /** Row-height cap picks size; keep char-based shrink off the shared board scale. */
     textScale: 1,
-    dense: typographies.some((t) => t.dense),
-    titleMaxLines: Math.max(...typographies.map((t) => t.titleMaxLines)),
-    artistMaxLines: Math.max(...typographies.map((t) => t.artistMaxLines)),
+    titleMaxLines: 8,
+    artistMaxLines: 6,
     letterBoxScale: 1,
-    clampContentHeight: typographies.some((t) => t.clampContentHeight),
-    lineHeightScale: Math.min(...typographies.map((t) => t.lineHeightScale ?? 1)),
+    clampContentHeight: false,
+    plainFullTitle: true,
   };
 }
 
-/** Grow/shrink textScale so title+artist fill one measured row (may exceed 1). */
-export function capCallCardTextScaleForRow(
-  typo: CallCardTypography,
+/** Build paint typography from a successful per-card fit. */
+export function typographyFromCallCardFit(
+  fit: CallCardFitResult,
+  opts: { masked: boolean; plainFullTitle: boolean; hasArtist: boolean },
+): CallCardTypography {
+  return {
+    textScale: fit.textScale,
+    titleMaxLines: Math.max(1, fit.titleLines),
+    artistMaxLines: opts.hasArtist ? Math.max(0, fit.artistLines) : 0,
+    letterBoxScale: 1,
+    clampContentHeight: true,
+    plainFullTitle: opts.plainFullTitle,
+    lineHeightScale: fit.lineHeightScale,
+  };
+}
+
+/**
+ * Emergency when the card box is not measured yet.
+ * Prefer fitCallCardTextBest once geometry exists.
+ */
+export function emergencyCallCardTypography(
   rowHeightPx: number,
-  displayFontScale: number,
-): number {
-  if (rowHeightPx <= 0 || displayFontScale <= 0) return typo.textScale;
+  opts: { plainFullTitle: boolean; hasArtist: boolean },
+): CallCardTypography {
   const textHeightPx = Math.max(32, rowHeightPx - 14);
-  const lhScale = typo.lineHeightScale ?? 1;
-  const atUnitScale =
-    typo.titleMaxLines *
-      PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT *
-      lhScale *
-      PUBLIC_DISPLAY_CALL_TITLE_BASE_PX +
-    typo.artistMaxLines *
-      PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT *
-      lhScale *
-      PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX;
-  if (atUnitScale <= 0) return typo.textScale;
-  const rowCap =
-    ((textHeightPx - PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX) * 0.96) /
-    (atUnitScale * displayFontScale);
-  return Math.max(0.55, Math.min(2.2, rowCap));
+  const atUnit =
+    2 * PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT * PUBLIC_DISPLAY_CALL_TITLE_BASE_PX +
+    (opts.hasArtist
+      ? PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT * PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX +
+        CALL_CARD_TITLE_ARTIST_GAP_PX
+      : 0) +
+    CALL_CARD_STACK_PAD_PX;
+  const textScale =
+    atUnit > 0
+      ? Math.max(FIT_MIN_SCALE, Math.min(FIT_MAX_SCALE, (textHeightPx * 0.96) / atUnit))
+      : 1;
+  return {
+    textScale,
+    titleMaxLines: 3,
+    artistMaxLines: opts.hasArtist ? 2 : 0,
+    letterBoxScale: 1,
+    clampContentHeight: true,
+    plainFullTitle: opts.plainFullTitle,
+    lineHeightScale: 1,
+  };
 }
 
 /* ------------------------------------------------------------------ */
 /* Measurement-based fitting (ground truth for call cards)             */
-/*                                                                     */
-/* The char-count heuristics above guess wrap points; on long titles / */
-/* artists / single words the guess is wrong and the card hard-clips.  */
-/* These helpers measure real glyph widths (canvas measureText with    */
-/* the display font) against the card's actual pixel box and binary-   */
-/* search the largest scale where everything truly fits.               */
 /* ------------------------------------------------------------------ */
 
 /** Call-card titles (Jeopardy-board style): condensed caps. */
@@ -388,15 +281,6 @@ export function callLetterSlotStyle(
     boxSizing: 'border-box',
   };
 }
-/** Gap between title and artist blocks (callCardLineStyles artist marginTop). */
-const TITLE_ARTIST_GAP_PX = 4;
-/** callCardLineStyles paddingBottom on clamped cards (title 3 + artist 4). */
-const CLAMPED_LINE_PADDING_PX = 7;
-/** Vertical safety — small DOM/canvas slack only (was over-padding and starving 100%). */
-const FIT_HEIGHT_SAFETY_PX = 6;
-const FIT_HEIGHT_SAFETY_MASKED_PX = 8;
-/** Absolute floor — only hit by absurd single-word titles/artists (e.g. 30+ char words). */
-const FIT_MIN_SCALE = 0.22;
 
 /** Line-height em used for fit + clamp — letter tiles are taller than plain lh. */
 export function callCardLineHeightEm(
@@ -411,6 +295,27 @@ export function callCardLineHeightEm(
   const lh = base * lineHeightScale;
   if (!masked) return lh;
   return Math.max(lh, getCallTitleCapMetrics().heightEm * 1.08);
+}
+
+/** Title+artist stack height — shared by fitter and paint clamp. */
+export function callCardStackHeightPx(opts: {
+  titleLines: number;
+  artistLines: number;
+  titlePx: number;
+  artistPx: number;
+  lineHeightScale: number;
+  masked: boolean;
+  hasArtist: boolean;
+}): number {
+  const titleLh = callCardLineHeightEm('title', opts.lineHeightScale, opts.masked);
+  const artistLh = callCardLineHeightEm('artist', opts.lineHeightScale, opts.masked);
+  return (
+    opts.titleLines * titleLh * opts.titlePx +
+    (opts.hasArtist
+      ? opts.artistLines * artistLh * opts.artistPx + CALL_CARD_TITLE_ARTIST_GAP_PX
+      : 0) +
+    CALL_CARD_STACK_PAD_PX
+  );
 }
 
 let fitCtxCached: CanvasRenderingContext2D | null | undefined;
@@ -554,10 +459,6 @@ export type CallCardFitOpts = {
   /** Available text height inside the card (after vertical padding). */
   boxHeightPx: number;
   /**
-   * @deprecated Use hostZoom — fit evaluates the same zoom used at render.
-   */
-  displayFontScale?: number;
-  /**
    * Host font % as a multiplier (1 = 100%). Must match resolveCallCardFontSizes
    * so title+artist are fitted as one unit at the size that will actually paint.
    */
@@ -566,14 +467,13 @@ export type CallCardFitOpts = {
   masked: boolean;
   /**
    * Multiplier on masked letter-tile advance (1 = full cap width).
-   * Prefer trying denser tiles via fitCallCardTextBest rather than a hard floor.
    */
   tileScale?: number;
   /** First-line width after reserving both call-number float notches. */
   firstLineWidthPx?: number;
   /** Smallest acceptable scale before we give up and let it clip. */
   minScale?: number;
-  /** Largest scale to try so short titles can fill empty card space (default 2.8). */
+  /** Largest scale to try (default 12 — box is the real lid). */
   maxScale?: number;
 };
 
@@ -586,9 +486,6 @@ export type CallCardFitResult = {
   /** Tile densify used for this fit (1 = full). */
   tileScale?: number;
 };
-
-/** Smallest line-height multiplier the fitter may apply (~10% tighter). */
-const FIT_LINE_HEIGHT_SCALE_MIN = 0.9;
 
 /**
  * Largest textScale where title + artist measurably fit the card box at hostZoom.
@@ -609,7 +506,7 @@ export function fitCallCardText(
     Math.min(3, Number.isFinite(opts.hostZoom) ? (opts.hostZoom as number) : 1),
   );
   const minScale = opts.minScale ?? FIT_MIN_SCALE;
-  const maxScale = opts.maxScale ?? 2.8;
+  const maxScale = opts.maxScale ?? FIT_MAX_SCALE;
   const titleText = formatCallCardTitle((title || '').trim() || 'Unknown');
   const artistText = formatCallCardArtist((artist || '').trim());
   const hasArtist = artistText.length > 0;
@@ -622,8 +519,6 @@ export function fitCallCardText(
       ? opts.firstLineWidthPx
       : opts.boxWidthPx) - 2,
   );
-
-  const heightSafety = opts.masked ? FIT_HEIGHT_SAFETY_MASKED_PX : FIT_HEIGHT_SAFETY_PX;
 
   const evaluate = (
     s: number,
@@ -658,17 +553,20 @@ export function fitCallCardText(
         )
       : { lines: 0, overflowsWidth: false };
 
-    const titleLh = callCardLineHeightEm('title', lineHeightScale, opts.masked);
-    const artistLh = callCardLineHeightEm('artist', lineHeightScale, opts.masked);
-    const heightPx =
-      t.lines * titleLh * titlePx +
-      (hasArtist ? a.lines * artistLh * artistPx + TITLE_ARTIST_GAP_PX : 0) +
-      CLAMPED_LINE_PADDING_PX;
+    const heightPx = callCardStackHeightPx({
+      titleLines: Math.max(1, t.lines),
+      artistLines: a.lines,
+      titlePx,
+      artistPx,
+      lineHeightScale,
+      masked: opts.masked,
+      hasArtist,
+    });
     return {
       fits:
         !t.overflowsWidth &&
         !a.overflowsWidth &&
-        heightPx <= opts.boxHeightPx - heightSafety,
+        heightPx <= opts.boxHeightPx - CALL_CARD_FIT_HEIGHT_SAFETY_PX,
       titleLines: Math.max(1, t.lines),
       artistLines: a.lines,
     };
@@ -688,7 +586,7 @@ export function fitCallCardText(
       };
     }
     let best: CallCardFitResult | null = null;
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 14; i++) {
       const mid = (lo + hi) / 2;
       const r = evaluate(mid, lineHeightScale);
       if (r.fits) {
@@ -740,7 +638,7 @@ export function fitCallCardTextBest(
 
 /** Bingo pattern / winner grid cells (vmin-based sizes get a scale multiplier). */
 export function computeBingoCellTextScale(title: string, artist: string): number {
-  const total = combinedLength(title, artist);
+  const total = (title || '').length + (artist || '').length;
   const tLen = (title || '').length;
   if (total > 55 || tLen > 38) return 0.78;
   if (total > 40 || tLen > 28) return 0.86;

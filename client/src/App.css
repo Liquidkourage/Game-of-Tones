@@ -809,11 +809,6 @@ body {
   margin-top: clamp(2px, 0.35vmin, 4px);
 }
 
-.App .public-display .call-song-info--dense .call-song-name,
-.App .public-display .call-song-info--dense .call-song-artist {
-  letter-spacing: 0.01em;
-}
-
 .App .public-display .bingo-square-text {
   text-overflow: clip;
   overflow: hidden;

@@ -34,20 +34,23 @@ import {
 import './PublicDisplayGlassTheme.css';
 import {
   computeBingoCellTextScale,
-  computeCallCardTypography,
-  capCallCardTextScaleForRow,
   fitCallCardTextBest,
   formatCallCardTitle,
   formatCallCardArtist,
   resolveCallCardFontSizes,
-  unifyCallListTypography,
   maxHeightEm,
+  CALL_CARD_ARTIST_LETTER_SPACING_EM,
   CALL_CARD_COLUMN_PAD_X_PX,
+  CALL_CARD_FIT_HEIGHT_SAFETY_PX,
+  CALL_CARD_TITLE_ARTIST_GAP_PX,
+  CALL_CARD_TITLE_LETTER_SPACING_EM,
   PUBLIC_DISPLAY_CALL_ARTIST_FONT_FAMILY,
-  PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX,
   PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY,
   callCardLineHeightEm,
   callLetterSlotStyle,
+  emergencyCallCardTypography,
+  typographyFromCallCardFit,
+  uncappedFullCardTypography,
   unrevealedLetterFillStyle,
   type CallCardTypography,
 } from '../utils/publicDisplayCallCardText';
@@ -1094,9 +1097,6 @@ const PublicDisplay: React.FC = () => {
     0.5,
     Math.min(3, Number.isFinite(fontSizeMultiplier) ? fontSizeMultiplier : 1),
   );
-  /** Alias for memo deps / legacy call sites — same as hostZoom. */
-  const autoDisplayFontScale = hostZoom;
-
   useLayoutEffect(() => {
     let raf = 0;
     const measure = () => {
@@ -1455,8 +1455,6 @@ const PublicDisplay: React.FC = () => {
     return viewportWidth / visibleCols;
   }, [carouselColWidthMeasuredPx, viewportWidth, visibleCols]);
 
-  const isFullTitleRevealMode =
-    titleRevealMode === 'track_start' || titleRevealMode === 'track_end';
   /**
    * Full Card + letter-reveal: keep the 5-row height lock / measured fitter.
    * Only uncap auto-height stacks when titles are plain (track_start / track_end).
@@ -1520,70 +1518,6 @@ const PublicDisplay: React.FC = () => {
       boxHeightPx,
     };
   }
-
-  /** One typography profile for clip-start/end so mid-game mode switches don't mix letter-scale cards. */
-  const unifiedFullTitleCallTypography = useMemo((): CallCardTypography | null => {
-    void fontsReadyNonce; // re-fit after webfonts load
-    if (!isFullTitleRevealMode || playedOrderForDisplay.length === 0) return null;
-    const typographies = playedOrderForDisplay.map((id) => {
-      const meta = idMetaRef.current[id] || { name: '', artist: '' };
-      return computeCallCardTypography(formatCallCardTitle(meta.name), meta.artist, {
-        fullCard: false,
-        masked: false,
-      });
-    });
-    const unified = unifyCallListTypography(typographies);
-    let textScale = unified.textScale;
-    let titleMaxLines = unified.titleMaxLines;
-    let artistMaxLines = unified.artistMaxLines;
-    let lineHeightScale = unified.lineHeightScale ?? 1;
-    const fitBox = callCardFitBox(columnCallListLayout ? '5x15' : 'carousel', true);
-    if (fitBox) {
-      // Shared board scale = min of per-card fits at current hostZoom.
-      for (const id of playedOrderForDisplay) {
-        const meta = idMetaRef.current[id] || { name: '', artist: '' };
-        const fit = fitCallCardTextBest(formatCallCardTitle(meta.name), meta.artist, {
-          ...fitBox,
-          masked: false,
-          hostZoom,
-        });
-        if (fit) {
-          textScale = Math.min(textScale, fit.textScale);
-          titleMaxLines = Math.max(titleMaxLines, fit.titleLines);
-          artistMaxLines = Math.max(artistMaxLines, fit.artistLines);
-          lineHeightScale = Math.min(lineHeightScale, fit.lineHeightScale);
-        }
-      }
-    } else {
-      const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
-      if (rowPx > 0) {
-        textScale = capCallCardTextScaleForRow(unified, rowPx, 1);
-      }
-    }
-    return {
-      ...unified,
-      textScale,
-      titleMaxLines,
-      artistMaxLines,
-      lineHeightScale,
-      plainFullTitle: true,
-      clampContentHeight: true,
-    };
-  }, [
-    isFullTitleRevealMode,
-    playedOrderForDisplay,
-    columnCallListLayout,
-    fiveBy15CardRowPx,
-    fiveBy15ColWidthPx,
-    carouselCardRowPx,
-    carouselColWidthPx,
-    viewportWidth,
-    carouselViewportHeightPx,
-    autoDisplayFontScale,
-    playedOrderRevision,
-    titleRevealMode,
-    fontsReadyNonce,
-  ]);
 
   useEffect(() => {
     setRevealLayoutNonce((n) => n + 1);
@@ -3849,75 +3783,57 @@ const PublicDisplay: React.FC = () => {
     fullCard: boolean,
     layout: '5x15' | 'carousel' = '5x15',
   ): CallCardTypography => {
+    void fontsReadyNonce; // re-fit after webfonts load
     const ui = getCallSongRevealUi(songId);
     const masked = ui.kind === 'masked';
     const plainFullTitle = ui.kind === 'plain';
+    const hasArtist = !!meta.artist?.trim();
     /** Letter-masked titles never use the uncapped Full Card typography shortcut. */
     const layoutFullCard = fullCard && uncapFullCardCallLayout && !masked;
-    if (!layoutFullCard && isFullTitleRevealMode && unifiedFullTitleCallTypography) {
-      return unifiedFullTitleCallTypography;
+    if (layoutFullCard) {
+      return uncappedFullCardTypography();
     }
-    const titleForFit = formatCallCardTitle(meta.name);
-    let typo = computeCallCardTypography(titleForFit, meta.artist, {
-      fullCard: layoutFullCard,
-      masked,
-    });
 
-    if (!layoutFullCard) {
-      // Per-card max fit at hostZoom — title+artist as one unit; no post-fit blow-up.
-      const fitBox = callCardFitBox(layout, plainFullTitle, masked);
-      const fit = fitBox
-        ? fitCallCardTextBest(titleForFit, meta.artist, {
-            ...fitBox,
-            masked,
-            hostZoom,
-            maxScale: 2.8,
-          })
-        : null;
+    // One path: measure box → fit title+artist at hostZoom → paint.
+    const titleForFit = formatCallCardTitle(meta.name);
+    const fitBox = callCardFitBox(layout, plainFullTitle, masked);
+    if (fitBox) {
+      const fit = fitCallCardTextBest(titleForFit, meta.artist, {
+        ...fitBox,
+        masked,
+        hostZoom,
+      });
       if (fit) {
-        typo = {
-          ...typo,
-          plainFullTitle,
-          textScale: fit.textScale,
-          titleMaxLines: Math.max(1, fit.titleLines),
-          artistMaxLines: meta.artist?.trim() ? Math.max(1, fit.artistLines) : 0,
-          lineHeightScale: fit.lineHeightScale,
-          letterBoxScale: 1,
-          clampContentHeight: true,
-        };
-        return typo;
+        return typographyFromCallCardFit(fit, { masked, plainFullTitle, hasArtist });
       }
     }
 
     const rowPx = layout === '5x15' ? fiveBy15CardRowPx : carouselCardRowPx;
-    if (rowPx > 0 && !layoutFullCard) {
-      typo = {
-        ...typo,
-        plainFullTitle,
-        textScale: capCallCardTextScaleForRow(typo, rowPx, 1),
-        clampContentHeight: true,
-      };
-    } else if (plainFullTitle) {
-      typo = { ...typo, plainFullTitle: true };
+    if (rowPx > 0) {
+      return emergencyCallCardTypography(rowPx, { plainFullTitle, hasArtist });
     }
-    return typo;
+    return {
+      textScale: 1,
+      titleMaxLines: 3,
+      artistMaxLines: hasArtist ? 2 : 0,
+      letterBoxScale: 1,
+      clampContentHeight: true,
+      plainFullTitle,
+      lineHeightScale: 1,
+    };
   };
 
   const callCardLineStyles = (
-    typo: ReturnType<typeof computeCallCardTypography>,
+    typo: CallCardTypography,
     kind: 'title' | 'artist',
     fullCard: boolean,
   ): React.CSSProperties => {
-    const layoutFullCard = fullCard && uncapFullCardCallLayout;
     const lhScale = typo.lineHeightScale ?? 1;
     const masked = !!typo.clampContentHeight && !typo.plainFullTitle;
     const lh = callCardLineHeightEm(kind, lhScale, masked);
-    const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
     const { titlePx, artistPx } = resolveCallCardFontSizes({
       textScale: typo.textScale,
       hostZoom,
-      plainFullTitle: !!typo.plainFullTitle,
-      masked,
     });
     const fontSize = kind === 'title' ? titlePx : artistPx;
     /** Small nudge only — large negative margin was helping text escape the clip box. */
@@ -3931,7 +3847,10 @@ const PublicDisplay: React.FC = () => {
       fontWeight: kind === 'title' ? 700 : 800,
       lineHeight: lh,
       fontSize: `${fontSize}px`,
-      letterSpacing: kind === 'title' ? '0.04em' : undefined,
+      letterSpacing:
+        kind === 'title'
+          ? `${CALL_CARD_TITLE_LETTER_SPACING_EM}em`
+          : `${CALL_CARD_ARTIST_LETTER_SPACING_EM}em`,
       color: kind === 'title' ? '#ffffff' : '#e0e0e0',
       textShadow:
         kind === 'title' ? '0 2px 6px rgba(0,0,0,0.8)' : '0 2px 4px rgba(0,0,0,0.6)',
@@ -3942,7 +3861,13 @@ const PublicDisplay: React.FC = () => {
       overflow: 'visible',
       textOverflow: 'clip',
       marginTop:
-        kind === 'title' ? -titleTopNudgePx : kind === 'artist' ? (fullCard ? 6 : 4) : 0,
+        kind === 'title'
+          ? -titleTopNudgePx
+          : kind === 'artist'
+            ? fullCard
+              ? 6
+              : CALL_CARD_TITLE_ARTIST_GAP_PX
+            : 0,
       paddingBottom:
         !fullCard && typo.clampContentHeight
           ? kind === 'title'
@@ -3956,9 +3881,9 @@ const PublicDisplay: React.FC = () => {
   };
 
   const callSongInfoStyles = (
-    typo: ReturnType<typeof computeCallCardTypography>,
+    typo: CallCardTypography,
     fullCard: boolean,
-    hasArtist: boolean,
+    _hasArtist: boolean,
   ): React.CSSProperties => {
     // Full claimable area — no standing gutters. Only the two corner notches
     // (floated) are reserved; every other pixel is available to title/artist.
@@ -3979,30 +3904,15 @@ const PublicDisplay: React.FC = () => {
     }
     const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
     const boxH = rowPx > 0 ? Math.max(24, rowPx - 2 * CALL_CARD_PAD_Y_PX) : 0;
-    const lhScale = typo.lineHeightScale ?? 1;
-    const masked = !typo.plainFullTitle;
-    const { titlePx, artistPx } = resolveCallCardFontSizes({
-      textScale: typo.textScale,
-      hostZoom,
-      plainFullTitle: !!typo.plainFullTitle,
-      masked,
-    });
-    // Same line-box math as fitCallCardText (letter tiles taller than plain lh).
-    const titleLh = callCardLineHeightEm('title', lhScale, masked);
-    const artistLh = callCardLineHeightEm('artist', lhScale, masked);
-    const titleBlock = typo.titleMaxLines * titleLh * titlePx;
-    const artistBlock = hasArtist
-      ? typo.artistMaxLines * artistLh * artistPx + 4
-      : 0;
-    const contentH = Math.round(
-      titleBlock + artistBlock + PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX,
-    );
-    // Never allow the text stack taller than the card’s claimable height.
-    const maxH = boxH > 0 ? Math.min(contentH, boxH) : contentH;
-    return {
-      ...base,
-      maxHeight: `${maxH}px`,
-    };
+    // Clamp to the card box (same budget the fitter used), not a tighter content guess.
+    const maxH =
+      boxH > 0 ? Math.max(24, boxH - CALL_CARD_FIT_HEIGHT_SAFETY_PX) : undefined;
+    return maxH != null
+      ? {
+          ...base,
+          maxHeight: `${maxH}px`,
+        }
+      : base;
   };
 
   /**
@@ -4177,7 +4087,7 @@ const PublicDisplay: React.FC = () => {
         {renderCallNumberOverlay(callNum, isFullCardPattern)}
         <div style={{ display: 'block', width: '100%', minWidth: 0 }}>
           <div
-            className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
+            className="call-song-info"
             style={callSongInfoStyles(typo, isFullCardPattern, !!meta.artist?.trim())}
           >
             {renderCallCardCornerNotches(callNum)}
