@@ -413,40 +413,39 @@ function spaceWidthUnits(weight: number, fontFamily: string): number {
 
 type MeasuredWrap = {
   lines: number;
-  /** True when a single glyph/tile is wider than the line (cannot fit even alone). */
+  /** True when an unbreakable segment is wider than the line. */
   overflowsWidth: boolean;
 };
 
-/** Width of one masked character slot at fontPx (advance + optional letter-spacing after). */
-function maskedCharWidthPx(
-  ch: string,
-  fontPx: number,
-  weight: number,
-  fontFamily: string,
-  tileScale: number,
-  letterSpacingEm: number,
-  addSpacingAfter: boolean,
-): number {
-  const scale = fontPx / FIT_REF_PX;
-  let units: number;
-  if (/[A-Za-z0-9]/.test(ch)) {
-    units = getCallCharAdvanceEm(ch, weight, fontFamily) * FIT_REF_PX * tileScale;
-  } else {
-    const ctx = getFitCtx();
-    if (!ctx) {
-      units = CAP_METRICS_FALLBACK.widthEm * FIT_REF_PX * tileScale;
-    } else {
-      ctx.font = `${weight} ${FIT_REF_PX}px ${fontFamily}`;
-      units = ctx.measureText(ch).width;
+/** Soft wrap points: spaces, hyphens, dashes, slashes — never mid-letter. */
+const CALL_CARD_SOFT_BREAK_RE = /([^\s\-–—/]+|[\-–—/]+|\s+)/g;
+
+/** Split title/artist into unbreakable runs + soft-break glue (hyphen stays with prior run). */
+export function callCardWrapSegments(text: string): string[] {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return [];
+  const raw = trimmed.match(CALL_CARD_SOFT_BREAK_RE) || [trimmed];
+  const out: string[] = [];
+  for (const part of raw) {
+    if (!part || /^\s+$/.test(part)) {
+      out.push(' ');
+      continue;
     }
+    if (/^[\-–—/]+$/.test(part)) {
+      // Keep hyphen/slash glued to the previous segment so we break *after* it.
+      if (out.length > 0 && out[out.length - 1] !== ' ') {
+        out[out.length - 1] += part;
+      } else {
+        out.push(part);
+      }
+      continue;
+    }
+    out.push(part);
   }
-  if (addSpacingAfter && letterSpacingEm > 0) {
-    units += letterSpacingEm * FIT_REF_PX;
-  }
-  return units * scale;
+  return out;
 }
 
-/** Greedy wrap with real measured widths. Masked: break inside words at letter tiles. */
+/** Greedy wrap: break on spaces / hyphens / dashes / slashes only — never mid-letter. */
 function measuredWrapLines(
   text: string,
   fontPx: number,
@@ -472,63 +471,26 @@ function measuredWrapLines(
   let overflowsWidth = false;
   const lineWidth = () => (lines === 1 ? firstW : maxWidthPx);
 
-  const breakMaskedWord = (word: string) => {
-    const chars = Array.from(word);
-    if (current > 0) {
-      lines += 1;
-      current = 0;
+  for (const seg of callCardWrapSegments(trimmed)) {
+    if (seg === ' ') {
+      // Soft space: only counts if something already on the line.
+      if (current > 0) current += spacePx;
+      continue;
     }
-    for (let i = 0; i < chars.length; i++) {
-      const chW = maskedCharWidthPx(
-        chars[i],
-        fontPx,
-        weight,
-        fontFamily,
-        tileScale,
-        letterSpacingEm,
-        i < chars.length - 1,
-      );
-      const avail = lineWidth();
-      if (chW > avail) {
-        overflowsWidth = true;
-        if (current > 0) {
-          lines += 1;
-          current = 0;
-        }
-        current = avail;
-        continue;
-      }
-      if (current > 0 && current + chW > avail) {
-        lines += 1;
-        current = chW;
-      } else {
-        current += chW;
-      }
-    }
-  };
-
-  for (const word of trimmed.split(/\s+/)) {
-    if (!word) continue;
     const w =
-      wordWidthUnits(word, weight, masked, fontFamily, tileScale, letterSpacingEm) * scale;
+      wordWidthUnits(seg, weight, masked, fontFamily, tileScale, letterSpacingEm) * scale;
     const avail = lineWidth();
     if (w > avail) {
-      if (masked) {
-        // Full kerning — wrap at letter boundaries instead of densifying tiles.
-        breakMaskedWord(word);
-        continue;
-      }
-      // Plain text has overflow-wrap:anywhere — the word splits across lines.
+      // Unbreakable segment wider than the line — must shrink type (no letter split).
+      overflowsWidth = true;
       if (current > 0) lines += 1;
-      const chunks = Math.max(1, Math.ceil(w / lineWidth()));
-      lines += chunks - 1;
-      current = w - (chunks - 1) * lineWidth();
+      current = avail;
       continue;
     }
     if (current === 0) {
       current = w;
-    } else if (current + spacePx + w <= avail) {
-      current += spacePx + w;
+    } else if (current + w <= avail) {
+      current += w;
     } else {
       lines += 1;
       current = w;
@@ -714,9 +676,8 @@ export function fitCallCardText(
 }
 
 /**
- * Per-card max-fill fit at full letter advances (no densify / kerning squash).
- * Masked titles wrap at letter boundaries so horizontal pressure becomes lines,
- * then type grows until title+artist fill the fixed card without spill.
+ * Per-card max-fill fit at full letter advances (no densify).
+ * Soft wraps on spaces/hyphens/dashes/slashes only — never mid-letter.
  */
 export function fitCallCardTextBest(
   title: string,

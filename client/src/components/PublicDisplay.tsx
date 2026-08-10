@@ -37,6 +37,7 @@ import {
   fitCallCardTextBest,
   formatCallCardTitle,
   formatCallCardArtist,
+  callCardWrapSegments,
   resolveCallCardFontSizes,
   maxHeightEm,
   CALL_CARD_ARTIST_LETTER_SPACING_EM,
@@ -3617,18 +3618,20 @@ const PublicDisplay: React.FC = () => {
   ) => {
     if (!text) return null;
     const blankFill = unrevealedLetterFillStyle(letterBoxScale);
-    const tokens = text.split(/(\s+)/); // keep whitespace tokens
+    // Soft breaks on spaces / hyphens / dashes / slashes only — never mid-letter.
+    const segments = callCardWrapSegments(text);
     return (
       <span style={{ whiteSpace: 'normal' }}>
-        {tokens.map((token, ti) => {
-          // Preserve whitespace exactly
-          if (/^\s+$/.test(token)) {
-            return <span key={`ws-${ti}`}>{token}</span>;
+        {segments.map((seg, si) => {
+          if (seg === ' ') {
+            return <span key={`ws-${si}`}>{' '}</span>;
           }
-          const chars = Array.from(token);
-          // Full kerning tiles may wrap at letter boundaries (no densify, no nowrap squash).
+          const chars = Array.from(seg);
           return (
-            <span key={`w-${ti}`}>
+            <span
+              key={`seg-${si}`}
+              style={{ whiteSpace: 'nowrap', display: 'inline-block' }}
+            >
               {chars.map((ch, ci) => {
                 const u = ch.toUpperCase();
                 if (/^[A-Z0-9]$/.test(u)) {
@@ -3636,7 +3639,7 @@ const PublicDisplay: React.FC = () => {
                   const isHighlight = revealed && !!highlightChar && u === highlightChar;
                   const slot = callLetterSlotStyle(u, { scale: letterBoxScale, weight: fontWeight });
                   return (
-                    <span key={`c-${ti}-${ci}`} style={slot}>
+                    <span key={`c-${si}-${ci}`} style={slot}>
                       {revealed ? (
                         <span
                           style={
@@ -3653,7 +3656,7 @@ const PublicDisplay: React.FC = () => {
                     </span>
                   );
                 }
-                return <span key={`c-${ti}-${ci}`}>{ch}</span>;
+                return <span key={`c-${si}-${ci}`}>{ch}</span>;
               })}
             </span>
           );
@@ -3795,8 +3798,9 @@ const PublicDisplay: React.FC = () => {
       textShadow:
         kind === 'title' ? '0 2px 6px rgba(0,0,0,0.8)' : '0 2px 4px rgba(0,0,0,0.6)',
       whiteSpace: 'normal',
-      wordBreak: 'break-word',
-      overflowWrap: 'anywhere',
+      // Soft wraps only (spaces / hyphens) — never mid-letter.
+      wordBreak: 'normal',
+      overflowWrap: 'normal',
       display: 'block',
       overflow: 'visible',
       textOverflow: 'clip',

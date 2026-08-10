@@ -243,7 +243,8 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
     if (!poolSongs.length) return [];
     const idx = currentSong ? poolSongs.findIndex((s) => s.id === currentSong.id) : -1;
     const start = idx >= 0 ? idx + 1 : 0;
-    return poolSongs.slice(start, start + 6).map((song, i) => ({
+    // Full remainder of the play order (through #75) — list scrolls in the panel.
+    return poolSongs.slice(start).map((song, i) => ({
       song,
       callNumber: start + i + 1,
     }));
