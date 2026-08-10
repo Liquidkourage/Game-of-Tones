@@ -14,6 +14,78 @@ export const PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT = 1.28;
 /** Slack added to call-song-info max-height budget so glyphs are not clipped. */
 export const PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX = 10;
 
+/**
+ * Absolute px bounds at host 100% (multiplied by hostZoom at render).
+ * Keeps short letter-reveal titles from ballooning and artists from going unreadably small.
+ */
+export const PUBLIC_DISPLAY_CALL_TITLE_MIN_PX = 18;
+export const PUBLIC_DISPLAY_CALL_TITLE_MAX_PX = 42;
+export const PUBLIC_DISPLAY_CALL_ARTIST_MIN_PX = 15;
+export const PUBLIC_DISPLAY_CALL_ARTIST_MAX_PX = 28;
+/** Artist size as a fraction of the resolved title size (readable hierarchy). */
+export const PUBLIC_DISPLAY_CALL_ARTIST_MIN_TITLE_RATIO = 0.62;
+export const PUBLIC_DISPLAY_CALL_ARTIST_MAX_TITLE_RATIO = 0.8;
+
+/** Clamp title + artist px together so both stay in range and keep hierarchy. */
+export function resolveCallCardFontSizes(opts: {
+  textScale: number;
+  displayFontScale: number;
+  hostZoom?: number;
+  rowPx?: number;
+  plainFullTitle?: boolean;
+  masked?: boolean;
+}): { titlePx: number; artistPx: number } {
+  const dfs = opts.displayFontScale > 0 ? opts.displayFontScale : 1;
+  const zoom = Math.max(
+    0.5,
+    Math.min(3, Number.isFinite(opts.hostZoom) ? (opts.hostZoom as number) : 1),
+  );
+  const scale = Number.isFinite(opts.textScale) ? opts.textScale : 1;
+  const row = opts.rowPx && opts.rowPx > 0 ? opts.rowPx : 0;
+
+  const titleFrac = opts.plainFullTitle ? 0.4 : opts.masked ? 0.42 : 0.4;
+  const artistFrac = opts.plainFullTitle ? 0.22 : opts.masked ? 0.24 : 0.22;
+
+  let titlePx = Math.round(PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * dfs * scale);
+  let artistPx = Math.round(PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX * dfs * scale);
+
+  const titleMin = Math.round(
+    Math.max(PUBLIC_DISPLAY_CALL_TITLE_MIN_PX, row > 0 ? row * 0.16 : 0) * zoom,
+  );
+  const titleMax = Math.round(
+    Math.min(
+      PUBLIC_DISPLAY_CALL_TITLE_MAX_PX * zoom,
+      row > 0 ? row * titleFrac * zoom : PUBLIC_DISPLAY_CALL_TITLE_MAX_PX * zoom,
+    ),
+  );
+  const artistMin = Math.round(
+    Math.max(PUBLIC_DISPLAY_CALL_ARTIST_MIN_PX, row > 0 ? row * 0.12 : 0) * zoom,
+  );
+  const artistMax = Math.round(
+    Math.min(
+      PUBLIC_DISPLAY_CALL_ARTIST_MAX_PX * zoom,
+      row > 0 ? row * artistFrac * zoom : PUBLIC_DISPLAY_CALL_ARTIST_MAX_PX * zoom,
+    ),
+  );
+
+  titlePx = Math.min(Math.max(titlePx, titleMin), Math.max(titleMin, titleMax));
+  artistPx = Math.min(Math.max(artistPx, artistMin), Math.max(artistMin, artistMax));
+
+  // Keep artist readable relative to the title (never a microscopic subtitle).
+  const relMin = Math.round(titlePx * PUBLIC_DISPLAY_CALL_ARTIST_MIN_TITLE_RATIO);
+  const relMax = Math.round(titlePx * PUBLIC_DISPLAY_CALL_ARTIST_MAX_TITLE_RATIO);
+  artistPx = Math.max(artistPx, artistMin, relMin);
+  artistPx = Math.min(artistPx, artistMax, relMax);
+  // If relative min exceeds artist max, pull title down so hierarchy still fits.
+  if (relMin > artistMax) {
+    artistPx = artistMax;
+    const titleFromArtist = Math.round(artistPx / PUBLIC_DISPLAY_CALL_ARTIST_MIN_TITLE_RATIO);
+    titlePx = Math.min(titlePx, Math.max(titleMin, titleFromArtist));
+  }
+
+  return { titlePx, artistPx };
+}
+
 /** ~how many letter-box characters fit per row in a narrow 5×15 call column. */
 const MASKED_CHARS_PER_LINE_TITLE = 12;
 const MASKED_CHARS_PER_LINE_ARTIST = 12;

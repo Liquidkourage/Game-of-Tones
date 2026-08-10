@@ -40,6 +40,7 @@ import {
   fitCallCardText,
   formatCallCardTitle,
   formatCallCardArtist,
+  resolveCallCardFontSizes,
   unifyCallListTypography,
   maxHeightEm,
   PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX,
@@ -3882,12 +3883,15 @@ const PublicDisplay: React.FC = () => {
       /** Narrow 5-col projectors: denser letter tiles unlock larger host-100% type. */
       let usedTileScale =
         masked && colWidthPx > 0 && colWidthPx < 220 ? 0.78 : masked ? 0.9 : 1;
+      /** Letter-reveal: don't grow short titles past ~1.15× — min/max px clamps handle fill. */
+      const fitMaxScale = masked ? 1.15 : 2.2;
       let fit = fitBox
         ? fitCallCardText(titleForFit, meta.artist, {
             ...fitBox,
             displayFontScale: autoDisplayFontScale,
             masked,
             tileScale: usedTileScale,
+            maxScale: fitMaxScale,
           })
         : null;
       // If still cramped, try denser tiles once more before accepting a small scale.
@@ -3898,6 +3902,7 @@ const PublicDisplay: React.FC = () => {
           displayFontScale: autoDisplayFontScale,
           masked,
           tileScale: denserScale,
+          maxScale: fitMaxScale,
         });
         if (denser && denser.textScale > fit.textScale) {
           fit = denser;
@@ -3940,26 +3945,21 @@ const PublicDisplay: React.FC = () => {
     fullCard: boolean,
   ): React.CSSProperties => {
     const layoutFullCard = fullCard && uncapFullCardCallLayout;
-    const basePx =
-      kind === 'title' ? PUBLIC_DISPLAY_CALL_TITLE_BASE_PX : PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX;
     const lhScale = typo.lineHeightScale ?? 1;
     const lh =
       (kind === 'title'
         ? PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT
         : PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT) * lhScale;
-    let fontSize = Math.round(basePx * displayFontScale * typo.textScale);
     const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
-    if (rowPx > 0 && !layoutFullCard) {
-      const titleFrac = typo.plainFullTitle ? 0.42 : typo.clampContentHeight ? 0.52 : 0.46;
-      const artistFrac = typo.plainFullTitle ? 0.24 : typo.clampContentHeight ? 0.28 : 0.26;
-      // Caps scale with the host zoom so the failsafe slider stays a uniform
-      // multiplier — at 100% these are the same row-fraction caps the fitter saw.
-      const maxPx =
-        kind === 'title'
-          ? Math.round(rowPx * titleFrac * hostZoom)
-          : Math.round(rowPx * artistFrac * hostZoom);
-      if (maxPx > 0) fontSize = Math.min(fontSize, maxPx);
-    }
+    const { titlePx, artistPx } = resolveCallCardFontSizes({
+      textScale: typo.textScale,
+      displayFontScale,
+      hostZoom,
+      rowPx: layoutFullCard ? 0 : rowPx,
+      plainFullTitle: !!typo.plainFullTitle,
+      masked: !!typo.clampContentHeight && !typo.plainFullTitle,
+    });
+    const fontSize = kind === 'title' ? titlePx : artistPx;
     /** Small nudge only — large negative margin was helping text escape the clip box. */
     const titleTopNudgePx =
       kind === 'title' ? Math.round(fontSize * (lh - 1) * 0.15) : 0;
@@ -4020,8 +4020,14 @@ const PublicDisplay: React.FC = () => {
     const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
     const boxH = rowPx > 0 ? Math.max(24, rowPx - 2 * CALL_CARD_PAD_Y_PX) : 0;
     const lhScale = typo.lineHeightScale ?? 1;
-    const titlePx = Math.round(PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * displayFontScale * typo.textScale);
-    const artistPx = Math.round(PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX * displayFontScale * typo.textScale);
+    const { titlePx, artistPx } = resolveCallCardFontSizes({
+      textScale: typo.textScale,
+      displayFontScale,
+      hostZoom,
+      rowPx,
+      plainFullTitle: !!typo.plainFullTitle,
+      masked: !typo.plainFullTitle,
+    });
     const titleBlock =
       typo.titleMaxLines * PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT * lhScale * titlePx;
     const artistBlock = hasArtist
