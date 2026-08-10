@@ -924,21 +924,133 @@ function emitDisplayPresence(roomId, room) {
   io.to(roomId).emit('display-presence', buildDisplayPresencePayload(room));
 }
 
-/** Re-play the current pool index without advancing (host bump → new snippet start). */
+/**
+ * Re-play the current pool index without advancing (host bump → new snippet start).
+ * Spotify: prefer seek/resume on the current track (no transfer + 800ms settle).
+ * Returns a real success/failure for the host toast.
+ */
 async function replayCurrentSnippet(roomId, deviceId) {
   const room = rooms.get(roomId);
-  if (!room || room.gameState !== 'playing' || !Array.isArray(room.playlistSongs) || !room.playlistSongs.length) {
+  if (!room || !Array.isArray(room.playlistSongs) || !room.playlistSongs.length) {
+    return { ok: false, error: 'not_playing' };
+  }
+  const bumpable =
+    room.gameState === 'playing' ||
+    room.gameState === 'paused_for_verification' ||
+    room.gameState === 'paused';
+  if (!bumpable) {
     return { ok: false, error: 'not_playing' };
   }
   const idx = typeof room.currentSongIndex === 'number' ? room.currentSongIndex : -1;
   if (idx < 0 || idx >= room.playlistSongs.length) {
     return { ok: false, error: 'no_current' };
   }
+  const song = room.playlistSongs[idx];
+  if (!song?.id) {
+    return { ok: false, error: 'no_current' };
+  }
+
+  // Lift bingo/host pause so the new clip can run; invalidate in-flight bingo pause.
+  if (room.gameState !== 'playing') {
+    room._bingoPauseGen = (room._bingoPauseGen || 0) + 1;
+    room.gameState = 'playing';
+  }
+  room.snippetPausedElapsedMs = null;
+  room.snippetPausedAtMs = null;
+
   clearRoomTimer(roomId);
   clearPlaybackWatcher(roomId);
   const dev = deviceId || room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id || '';
-  await playSongAtIndex(roomId, dev, idx, { bump: true });
-  return { ok: true, songIndex: idx };
+
+  // Host-browser (YouTube / Apple): emit new start — no Spotify round-trips.
+  if (songUsesHostBrowserPlayback(song)) {
+    const result = await playSongAtIndex(roomId, dev, idx, { bump: true });
+    if (result?.ok) return { ok: true, songIndex: idx, startMs: result.startMs };
+    return { ok: false, error: result?.error || 'playback_failed', songIndex: idx };
+  }
+
+  // Spotify: seek-first when already on this track; fall back to a lean startPlayback.
+  try {
+    let sp = null;
+    try {
+      sp = spotifyFor(roomId);
+    } catch {
+      /* ignore */
+    }
+    if (sp && sp.isQuarantined()) {
+      return { ok: false, error: 'spotify_quarantined', songIndex: idx };
+    }
+
+    let targetDeviceId = dev;
+    if (!targetDeviceId) {
+      return { ok: false, error: 'no_device', songIndex: idx };
+    }
+    targetDeviceId = await resolveRoomSpotifyPlaybackDeviceId(roomId, room, targetDeviceId, null);
+    if (spotifyDevices.isVenueSpotifyJamMode(room) && !spotifyDevices.isSpotifyJamDeviceId(targetDeviceId)) {
+      io.to(roomId).emit('playback-error', {
+        message:
+          'Venue Jam mode is on but no Jam session was found. Start Jam on the venue speaker, refresh devices in Connection, then try again.',
+        type: 'jam_not_found',
+      });
+      return { ok: false, error: 'jam_not_found', songIndex: idx };
+    }
+    room.selectedDeviceId = targetDeviceId;
+
+    const startMs = computeBumpSnippetStartMs(room, song, {
+      avoidMs: room.currentSongStartMs,
+      contextLabel: 'bump-spotify',
+    });
+    routineServerLog(
+      `🔁 Bump snippet start → ${startMs}ms (${Math.floor(startMs / 1000)}s) for ${song.name}`,
+    );
+
+    const sameTrack = room.currentSong?.id === song.id;
+    const t0 = Date.now();
+    if (sameTrack && sp) {
+      try {
+        await sp.resumePlayback(targetDeviceId);
+      } catch (resumeErr) {
+        routineServerLog(`⚠️ Bump resume before seek: ${resumeErr?.message || resumeErr}`);
+      }
+      await sp.seekToPosition(startMs, targetDeviceId);
+      routineServerLog(`✅ Bump seek completed in ${Date.now() - t0}ms (same track)`);
+    } else if (sp) {
+      // Lean restart: no transfer retries, no 800ms volume settle.
+      await sp.startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs);
+      routineServerLog(`✅ Bump startPlayback completed in ${Date.now() - t0}ms`);
+    } else {
+      return { ok: false, error: 'no_spotify', songIndex: idx };
+    }
+
+    room.currentSong = {
+      id: song.id,
+      name: song.name,
+      artist: song.artist,
+      explicit: song.explicit === true,
+    };
+    room.currentSongStartMs = startMs;
+    room.songStartAtMs = Date.now();
+    emitSongPlayingToRoom(roomId, room, song, idx);
+    sendPlayerCardUpdates(roomId, true);
+    startSimpleProgression(roomId, targetDeviceId, room.snippetLength);
+    io.to(roomId).emit('game-resumed', { reason: 'Host bumped clip' });
+    return { ok: true, songIndex: idx, startMs };
+  } catch (e) {
+    routineServerLog(`⚠️ Fast bump failed (${e?.message || e}) — trying full playSongAtIndex`);
+    const result = await playSongAtIndex(roomId, dev, idx, {
+      bump: true,
+      skipStabilization: true,
+    });
+    if (result?.ok) {
+      io.to(roomId).emit('game-resumed', { reason: 'Host bumped clip' });
+      return { ok: true, songIndex: idx, startMs: result.startMs };
+    }
+    return {
+      ok: false,
+      error: result?.error || e?.message || 'playback_failed',
+      songIndex: idx,
+    };
+  }
 }
 
 /** Mark current song as called (pool + display) without advancing playback. */
@@ -1273,18 +1385,37 @@ function setRoomTimer(roomId, callback, delay) {
   routineServerLog(`⏰ Set timer for room ${roomId}: ${actualDelay}ms (${actualDelay/1000}s)`);
 }
 
-// Play song at specific index without changing the index
+// Play song at specific index without changing the index.
+// Returns { ok, error?, startMs? } so bump/undo can report real success.
 async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
   routineServerLog(`🎵 Playing song at index ${songIndex} for room:`, roomId);
   const room = rooms.get(roomId);
-  if (!room || room.gameState !== 'playing' || !room.playlistSongs) {
-    routineServerLog('❌ Cannot play song: Room not in playing state or no playlist songs');
-    return;
+  if (!room || !room.playlistSongs) {
+    routineServerLog('❌ Cannot play song: Room missing or no playlist songs');
+    return { ok: false, error: 'no_playlist' };
   }
   const bump = options?.bump === true;
+  const skipStabilization = options?.skipStabilization === true || bump;
+  if (room.gameState !== 'playing') {
+    if (!bump) {
+      routineServerLog('❌ Cannot play song: Room not in playing state or no playlist songs');
+      return { ok: false, error: 'not_playing' };
+    }
+    // Bump may lift pause; allow play once state is playing.
+    if (
+      room.gameState !== 'paused_for_verification' &&
+      room.gameState !== 'paused'
+    ) {
+      return { ok: false, error: 'not_playing' };
+    }
+    room.gameState = 'playing';
+  }
 
   try {
     const song = room.playlistSongs[songIndex];
+    if (!song?.id) {
+      return { ok: false, error: 'no_current' };
+    }
     routineServerLog(`🎵 Playing song ${songIndex + 1}/${room.playlistSongs.length}: ${song.name} by ${song.artist}`);
 
     if (songUsesHostBrowserPlayback(song)) {
@@ -1318,7 +1449,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
       const saved = loadSavedDeviceForRoom(roomId);
       const dev = deviceId || (saved && saved.id) || '';
       startSimpleProgression(roomId, dev, room.snippetLength);
-      return;
+      return { ok: true, startMs };
     }
 
     // STRICT device control: use provided device or saved device only
@@ -1333,7 +1464,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
     if (!targetDeviceId) {
       console.error('❌ Strict mode: no locked device available for playback');
       io.to(roomId).emit('playback-error', { message: 'Locked device not available. Open Spotify on your chosen device or reselect in Host.' });
-          return;
+      return { ok: false, error: 'no_device' };
     }
 
     targetDeviceId = await resolveRoomSpotifyPlaybackDeviceId(roomId, room, targetDeviceId, null);
@@ -1343,14 +1474,21 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
           'Venue Jam mode is on but no Jam session was found. Start Jam on the venue speaker, refresh devices in Connection, then try again.',
         type: 'jam_not_found',
       });
-      return;
+      return { ok: false, error: 'jam_not_found' };
     }
     room.selectedDeviceId = targetDeviceId;
 
-    try {
-      await spotifyFor(roomId).withRetries('transferPlayback(initial)', () => spotifyFor(roomId).transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
-    } catch (e) {
-      console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
+    // Bump fallback: skip transfer retries (device should already be active).
+    if (!skipStabilization) {
+      try {
+        await spotifyFor(roomId).withRetries(
+          'transferPlayback(initial)',
+          () => spotifyFor(roomId).transferPlayback(targetDeviceId, false),
+          { attempts: 3, backoffMs: 300 },
+        );
+      } catch (e) {
+        console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
+      }
     }
     routineServerLog(`🎵 Starting playback on device: ${targetDeviceId}`);
 
@@ -1373,17 +1511,22 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
       await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs);
       const endTime = Date.now();
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId} (took ${endTime - startTime}ms)`);
-      
-      // Stabilization delay to prevent context hijacks from volume changes
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Set initial volume to 100% (or room's saved volume) with single retry
+
+      if (!skipStabilization) {
+        // Stabilization delay to prevent context hijacks from volume changes
+        await new Promise((resolve) => setTimeout(resolve, 800));
+
         try {
           const initialVolume = room.volume || 100;
-        await spotifyFor(roomId).withRetries('setVolume(index)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
-        routineServerLog(`🔊 Set initial volume to ${initialVolume}%`);
+          await spotifyFor(roomId).withRetries(
+            'setVolume(index)',
+            () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId),
+            { attempts: 2, backoffMs: 300 },
+          );
+          routineServerLog(`🔊 Set initial volume to ${initialVolume}%`);
         } catch (volumeError) {
-        console.warn('⚠️ Volume setting failed, continuing anyway:', volumeError?.message || volumeError);
+          console.warn('⚠️ Volume setting failed, continuing anyway:', volumeError?.message || volumeError);
+        }
       }
     } catch (playbackError) {
       console.error('❌ Error starting playback:', playbackError);
@@ -1405,7 +1548,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
       } else {
         io.to(roomId).emit('playback-error', { message: 'Playback failed on locked device. Ensure it is online and try again.' });
       }
-            return;
+      return { ok: false, error: errorMsg || 'playback_failed' };
     }
 
     room.currentSong = {
@@ -1431,23 +1574,27 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
 
     // Use simplified progression system
     startSimpleProgression(roomId, targetDeviceId, room.snippetLength);
+    return { ok: true, startMs };
   } catch (error) {
     console.error('❌ Error playing song at index:', error);
-    const room = rooms.get(roomId);
-    const sp = room ? spotifyFor(roomId) : null;
-    if (room && isSpotifyRateLimitOrQuarantineError(error, sp)) {
-      lockRoomSpotifyPlayback(roomId, room, 'play_at_index_429', sp);
-      return;
+    const live = rooms.get(roomId);
+    const sp = live ? spotifyFor(roomId) : null;
+    if (live && isSpotifyRateLimitOrQuarantineError(error, sp)) {
+      lockRoomSpotifyPlayback(roomId, live, 'play_at_index_429', sp);
+      return { ok: false, error: 'spotify_quarantined' };
     }
-    // Soft one-shot only (never infinite 3s 429 storm)
-    clearSpotifyCallRetryTimer(room);
-    if (room) {
-      room._spotifyCallRetryTimer = setTimeout(() => {
-        room._spotifyCallRetryTimer = null;
-        if (!roomStillPlaying(roomId) || room._spotifyAdvanceLocked) return;
-        playNextSongSimple(roomId, deviceId, { retrying: true });
-      }, 3000);
+    // Soft one-shot only (never infinite 3s 429 storm) — never advance on bump failure.
+    if (!bump) {
+      clearSpotifyCallRetryTimer(live);
+      if (live) {
+        live._spotifyCallRetryTimer = setTimeout(() => {
+          live._spotifyCallRetryTimer = null;
+          if (!roomStillPlaying(roomId) || live._spotifyAdvanceLocked) return;
+          playNextSongSimple(roomId, deviceId, { retrying: true });
+        }, 3000);
+      }
     }
+    return { ok: false, error: error?.message || 'playback_failed' };
   }
 }
 
@@ -8093,12 +8240,21 @@ io.on('connection', (socket) => {
   socket.on('replay-current-snippet', async (data) => {
     const { roomId } = data || {};
     const room = rooms.get(roomId);
-    if (!room || room.host !== socket.id) return;
+    if (!room) return;
+    const isHost =
+      room.host === socket.id ||
+      (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+    if (!isHost) {
+      socket.emit('replay-snippet-result', { ok: false, error: 'not_host' });
+      return;
+    }
     try {
       const result = await replayCurrentSnippet(roomId, room.selectedDeviceId);
       socket.emit('replay-snippet-result', result);
       if (result.ok) {
         routineServerLog(`🔁 Host bumped current snippet in room ${roomId} (index ${result.songIndex})`);
+      } else {
+        routineServerLog(`⚠️ Bump failed in room ${roomId}: ${result.error || 'unknown'}`);
       }
     } catch (e) {
       console.error('❌ replay-current-snippet:', e?.message || e);

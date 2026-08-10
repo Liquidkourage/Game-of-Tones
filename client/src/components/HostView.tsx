@@ -3857,8 +3857,24 @@ const HostView: React.FC = () => {
       if (data?.ok) {
         addLog('Bumped snippet to a new start', 'info');
         showToast('Bumped clip', 'info');
+        setGamePaused(false);
+        setIsPlaying(true);
       } else {
-        showToast('Could not bump clip', 'error');
+        const why = typeof data?.error === 'string' ? data.error : '';
+        const hint =
+          why === 'not_playing'
+            ? 'Game is not playing'
+            : why === 'no_device'
+              ? 'No Spotify device locked'
+              : why === 'spotify_quarantined'
+                ? 'Spotify rate-limited — wait a moment'
+                : why === 'not_host'
+                  ? 'Host session mismatch — refresh host'
+                  : why === 'jam_not_found'
+                    ? 'Venue Jam not found'
+                    : 'Could not bump clip';
+        addLog(`Bump failed${why ? `: ${why}` : ''}`, 'warn');
+        showToast(hint, 'error');
       }
     });
 
