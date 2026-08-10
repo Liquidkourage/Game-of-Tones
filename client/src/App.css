@@ -728,8 +728,23 @@ body {
   overflow: visible;
 }
 
-.App .call-carousel-col-inner > .call-item,
-.App .call-carousel-col-inner > .call-item-slot {
+/* Letter-reveal / locked 5-row: fill the 1fr track so row geometry matches the fitter. */
+.App .call-carousel-col-inner:not(.call-carousel-col-inner--full-card) > .call-item,
+.App .call-carousel-col-inner:not(.call-carousel-col-inner--full-card) > .call-item-slot {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  margin-bottom: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  align-self: stretch;
+}
+
+.App .call-carousel-col-inner--full-card > .call-item,
+.App .call-carousel-col-inner--full-card > .call-item-slot {
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -821,7 +836,8 @@ body {
 .App .public-display .call-carousel-col-inner > .call-item-slot,
 .App .public-display .call-list-content--5x15 .call-item {
   margin-bottom: 0 !important;
-  padding-bottom: clamp(2px, 0.3vmin, 5px) !important;
+  /* Keep bottom pad aligned with inline CALL_CARD_PAD_Y (fitter uses the same). */
+  padding-bottom: 7px !important;
   transition: opacity 0.35s ease, filter 0.35s ease;
 }
 

@@ -15,73 +15,50 @@ export const PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT = 1.28;
 export const PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX = 10;
 
 /**
- * Absolute px bounds at host 100% (multiplied by hostZoom at render).
- * Keeps short letter-reveal titles from ballooning and artists from going unreadably small.
+ * Soft absolute ceilings after fit (hostZoom applied). Fit owns the real size;
+ * these only stop absurd host >100% blow-ups.
  */
-export const PUBLIC_DISPLAY_CALL_TITLE_MIN_PX = 18;
-export const PUBLIC_DISPLAY_CALL_TITLE_MAX_PX = 42;
-export const PUBLIC_DISPLAY_CALL_ARTIST_MIN_PX = 15;
-export const PUBLIC_DISPLAY_CALL_ARTIST_MAX_PX = 28;
+export const PUBLIC_DISPLAY_CALL_TITLE_MAX_PX = 56;
+export const PUBLIC_DISPLAY_CALL_ARTIST_MAX_PX = 40;
 /** Artist size as a fraction of the resolved title size (readable hierarchy). */
 export const PUBLIC_DISPLAY_CALL_ARTIST_MIN_TITLE_RATIO = 0.62;
 export const PUBLIC_DISPLAY_CALL_ARTIST_MAX_TITLE_RATIO = 0.8;
 
-/** Clamp title + artist px together so both stay in range and keep hierarchy. */
+/** Matches `.call-carousel-col*` horizontal padding (border-box). */
+export const CALL_CARD_COLUMN_PAD_X_PX = 4;
+/** Matches inline / CSS letter-spacing on call title & artist. */
+export const CALL_CARD_TITLE_LETTER_SPACING_EM = 0.04;
+export const CALL_CARD_ARTIST_LETTER_SPACING_EM = 0.02;
+
+/**
+ * Render sizes from a per-card fit at dfs=1.
+ * `textScale` is relative to TITLE/ARTIST base px; hostZoom multiplies only.
+ */
 export function resolveCallCardFontSizes(opts: {
   textScale: number;
-  displayFontScale: number;
+  /** @deprecated Ignored — fit is always at dfs=1; use hostZoom. */
+  displayFontScale?: number;
   hostZoom?: number;
   rowPx?: number;
   plainFullTitle?: boolean;
   masked?: boolean;
 }): { titlePx: number; artistPx: number } {
-  const dfs = opts.displayFontScale > 0 ? opts.displayFontScale : 1;
   const zoom = Math.max(
     0.5,
     Math.min(3, Number.isFinite(opts.hostZoom) ? (opts.hostZoom as number) : 1),
   );
-  const scale = Number.isFinite(opts.textScale) ? opts.textScale : 1;
-  const row = opts.rowPx && opts.rowPx > 0 ? opts.rowPx : 0;
+  const scale = Number.isFinite(opts.textScale) && opts.textScale > 0 ? opts.textScale : 1;
 
-  const titleFrac = opts.plainFullTitle ? 0.4 : opts.masked ? 0.42 : 0.4;
-  const artistFrac = opts.plainFullTitle ? 0.22 : opts.masked ? 0.24 : 0.22;
+  let titlePx = Math.round(PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * scale * zoom);
+  let artistPx = Math.round(PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX * scale * zoom);
 
-  let titlePx = Math.round(PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * dfs * scale);
-  let artistPx = Math.round(PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX * dfs * scale);
+  titlePx = Math.min(titlePx, Math.round(PUBLIC_DISPLAY_CALL_TITLE_MAX_PX * zoom));
+  artistPx = Math.min(artistPx, Math.round(PUBLIC_DISPLAY_CALL_ARTIST_MAX_PX * zoom));
 
-  const titleMin = Math.round(
-    Math.max(PUBLIC_DISPLAY_CALL_TITLE_MIN_PX, row > 0 ? row * 0.16 : 0) * zoom,
-  );
-  const titleMax = Math.round(
-    Math.min(
-      PUBLIC_DISPLAY_CALL_TITLE_MAX_PX * zoom,
-      row > 0 ? row * titleFrac * zoom : PUBLIC_DISPLAY_CALL_TITLE_MAX_PX * zoom,
-    ),
-  );
-  const artistMin = Math.round(
-    Math.max(PUBLIC_DISPLAY_CALL_ARTIST_MIN_PX, row > 0 ? row * 0.12 : 0) * zoom,
-  );
-  const artistMax = Math.round(
-    Math.min(
-      PUBLIC_DISPLAY_CALL_ARTIST_MAX_PX * zoom,
-      row > 0 ? row * artistFrac * zoom : PUBLIC_DISPLAY_CALL_ARTIST_MAX_PX * zoom,
-    ),
-  );
-
-  titlePx = Math.min(Math.max(titlePx, titleMin), Math.max(titleMin, titleMax));
-  artistPx = Math.min(Math.max(artistPx, artistMin), Math.max(artistMin, artistMax));
-
-  // Keep artist readable relative to the title (never a microscopic subtitle).
   const relMin = Math.round(titlePx * PUBLIC_DISPLAY_CALL_ARTIST_MIN_TITLE_RATIO);
   const relMax = Math.round(titlePx * PUBLIC_DISPLAY_CALL_ARTIST_MAX_TITLE_RATIO);
-  artistPx = Math.max(artistPx, artistMin, relMin);
-  artistPx = Math.min(artistPx, artistMax, relMax);
-  // If relative min exceeds artist max, pull title down so hierarchy still fits.
-  if (relMin > artistMax) {
-    artistPx = artistMax;
-    const titleFromArtist = Math.round(artistPx / PUBLIC_DISPLAY_CALL_ARTIST_MIN_TITLE_RATIO);
-    titlePx = Math.min(titlePx, Math.max(titleMin, titleFromArtist));
-  }
+  artistPx = Math.max(artistPx, relMin);
+  artistPx = Math.min(artistPx, relMax, Math.round(PUBLIC_DISPLAY_CALL_ARTIST_MAX_PX * zoom));
 
   return { titlePx, artistPx };
 }
@@ -369,11 +346,6 @@ const CLAMPED_LINE_PADDING_PX = 7;
 const FIT_HEIGHT_SAFETY_PX = 8;
 /** Absolute floor — only hit by absurd single-word titles/artists (e.g. 30+ char words). */
 const FIT_MIN_SCALE = 0.22;
-/**
- * Letter-reveal floor: never shrink projector type below this at host 100%.
- * Prefer denser tiles (tileScale) over microscopic glyphs on XGA / 5-col boards.
- */
-const FIT_MIN_SCALE_MASKED = 0.68;
 
 let fitCtxCached: CanvasRenderingContext2D | null | undefined;
 function getFitCtx(): CanvasRenderingContext2D | null {
@@ -404,21 +376,24 @@ function wordWidthUnits(
   masked: boolean,
   fontFamily: string,
   tileScale = 1,
+  letterSpacingEm = 0,
 ): number {
   const ts = Number.isFinite(tileScale) && tileScale > 0 ? tileScale : 1;
-  const key = `${fontsLoadedFlag()}|${masked ? 'm' : 'p'}|${ts.toFixed(2)}|${weight}|${fontFamily}|${word}`;
+  const ls = Number.isFinite(letterSpacingEm) && letterSpacingEm > 0 ? letterSpacingEm : 0;
+  const key = `${fontsLoadedFlag()}|${masked ? 'm' : 'p'}|${ts.toFixed(2)}|${ls.toFixed(3)}|${weight}|${fontFamily}|${word}`;
   const hit = wordUnitsCache.get(key);
   if (hit !== undefined) return hit;
   const ctx = getFitCtx();
   const tileAdvancePx = getCallTitleCapMetrics().advanceEm * FIT_REF_PX * ts;
+  const chars = Array.from(word);
   let units: number;
   if (!ctx) {
-    units = word.length * (masked ? tileAdvancePx : 0.55 * FIT_REF_PX);
+    units = chars.length * (masked ? tileAdvancePx : 0.55 * FIT_REF_PX);
   } else {
     ctx.font = `${weight} ${FIT_REF_PX}px ${fontFamily}`;
     if (masked) {
       units = 0;
-      for (const ch of Array.from(word)) {
+      for (const ch of chars) {
         const glyph = ctx.measureText(ch).width;
         // Tile sized ≈ average capital; never narrower than the real glyph (W, M, …).
         units += /[A-Za-z0-9]/.test(ch) ? Math.max(tileAdvancePx, glyph * ts) : glyph;
@@ -426,6 +401,10 @@ function wordWidthUnits(
     } else {
       units = ctx.measureText(word).width;
     }
+  }
+  // CSS letter-spacing applies between glyphs / inline-block tiles.
+  if (ls > 0 && chars.length > 1) {
+    units += ls * (chars.length - 1) * FIT_REF_PX;
   }
   if (wordUnitsCache.size > 4000) wordUnitsCache.clear();
   wordUnitsCache.set(key, units);
@@ -451,36 +430,45 @@ function measuredWrapLines(
   maxWidthPx: number,
   fontFamily: string,
   tileScale = 1,
+  letterSpacingEm = 0,
+  /** Narrower first line (call-number float notches). */
+  firstLineMaxWidthPx?: number,
 ): MeasuredWrap {
   const trimmed = (text || '').trim();
   if (!trimmed || maxWidthPx <= 0 || fontPx <= 0) return { lines: 0, overflowsWidth: false };
   const scale = fontPx / FIT_REF_PX;
   const spacePx = spaceWidthUnits(weight, fontFamily) * scale;
+  const firstW =
+    firstLineMaxWidthPx && firstLineMaxWidthPx > 0
+      ? Math.min(firstLineMaxWidthPx, maxWidthPx)
+      : maxWidthPx;
   let lines = 1;
   let current = 0;
   let overflowsWidth = false;
+  const lineWidth = () => (lines === 1 ? firstW : maxWidthPx);
   for (const word of trimmed.split(/\s+/)) {
     if (!word) continue;
-    const w = wordWidthUnits(word, weight, masked, fontFamily, tileScale) * scale;
-    if (w > maxWidthPx) {
+    const w =
+      wordWidthUnits(word, weight, masked, fontFamily, tileScale, letterSpacingEm) * scale;
+    const avail = lineWidth();
+    if (w > avail) {
       if (masked && Array.from(word).length <= 18) {
         // Letter tiles render in a nowrap span — the word cannot break, only shrink.
-        // (Monster words >18 chars are rendered breakable, so they fall through.)
         overflowsWidth = true;
         if (current > 0) lines += 1;
-        current = maxWidthPx; // occupies a full line
+        current = lineWidth();
         continue;
       }
       // Plain text has overflow-wrap:anywhere — the word splits across lines.
       if (current > 0) lines += 1;
-      const chunks = Math.max(1, Math.ceil(w / maxWidthPx));
+      const chunks = Math.max(1, Math.ceil(w / lineWidth()));
       lines += chunks - 1;
-      current = w - (chunks - 1) * maxWidthPx;
+      current = w - (chunks - 1) * lineWidth();
       continue;
     }
     if (current === 0) {
       current = w;
-    } else if (current + spacePx + w <= maxWidthPx) {
+    } else if (current + spacePx + w <= avail) {
       current += spacePx + w;
     } else {
       lines += 1;
@@ -491,21 +479,23 @@ function measuredWrapLines(
 }
 
 export type CallCardFitOpts = {
-  /** Available text width inside the card (after card + stripe padding). */
+  /** Full text width inside the card (after card + column padding) — lines after the first. */
   boxWidthPx: number;
   /** Available text height inside the card (after vertical padding). */
   boxHeightPx: number;
-  displayFontScale: number;
+  /**
+   * @deprecated Fit always runs at dfs=1. Host zoom multiplies at render only.
+   */
+  displayFontScale?: number;
   /** Letter-tile mode (title reveal "by letter"). */
   masked: boolean;
   /**
    * Multiplier on masked letter-tile advance (1 = full cap width).
-   * Use &lt;1 on narrow projector columns so type can stay large.
+   * Prefer trying denser tiles via fitCallCardTextBest rather than a hard floor.
    */
   tileScale?: number;
-  /** Hard px ceilings from row-height fractions (optional). */
-  titleCapPx?: number;
-  artistCapPx?: number;
+  /** First-line width after reserving both call-number float notches. */
+  firstLineWidthPx?: number;
   /** Smallest acceptable scale before we give up and let it clip. */
   minScale?: number;
   /** Largest scale to try so short titles can fill empty card space (default 2.2). */
@@ -518,44 +508,49 @@ export type CallCardFitResult = {
   artistLines: number;
   /** 1 = default leading; down to FIT_LINE_HEIGHT_SCALE_MIN when a squeeze helps. */
   lineHeightScale: number;
+  /** Tile densify used for this fit (1 = full). */
+  tileScale?: number;
 };
 
 /** Smallest line-height multiplier the fitter may apply (~10% tighter). */
 const FIT_LINE_HEIGHT_SCALE_MIN = 0.9;
 
 /**
- * Largest textScale where the full title + artist measurably fit inside the
- * card box — grows above 1 when there's unused room, shrinks when cramped.
- * May tighten line-height up to 10% when that yields a better (larger) fit.
+ * Largest textScale (at dfs=1) where title + artist measurably fit the card box.
+ * Host 100% = this size; hostZoom multiplies only at render.
  */
 export function fitCallCardText(
   title: string,
   artist: string,
   opts: CallCardFitOpts,
 ): CallCardFitResult | null {
-  const dfs = opts.displayFontScale > 0 ? opts.displayFontScale : 1;
   if (opts.boxWidthPx <= 8 || opts.boxHeightPx <= 8) return null;
   const tileScale =
     Number.isFinite(opts.tileScale) && (opts.tileScale as number) > 0
       ? (opts.tileScale as number)
       : 1;
-  const minScale =
-    opts.minScale ?? (opts.masked ? FIT_MIN_SCALE_MASKED : FIT_MIN_SCALE);
+  const minScale = opts.minScale ?? FIT_MIN_SCALE;
   const maxScale = opts.maxScale ?? 2.2;
   const titleText = formatCallCardTitle((title || '').trim() || 'Unknown');
   const artistText = formatCallCardArtist((artist || '').trim());
   const hasArtist = artistText.length > 0;
 
   // Small slack absorbs canvas-vs-DOM kerning/subpixel differences.
-  const effWidthPx = opts.boxWidthPx - 2;
+  const effWidthPx = Math.max(8, opts.boxWidthPx - 2);
+  const firstLinePx = Math.max(
+    8,
+    (opts.firstLineWidthPx && opts.firstLineWidthPx > 0
+      ? opts.firstLineWidthPx
+      : opts.boxWidthPx) - 2,
+  );
+
   const evaluate = (
     s: number,
     lineHeightScale: number,
   ): { fits: boolean; titleLines: number; artistLines: number } => {
-    let titlePx = PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * dfs * s;
-    if (opts.titleCapPx && opts.titleCapPx > 0) titlePx = Math.min(titlePx, opts.titleCapPx);
-    let artistPx = PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX * dfs * s;
-    if (opts.artistCapPx && opts.artistCapPx > 0) artistPx = Math.min(artistPx, opts.artistCapPx);
+    // Always dfs=1 — host % is applied in resolveCallCardFontSizes.
+    const titlePx = PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * s;
+    const artistPx = PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX * s;
 
     const t = measuredWrapLines(
       titleText,
@@ -565,6 +560,8 @@ export function fitCallCardText(
       effWidthPx,
       PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY,
       tileScale,
+      CALL_CARD_TITLE_LETTER_SPACING_EM,
+      firstLinePx,
     );
     const a = hasArtist
       ? measuredWrapLines(
@@ -575,6 +572,8 @@ export function fitCallCardText(
           effWidthPx,
           PUBLIC_DISPLAY_CALL_ARTIST_FONT_FAMILY,
           tileScale,
+          CALL_CARD_ARTIST_LETTER_SPACING_EM,
+          firstLinePx,
         )
       : { lines: 0, overflowsWidth: false };
 
@@ -604,10 +603,11 @@ export function fitCallCardText(
         titleLines: atMax.titleLines,
         artistLines: atMax.artistLines,
         lineHeightScale,
+        tileScale,
       };
     }
     let best: CallCardFitResult | null = null;
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 12; i++) {
       const mid = (lo + hi) / 2;
       const r = evaluate(mid, lineHeightScale);
       if (r.fits) {
@@ -616,6 +616,7 @@ export function fitCallCardText(
           titleLines: r.titleLines,
           artistLines: r.artistLines,
           lineHeightScale,
+          tileScale,
         };
         lo = mid;
       } else {
@@ -623,25 +624,51 @@ export function fitCallCardText(
       }
     }
     if (best) return best;
+    // Nothing fitted — return true min (may still clip); never invent a higher floor.
     const atMin = evaluate(minScale, lineHeightScale);
     return {
       textScale: minScale,
       titleLines: atMin.titleLines,
       artistLines: atMin.artistLines,
       lineHeightScale,
+      tileScale,
     };
   };
 
   const atDefault = bestScaleAt(1);
   const atTight = bestScaleAt(FIT_LINE_HEIGHT_SCALE_MIN);
-  // Prefer default leading unless a 10% squeeze unlocks meaningfully larger type
-  // or is required for the content to fit at all.
   const defaultFits = evaluate(atDefault.textScale, 1).fits;
   const tightHelpsSize = atTight.textScale > atDefault.textScale * 1.04;
   if (!defaultFits || tightHelpsSize) {
     return atTight;
   }
   return atDefault;
+}
+
+/**
+ * Per-card fit: try denser letter tiles when that unlocks a larger textScale.
+ * Prefer larger type over denser tiles when both fit.
+ */
+export function fitCallCardTextBest(
+  title: string,
+  artist: string,
+  opts: Omit<CallCardFitOpts, 'tileScale'>,
+): CallCardFitResult | null {
+  const tileScales = opts.masked ? [1, 0.9, 0.78, 0.72] : [1];
+  let best: CallCardFitResult | null = null;
+  for (const ts of tileScales) {
+    const fit = fitCallCardText(title, artist, { ...opts, tileScale: ts });
+    if (!fit) continue;
+    if (
+      !best ||
+      fit.textScale > best.textScale + 0.01 ||
+      (Math.abs(fit.textScale - best.textScale) <= 0.01 &&
+        (fit.tileScale ?? 1) > (best.tileScale ?? 1))
+    ) {
+      best = fit;
+    }
+  }
+  return best;
 }
 
 /** Bingo pattern / winner grid cells (vmin-based sizes get a scale multiplier). */
