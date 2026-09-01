@@ -6632,11 +6632,20 @@ button.conn-chip.conn-chip-compact {
   color: #0f172a;
 }
 
-/* Short phones (SE-class): drop always-on chip so card + bingo bar fit without scroll. */
+/* Short phones (SE-class): drop always-on stage chip so card + bingo bar fit without scroll.
+   Pattern remains available in More (sheet); do not hide .player-pattern-hint there. */
 @media (max-height: 700px) {
-  .player-container--v2 .player-pattern-hint {
+  .player-container--v2 .player-bingo-stage > .player-pattern-hint {
     display: none;
   }
+}
+
+.player-container--v2 .player-v2-sheet .player-pattern-hint {
+  margin: 0;
+  max-width: none;
+  width: 100%;
+  justify-content: flex-start;
+  border-radius: clamp(12px, 2.4vmin, 16px);
 }
 
 .player-container--v2 .player-v2-action-bar {

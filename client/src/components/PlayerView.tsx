@@ -2698,14 +2698,26 @@ const PlayerView: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="player-v2-sheet-row">
+                <div className="player-v2-sheet-row player-v2-sheet-row--stacked">
                   <div className="player-v2-sheet-copy">
-                    <div className="player-v2-sheet-label">Game status</div>
+                    <div className="player-v2-sheet-label">Win pattern</div>
                     <div className="player-v2-sheet-note">
-                      {currentPatternLabel}
-                      {gameState.isPlaying ? ' · Live' : ''}
+                      {gameState.isPlaying ? 'Live · shape to complete' : 'Shape to complete'}
+                      {!gameState.pattern ? ` · ${currentPatternLabel}` : ''}
                     </div>
                   </div>
+                  {gameState.pattern ? (
+                    <PlayerPatternHint
+                      pattern={gameState.pattern}
+                      linesRequired={gameState.linesRequired}
+                      customPattern={gameState.customPattern}
+                      customMatchReverse={gameState.customMatchReverse}
+                      customMatchAllowRotation={gameState.customMatchAllowRotation}
+                      customMatchAllowMirror={gameState.customMatchAllowMirror}
+                      customPatternName={gameState.customPatternName}
+                      patternComposite={gameState.patternComposite}
+                    />
+                  ) : null}
                 </div>
 
                 <div className={`player-v2-sheet-row${requestOpen ? ' player-v2-sheet-row--stacked' : ''}`}>
