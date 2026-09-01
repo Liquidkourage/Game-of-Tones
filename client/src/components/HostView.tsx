@@ -3748,7 +3748,8 @@ const HostView: React.FC = () => {
     /** Set below; reconnect calls this after reset so host re-enters the room socket. */
     let emitHostJoinImpl: () => void = () => {};
 
-    // Auto-refresh host player-card snapshot (debounced; replaces manual Request Player Cards)
+    // Auto-refresh host player-card *snapshot* only (debounced). Never sends recover:true —
+    // recovery deals / playlist API must not ride join/song UI refreshes.
     let playerCardsRefreshTimer: ReturnType<typeof setTimeout> | null = null;
     const schedulePlayerCardsRefresh = (delayMs = 500) => {
       if (!roomId) return;
@@ -4147,7 +4148,8 @@ const HostView: React.FC = () => {
           syncVolumeToSpotify();
         }, 500);
       }
-      schedulePlayerCardsRefresh(550);
+      // Host card marks arrive via server `player-cards-update` on each call — do not
+      // re-request (that used to run recovery deals and burn playlist API quota).
     });
 
     newSocket.on('final-song-started', (data: { songNumber?: number; totalSongs?: number; snippetSec?: number }) => {
@@ -6399,7 +6401,9 @@ const HostView: React.FC = () => {
       return;
     }
     console.log('?? Requesting player cards for room:', roomId);
-    socket.emit('request-player-cards', { roomId });
+    // Snapshot by default. Explicit announce (= host-initiated refresh) may recover missing deals
+    // from the locked room pool — still no playlist API after finalize.
+    socket.emit('request-player-cards', { roomId, recover: opts?.announce === true });
     if (opts?.announce) {
       showToast('Refreshing player cards…', 'info');
       addLog('Requested player cards', 'info');

@@ -7760,7 +7760,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Host requests to view all player cards
+  // Host requests to view all player cards.
+  // Default = snapshot only (no recovery deals / no playlist API).
+  // Pass { recover: true } only for an explicit host "fill missing cards" action.
   socket.on('request-player-cards', async (data = {}) => {
     try {
       const { roomId } = data;
@@ -7771,9 +7773,11 @@ io.on('connection', (socket) => {
       const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
       if (!isHost) return;
 
-      const recovered = await ensureActivePlayersHaveCards(roomId, room);
-      if (recovered > 0) {
-        routineServerLog(`✅ Host card view: recovered ${recovered} missing player card(s)`);
+      if (data?.recover === true) {
+        const recovered = await ensureActivePlayersHaveCards(roomId, room);
+        if (recovered > 0) {
+          routineServerLog(`✅ Host card recovery: dealt ${recovered} missing player card(s)`);
+        }
       }
 
       const playerCardsData = buildHostPlayerCardsData(room);
@@ -8989,18 +8993,20 @@ io.on('connection', (socket) => {
           card.cardId || null,
         );
         const square = card.squares.find(s => s.position === position);
-        if (square && (square.isFreeSpace || square.songId === FREE_SPACE_SONG_ID)) {
-          return;
-        }
-        if (square && square.songId === songId) {
-          // Toggle mark state to support unmarking (room.bingoCards is source of truth for host)
+        const isFree = square && (square.isFreeSpace || square.songId === FREE_SPACE_SONG_ID);
+        // FREE is clickable for fun; still counts as marked for bingo validation.
+        if (square && (isFree || square.songId === songId)) {
           square.marked = !square.marked;
-          
+          if (isFree) {
+            square.isFreeSpace = true;
+            square.songId = FREE_SPACE_SONG_ID;
+          }
+
           // CRITICAL: Send confirmation back to player to ensure their state matches server
           // This prevents desync where server has mark but player doesn't
           socket.emit('mark-confirmed', {
             position,
-            songId,
+            songId: isFree ? FREE_SPACE_SONG_ID : songId,
             marked: square.marked,
             cardId: card.cardId || card.id,
           });
@@ -9008,7 +9014,8 @@ io.on('connection', (socket) => {
           // Send real-time player card updates to host (immediate so marks show without delay)
           sendPlayerCardUpdates(roomId, true);
           void persistPlayerDataCard(room, player, cards.length ? cards : [card]);
-          if (player.playerUserId != null) {
+          // Fun FREE taps shouldn't inflate mark stats
+          if (!isFree && player.playerUserId != null) {
             void playerAccountsStore.recordMark(db, player.playerUserId, playerStatsContext(room, player), 1);
           }
           
@@ -9279,6 +9286,18 @@ function properShuffle(array) {
 
 /** Center square (2-2): pre-marked, counts toward patterns without a played song */
 const FREE_SPACE_SONG_ID = '__FREE_SPACE__';
+
+function isFreeBingoSquare(square) {
+  return !!(square && (square.isFreeSpace || square.songId === FREE_SPACE_SONG_ID));
+}
+
+/** FREE always counts for wins even if the player toggled the visual daub off for fun. */
+function isMarkedSquareValidPlayed(square, playedSongIds) {
+  if (!square) return false;
+  if (isFreeBingoSquare(square)) return true;
+  return !!(square.marked && Array.isArray(playedSongIds) && playedSongIds.includes(square.songId));
+}
+
 /** Synthetic playlist id for saved-round 1×75 card pool — never call Spotify /items with this. */
 const SAVED_ROUND_SNAP_PLAYLIST_ID = '__saved_round_snap__';
 
@@ -10852,9 +10871,10 @@ function normalizeSongSnapshotForPrint(raw) {
   return out.length ? out : null;
 }
 
-/** Live show + shared org quarantine: never burn Web API on late-join card deal. */
+/** Live show, finalized mix, or shared org quarantine: never burn Web API on late-join card deal. */
 function lateJoinMustUseRoomPoolOnly(roomId, room) {
   if (roomIsLiveRound(room)) return true;
+  if (room?.mixFinalized) return true;
   try {
     const sp = spotifyFor(roomId);
     if (typeof sp?.isQuarantined === 'function' && sp.isQuarantined()) return true;
@@ -10889,7 +10909,13 @@ async function fetchTracksForLateJoinPlaylist(roomId, room, playlist) {
   if (lateJoinMustUseRoomPoolOnly(roomId, room)) {
     routineServerLog(
       `📋 Late-join: no room-cache tracks for "${playlist.name}" — skipping external fetch ` +
-        `(${roomIsLiveRound(room) ? 'live round' : 'Spotify quarantine'}; pool-only deal)`,
+        `(${
+          roomIsLiveRound(room)
+            ? 'live round'
+            : room?.mixFinalized
+              ? 'mix finalized'
+              : 'Spotify quarantine'
+        }; pool-only deal)`,
     );
     return [];
   }
@@ -10977,10 +11003,31 @@ async function generateBingoCardForPlayer(roomId, playerId, options = {}) {
     const useFreeSpace = !!room.freeSpaceEnabled;
     const songsNeededPerCard = useFreeSpace ? 24 : 25;
 
+    const hasLockedFive =
+      Array.isArray(room.fiveByFifteenColumnsIds) &&
+      room.fiveByFifteenColumnsIds.length === 5 &&
+      room.fiveByFifteenColumnsIds.every((col) => Array.isArray(col) && col.length >= 15);
+    const hasLockedOne =
+      Array.isArray(room.oneBySeventyFivePool) &&
+      room.oneBySeventyFivePool.length >= songsNeededPerCard;
+
     const playlistsWithSongs = [];
-    for (const playlist of playlists) {
-      const songs = await fetchTracksForLateJoinPlaylist(roomId, room, playlist);
-      playlistsWithSongs.push({ ...playlist, songs });
+    if (hasLockedFive || hasLockedOne) {
+      // Locked show pool already on the room — deal without playlist API calls.
+      routineServerLog(
+        `📋 Late-join: locked ${hasLockedFive ? '5×15' : '1×75'} room pool — skipping playlist API fetches`,
+      );
+      for (const playlist of playlists) {
+        playlistsWithSongs.push({
+          ...playlist,
+          songs: songsForPlaylistFromRoomCache(room, playlist.id),
+        });
+      }
+    } else {
+      for (const playlist of playlists) {
+        const songs = await fetchTracksForLateJoinPlaylist(roomId, room, playlist);
+        playlistsWithSongs.push({ ...playlist, songs });
+      }
     }
 
     let totalFetched = playlistsWithSongs.reduce((n, pl) => n + (Array.isArray(pl.songs) ? pl.songs.length : 0), 0);
@@ -12374,8 +12421,7 @@ function unionLineWinningPositions(lineObjs) {
 }
 
 function checkBingoWithPlayedSongs(card, playedSongIds, linesRequiredRaw) {
-  const isMarkedSquareValid = (square) =>
-    square && square.marked && (square.isFreeSpace || playedSongIds.includes(square.songId));
+  const isMarkedSquareValid = (square) => isMarkedSquareValidPlayed(square, playedSongIds);
   const need = normalizeLinesRequiredSrv(linesRequiredRaw != null ? linesRequiredRaw : 1);
   const completed = listCompletedLinesPlayedStrict(card, isMarkedSquareValid);
   if (completed.length >= need) {
@@ -12828,7 +12874,7 @@ function validateBingoForPattern(card, room) {
   
   // Helper function to check if a marked square corresponds to a played song (or free space)
   const isMarkedSquareValid = (square) => {
-    const isValid = square && square.marked && (square.isFreeSpace || playedSongIds.includes(square.songId));
+    const isValid = isMarkedSquareValidPlayed(square, playedSongIds);
     if (!isValid && square && square.marked) {
       logger.debug(
         `🎯 Invalid marked square: ${square.position} - songId: ${square.songId}, marked: ${square.marked}, inPlayedList: ${playedSongIds.includes(square.songId)}`
@@ -13049,9 +13095,7 @@ function getWinningPatternPositions(card, room, validationResult) {
     playedSongIds.push(room.currentSong.id);
   }
   
-  const isMarkedSquareValid = (square) => {
-    return square && square.marked && (square.isFreeSpace || playedSongIds.includes(square.songId));
-  };
+  const isMarkedSquareValid = (square) => isMarkedSquareValidPlayed(square, playedSongIds);
   
   if (pattern === 'composite' && Array.isArray(validationResult?.winningPositions) && validationResult.winningPositions.length > 0) {
     return validationResult.winningPositions;

@@ -3361,17 +3361,22 @@ body {
   z-index: 10;
 }
 
-/* Bingo feedback: in-flow between card and call button; fixed top banner on crushed / landscape viewports. */
+/* Bingo feedback: overlay above the call button — never steal flex height (kept button on-screen). */
 .player-bingo-status-toast {
-  flex: 0 0 auto;
-  align-self: center;
+  position: fixed;
+  left: 50%;
+  right: auto;
+  bottom: calc(
+    env(safe-area-inset-bottom, 0px) + var(--player-visual-bottom-gap, 0px) + 4.85rem
+  );
+  transform: translateX(-50%);
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  width: min(calc(100% - 16px), 22rem);
-  margin: clamp(4px, 1.1vmin, 10px) auto clamp(2px, 0.6vmin, 6px);
+  width: min(calc(100vw - 16px), 22rem);
+  margin: 0;
   padding: clamp(10px, 2.2vmin, 14px) clamp(14px, 3.5vw, 20px);
   border-radius: clamp(14px, 3vmin, 22px);
   font-weight: 700;
@@ -3384,7 +3389,7 @@ body {
   box-shadow:
     0 10px 32px rgba(0, 0, 0, 0.38),
     0 0 0 1px rgba(0, 0, 0, 0.12);
-  z-index: 24;
+  z-index: 2600;
   pointer-events: none;
 }
 
@@ -6429,6 +6434,11 @@ button.conn-chip.conn-chip-compact {
   --player-card-font-scale: 1 !important;
 }
 
+/* Silent refit (song/sync/resize): hide grid for the measure tick only — no fit-pending blanking loop. */
+.player-container--v2[data-fit-silent='1'] .bingo-card-grid {
+  visibility: hidden;
+}
+
 .player-container--v2 .player-square-title {
   width: 100%;
   font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-title-scale, 1) * var(--player-v2-title-size));
@@ -6513,6 +6523,7 @@ button.conn-chip.conn-chip-compact {
 
 .player-container--v2 .player-rest {
   flex: 0 0 auto;
+  flex-shrink: 0;
   gap: 8px;
   padding: 0 4px calc(env(safe-area-inset-bottom, 0px) + var(--player-visual-bottom-gap, 0px));
   margin-top: clamp(2px, 0.5vmin, 4px);

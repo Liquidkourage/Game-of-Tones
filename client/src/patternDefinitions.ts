@@ -316,10 +316,21 @@ export function customMaskHighlightPositions(
 
 type CardSqLite = { position: string; marked?: boolean; songId?: string; isFreeSpace?: boolean };
 
+function isLiteFreeSpace(sq: { isFreeSpace?: boolean; songId?: string } | null | undefined): boolean {
+  return !!(sq && (sq.isFreeSpace || sq.songId === '__FREE_SPACE__'));
+}
+
+/** FREE counts as daubed for win checks even if the player toggled the visual mark off. */
+function isLiteVisuallyDaubed(sq: CardSqLite | null | undefined): boolean {
+  if (!sq) return false;
+  if (isLiteFreeSpace(sq)) return true;
+  return !!sq.marked;
+}
+
 function everyMarked(card: { squares: CardSqLite[] }, mask: readonly string[]): boolean {
   return mask.every((pos) => {
     const sq = card.squares.find((s) => s.position === pos);
-    return !!(sq && sq.marked);
+    return isLiteVisuallyDaubed(sq);
   });
 }
 
@@ -355,8 +366,8 @@ export function evaluateCustomPatternStrict(
   if (!card?.squares?.length || !basePositions) return false;
   const cur = playedSongIds;
   const isValid = (sq: CardSqLite) => {
-    const free = !!(sq.isFreeSpace || sq.songId === '__FREE_SPACE__');
-    return !!(sq.marked && (free || cur.includes(sq.songId || '')));
+    if (isLiteFreeSpace(sq)) return true;
+    return !!(sq.marked && cur.includes(sq.songId || ''));
   };
   const variants = customPatternMaskVariants(basePositions, opts);
   return variants.some((m) => everyStrict(card, m, isValid));
@@ -375,7 +386,7 @@ export function normalizeLinesRequired(raw: unknown): number {
 export function countCompletedLinesVisual(card: { squares: CardSqLite[] }): number {
   const isOn = (pos: string) => {
     const sq = card.squares.find((s) => s.position === pos);
-    return !!(sq && sq.marked);
+    return isLiteVisuallyDaubed(sq);
   };
   let n = 0;
   for (let row = 0; row < 5; row++) {
@@ -419,8 +430,11 @@ export function countCompletedLinesStrict(
   card: { squares: CardSqLite[] },
   playedSongIds: readonly string[],
 ): number {
-  const isValid = (sq: CardSqLite | undefined) =>
-    !!(sq && sq.marked && (sq.isFreeSpace || sq.songId === '__FREE_SPACE__' || playedSongIds.includes(sq.songId || '')));
+  const isValid = (sq: CardSqLite | undefined) => {
+    if (!sq) return false;
+    if (isLiteFreeSpace(sq)) return true;
+    return !!(sq.marked && playedSongIds.includes(sq.songId || ''));
+  };
   return countCompletedLinesWithValidator(card, isValid);
 }
 
@@ -665,7 +679,7 @@ type SquareLite = { position: string; marked?: boolean; songId?: string; isFreeS
 function maskVisualComplete(card: { squares: SquareLite[] }, positions: readonly string[]): boolean {
   return positions.every((pos) => {
     const sq = card.squares.find((s) => s.position === pos);
-    return !!(sq && sq.marked);
+    return isLiteVisuallyDaubed(sq);
   });
 }
 
@@ -690,7 +704,7 @@ function clauseVisualComplete(card: { squares: SquareLite[] }, clause: PatternCo
       if (!validateBingoCardGrid(card)) return false;
       return STANDARD_BINGO_POSITIONS.every((pos) => {
         const sq = card.squares.find((s) => s.position === pos);
-        return !!(sq && sq.marked);
+        return isLiteVisuallyDaubed(sq);
       });
     }
     const def = BINGO_PATTERNS[clause.preset];
@@ -747,8 +761,8 @@ export function evaluateCompositeStrict(
   if (!card?.squares || !spec?.clauses?.length) return false;
   const cur = playedSongIds;
   const isValid = (sq: SquareLite) => {
-    const free = !!(sq.isFreeSpace || sq.songId === '__FREE_SPACE__');
-    return !!(sq.marked && (free || cur.includes(sq.songId || '')));
+    if (isLiteFreeSpace(sq)) return true;
+    return !!(sq.marked && cur.includes(sq.songId || ''));
   };
   if (spec.op === 'or') return spec.clauses.some((c) => clauseStrictComplete(card, c, isValid));
   return spec.clauses.every((c) => clauseStrictComplete(card, c, isValid));
@@ -762,9 +776,9 @@ export function compositeLegitProgressPct(
 ): number {
   if (!card?.squares?.length || !spec?.clauses?.length) return 0;
   const legit = (sq: SquareLite | undefined) => {
-    if (!sq?.marked) return false;
-    if (sq.isFreeSpace || sq.songId === '__FREE_SPACE__') return true;
-    return playedSongIds.includes(sq.songId || '');
+    if (!sq) return false;
+    if (isLiteFreeSpace(sq)) return true;
+    return !!(sq.marked && playedSongIds.includes(sq.songId || ''));
   };
   const ratioMask = (positions: readonly string[]) => {
     if (!positions.length) return 0;
@@ -866,9 +880,9 @@ export function hostPatternLegitProgress(
   }
 
   const legit = (sq: SquareLite | undefined) => {
-    if (!sq?.marked) return false;
-    if (sq.isFreeSpace || sq.songId === '__FREE_SPACE__') return true;
-    return playedSongIds.includes(sq.songId || '');
+    if (!sq) return false;
+    if (isLiteFreeSpace(sq)) return true;
+    return !!(sq.marked && playedSongIds.includes(sq.songId || ''));
   };
 
   const canonical = pattern === 'blackout' ? 'full_card' : pattern;

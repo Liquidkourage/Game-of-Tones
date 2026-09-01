@@ -185,7 +185,6 @@ const PlayerView: React.FC = () => {
   };
   const [focusedSquare, setFocusedSquare] = useState<BingoSquare | null>(null);
   const longPressTimer = useRef<number | null>(null);
-  const hoverTooltipTimer = useRef<number | null>(null);
   const suppressNextClickRef = useRef(false);
   /** Grid node as state so text-fit re-runs after multi-card slide remounts. */
   const [cardGridEl, setCardGridEl] = useState<HTMLDivElement | null>(null);
@@ -455,7 +454,12 @@ const PlayerView: React.FC = () => {
       ...card,
       squares: card.squares.map((square) =>
         isPlayerFreeSpaceSquare(square)
-          ? { ...square, marked: true, isFreeSpace: true, songId: '__FREE_SPACE__' }
+          ? {
+              ...square,
+              // Keep whatever marked state the player toggled — FREE still counts for bingo.
+              isFreeSpace: true,
+              songId: '__FREE_SPACE__',
+            }
           : square,
       ),
     };
@@ -471,8 +475,11 @@ const PlayerView: React.FC = () => {
     }
     try {
       const marks: Record<string, boolean> = {};
-      normalizedCard.squares.forEach(square => {
-        if (square.marked) {
+      normalizedCard.squares.forEach((square) => {
+        if (isPlayerFreeSpaceSquare(square)) {
+          // Persist FREE daub state (including false) so unmark/remount survives refresh.
+          marks[square.position] = !!square.marked;
+        } else if (square.marked) {
           marks[square.position] = true;
         }
       });
@@ -486,16 +493,21 @@ const PlayerView: React.FC = () => {
     const normalizedCard = normalizeCardFreeSpaces(card);
     if (!normalizedCard) return normalizedCard;
     const storedMarks = getStoredMarks(normalizedCard);
-    if (Object.keys(storedMarks).length === 0) return normalizedCard;
-    
-    const updatedSquares = normalizedCard.squares.map(square => ({
-      ...square,
-      marked:
-        square.isFreeSpace ||
-        square.songId === '__FREE_SPACE__' ||
-        storedMarks[square.position] === true ||
-        square.marked
-    }));
+    if (Object.keys(storedMarks).length === 0) {
+      // No local history — keep server/deal defaults (FREE starts marked).
+      return normalizedCard;
+    }
+
+    const updatedSquares = normalizedCard.squares.map((square) => {
+      if (Object.prototype.hasOwnProperty.call(storedMarks, square.position)) {
+        return { ...square, marked: storedMarks[square.position] === true };
+      }
+      // FREE defaults marked when never toggled in this browser.
+      if (isPlayerFreeSpaceSquare(square)) {
+        return { ...square, marked: true };
+      }
+      return { ...square, marked: square.marked };
+    });
     return { ...normalizedCard, squares: updatedSquares };
   };
 
@@ -876,31 +888,40 @@ const PlayerView: React.FC = () => {
         // CRITICAL: Sync playedSongIds from server (single source of truth)
         // This is the ONLY place where playedSongIds should be updated
         if (Array.isArray(payload?.playedSongIds)) {
-          setPlayedSongIds(prev => {
-            // Validate sync: compare local vs server state
-            const serverCount = payload.playedSongIds.length;
-            const localCount = prev.length;
-            
-            // Calculate missed songs if reconnecting
+          setPlayedSongIds((prev) => {
+            const next = payload.playedSongIds as string[];
+            // Same sequence → keep prev (avoids card re-fit flash on every room-state sync).
+            if (
+              prev.length === next.length &&
+              prev.every((id, i) => id === next[i])
+            ) {
+              if (wasReconnectingRef.current) {
+                wasReconnectingRef.current = false;
+                setConnectionToast('✅ Reconnected successfully');
+                setTimeout(() => setConnectionToast(''), 3000);
+              }
+              return prev;
+            }
+
             if (wasReconnectingRef.current && previousPlayedSongIdsRef.current.length > 0) {
-              const missedSongs = payload.playedSongIds.filter(
-                (id: string) => !previousPlayedSongIdsRef.current.includes(id)
+              const missedSongs = next.filter(
+                (id: string) => !previousPlayedSongIdsRef.current.includes(id),
               );
               if (missedSongs.length > 0) {
-                setConnectionToast(`🔄 Reconnected! You missed ${missedSongs.length} song${missedSongs.length > 1 ? 's' : ''} while disconnected`);
+                setConnectionToast(
+                  `🔄 Reconnected! You missed ${missedSongs.length} song${missedSongs.length > 1 ? 's' : ''} while disconnected`,
+                );
                 setTimeout(() => setConnectionToast(''), 6000);
               } else {
                 setConnectionToast('✅ Reconnected successfully');
                 setTimeout(() => setConnectionToast(''), 3000);
               }
-              // Reset reconnection flag after handling
+              wasReconnectingRef.current = false;
+            } else if (wasReconnectingRef.current) {
               wasReconnectingRef.current = false;
             }
-            
-            if (serverCount !== localCount) {
-            }
-            // Always use server state as source of truth
-            return payload.playedSongIds;
+
+            return next;
           });
         }
         
@@ -912,42 +933,62 @@ const PlayerView: React.FC = () => {
               effectivePat === 'line' && payload?.linesRequired != null
                 ? normalizeLinesRequired(payload.linesRequired)
                 : undefined;
+            const nextPlayerCount =
+              typeof payload?.playerCount === 'number' ? payload.playerCount : prev.playerCount;
+            const nextSong = payload?.currentSong || prev.currentSong;
+            const nextCustom =
+              effectivePat === 'custom' &&
+              Array.isArray(payload?.customMask) &&
+              payload.customMask.length > 0
+                ? payload.customMask
+                : effectivePat === 'custom'
+                  ? prev.customPattern
+                  : undefined;
+            const nextComposite =
+              effectivePat === 'composite'
+                ? normalizePatternComposite(payload.patternComposite) ?? prev.patternComposite
+                : pat && pat !== 'composite'
+                  ? undefined
+                  : prev.patternComposite;
+            const nextRev = effectivePat === 'custom' ? !!payload.customMatchReverse : false;
+            const nextRot = effectivePat === 'custom' ? !!payload.customMatchAllowRotation : false;
+            const nextMir = effectivePat === 'custom' ? !!payload.customMatchAllowMirror : false;
+            const sameSong =
+              (nextSong?.id || null) === (prev.currentSong?.id || null) &&
+              (nextSong?.name || null) === (prev.currentSong?.name || null) &&
+              (nextSong?.artist || null) === (prev.currentSong?.artist || null);
+            if (
+              prev.isPlaying &&
+              effectivePat === prev.pattern &&
+              nextPlayerCount === prev.playerCount &&
+              sameSong &&
+              nextCustom === prev.customPattern &&
+              nextComposite === prev.patternComposite &&
+              (lr === undefined || lr === prev.linesRequired) &&
+              nextRev === !!prev.customMatchReverse &&
+              nextRot === !!prev.customMatchAllowRotation &&
+              nextMir === !!prev.customMatchAllowMirror
+            ) {
+              return prev;
+            }
             return {
               ...prev,
               isPlaying: true,
               pattern: effectivePat,
-              playerCount: typeof payload?.playerCount === 'number' ? payload.playerCount : prev.playerCount,
-              currentSong: payload?.currentSong || prev.currentSong,
-              customPattern:
-                effectivePat === 'custom' &&
-                Array.isArray(payload?.customMask) &&
-                payload.customMask.length > 0
-                  ? payload.customMask
-                  : effectivePat === 'custom'
-                    ? prev.customPattern
-                    : undefined,
-              patternComposite:
-                effectivePat === 'composite'
-                  ? normalizePatternComposite(payload.patternComposite) ?? prev.patternComposite
-                  : pat && pat !== 'composite'
-                    ? undefined
-                    : prev.patternComposite,
+              playerCount: nextPlayerCount,
+              currentSong: nextSong,
+              customPattern: nextCustom,
+              patternComposite: nextComposite,
               ...(lr !== undefined ? { linesRequired: lr } : {}),
-              ...(effectivePat === 'custom'
-                ? {
-                    customMatchReverse: !!payload.customMatchReverse,
-                    customMatchAllowRotation: !!payload.customMatchAllowRotation,
-                    customMatchAllowMirror: !!payload.customMatchAllowMirror,
-                  }
-                : {
-                    customMatchReverse: false,
-                    customMatchAllowRotation: false,
-                    customMatchAllowMirror: false,
-                  }),
+              customMatchReverse: nextRev,
+              customMatchAllowRotation: nextRot,
+              customMatchAllowMirror: nextMir,
             };
           });
         } else if (typeof payload?.playerCount === 'number') {
-          setGameState(prev => ({ ...prev, playerCount: payload.playerCount }));
+          setGameState((prev) =>
+            prev.playerCount === payload.playerCount ? prev : { ...prev, playerCount: payload.playerCount },
+          );
         }
       } catch {}
     });
@@ -973,16 +1014,32 @@ const PlayerView: React.FC = () => {
         typeof data.customSongName === 'string' && data.customSongName.trim() !== ''
           ? data.customSongName.trim()
           : data.songName;
-      setGameState(prev => ({
-        ...prev,
-        currentSong: {
-          id: data.songId,
-          name: displayName,
-          artist: displayArtist
+      const songId = data?.songId != null ? String(data.songId) : '';
+      setGameState((prev) => {
+        if (
+          prev.currentSong?.id === songId &&
+          prev.currentSong?.name === displayName &&
+          prev.currentSong?.artist === displayArtist
+        ) {
+          return prev;
         }
-      }));
-      // Increment songs played counter
-      setSongsPlayed(prev => prev + 1);
+        return {
+          ...prev,
+          currentSong: {
+            id: songId,
+            name: displayName,
+            artist: displayArtist,
+          },
+        };
+      });
+      // Absolute call index from server (re-emits of the same song must not bump / flash UI).
+      const playbackNumber = Number(data?.playbackNumber);
+      if (Number.isFinite(playbackNumber) && playbackNumber > 0) {
+        setSongsPlayed((prev) => (prev === playbackNumber ? prev : playbackNumber));
+      } else if (Array.isArray(data?.playedSongIds)) {
+        const n = data.playedSongIds.length;
+        setSongsPlayed((prev) => (prev === n ? prev : n));
+      }
     });
 
     newSocket.on('bingo-card-error', (data: any) => {
@@ -1405,7 +1462,11 @@ const PlayerView: React.FC = () => {
     [bingoCard?.squares],
   );
 
+  /** True after the first successful fit for the current card content — refits must not blank the grid. */
+  const cardTextFitEverReadyRef = useRef(false);
+
   useLayoutEffect(() => {
+    cardTextFitEverReadyRef.current = false;
     setCardTextFitReady(false);
   }, [cardTextFitSignature]);
 
@@ -1421,6 +1482,7 @@ const PlayerView: React.FC = () => {
     let fitGeneration = 0;
     let measuring = false;
     let pendingRefit = false;
+    let resizeObserver: ResizeObserver | null = null;
 
     /** Title leads. Artist uses its own scale (not × titleScale); hierarchy enforced after fit. */
     const titleOnlyCells = !showArtists;
@@ -1486,6 +1548,11 @@ const PlayerView: React.FC = () => {
       measuring = true;
       if (playerContainer) {
         playerContainer.setAttribute('data-fit-measuring', '1');
+        // After the first successful fit, hide the grid only for the measure tick so
+        // --player-card-font-scale:1 does not flash oversized text on every song sync.
+        if (cardTextFitEverReadyRef.current) {
+          playerContainer.setAttribute('data-fit-silent', '1');
+        }
         void playerContainer.offsetHeight;
       }
 
@@ -1649,10 +1716,12 @@ const PlayerView: React.FC = () => {
 
       if (playerContainer) {
         playerContainer.removeAttribute('data-fit-measuring');
+        playerContainer.removeAttribute('data-fit-silent');
       }
       measuring = false;
 
       if (cancelled || gen !== fitGeneration) return;
+      cardTextFitEverReadyRef.current = true;
       setCardTextFitReady(true);
       if (pendingRefit) {
         pendingRefit = false;
@@ -1663,27 +1732,32 @@ const PlayerView: React.FC = () => {
 
     frame = requestAnimationFrame(fitCardText);
 
-    const resizeObserver = new ResizeObserver(() => {
+    resizeObserver = new ResizeObserver(() => {
+      if (cancelled || measuring) return;
       cancelAnimationFrame(frame);
-      setCardTextFitReady(false);
+      // Silent refit — do not flip to fit-pending (that blanks every cell on song/sync layout noise).
       frame = requestAnimationFrame(fitCardText);
     });
     resizeObserver.observe(gridEl);
 
     const fontsReady = (document as Document & { fonts?: FontFaceSet }).fonts?.ready;
-    fontsReady?.then(() => {
-      cancelAnimationFrame(frame);
-      setCardTextFitReady(false);
-      frame = requestAnimationFrame(fitCardText);
-    }).catch(() => {});
+    fontsReady
+      ?.then(() => {
+        if (cancelled || measuring) return;
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(fitCardText);
+      })
+      .catch(() => {});
 
     return () => {
       cancelled = true;
       cancelAnimationFrame(frame);
-      resizeObserver.disconnect();
-      gridEl.closest<HTMLElement>('.player-container')?.removeAttribute('data-fit-measuring');
+      resizeObserver?.disconnect();
+      const container = gridEl.closest<HTMLElement>('.player-container');
+      container?.removeAttribute('data-fit-measuring');
+      container?.removeAttribute('data-fit-silent');
     };
-  }, [cardTextFitSignature, visualViewportHeightPx, compactCardCells, showArtists, cardGridEl, titleCollisionPositions]);
+  }, [cardTextFitSignature, compactCardCells, showArtists, cardGridEl, titleCollisionPositions]);
 
   // Keep screen awake during game using Wake Lock API
   useEffect(() => {
@@ -1715,12 +1789,14 @@ const PlayerView: React.FC = () => {
 
     const square = bingoCard.squares.find(s => s.position === position);
     if (!square) return;
-    if (square.isFreeSpace || square.songId === '__FREE_SPACE__') return;
 
-    // Emit mark-square event to server
+    const free = isPlayerFreeSpaceSquare(square);
+    const songId = free ? '__FREE_SPACE__' : square.songId;
+
+    // Emit mark-square event to server (FREE is toggleable for fun; still counts for bingo).
     socket.emit('mark-square', {
       roomId,
-      songId: square.songId,
+      songId,
       position,
       cardId: bingoCard.cardId || bingoCard.id,
     });
@@ -1738,7 +1814,8 @@ const PlayerView: React.FC = () => {
     if (navigator.vibrate) navigator.vibrate(10);
   };
 
-  // Long-press (touch) / hover (mouse): full title + artist in fixed panel.
+  // Long-press (touch): full title + artist when artists are hidden. No mouse hover — it
+  // duplicated artists already on the card and covered HOLD TO CALL BINGO.
   const squareTooltipContent = (square: BingoSquare) => {
     const free = isPlayerFreeSpaceSquare(square);
     const vis = youtubeBingoSquareDisplay(square);
@@ -1761,32 +1838,13 @@ const PlayerView: React.FC = () => {
     }
   };
 
-  const clearHoverTooltipTimer = () => {
-    if (hoverTooltipTimer.current) {
-      window.clearTimeout(hoverTooltipTimer.current);
-      hoverTooltipTimer.current = null;
-    }
-  };
-
   const dismissSquareTooltip = () => {
     setLongPressTooltip(null);
   };
 
-  const handleSquarePointerEnter = (square: BingoSquare, e: React.PointerEvent) => {
-    if (e.pointerType !== 'mouse') return;
-    clearHoverTooltipTimer();
-    hoverTooltipTimer.current = window.setTimeout(() => {
-      showSquareTooltip(square);
-    }, 400);
-  };
-
   const handleSquarePointerLeave = (e: React.PointerEvent) => {
     clearLongPressTimer();
-    if (e.pointerType === 'mouse') {
-      clearHoverTooltipTimer();
-      dismissSquareTooltip();
-      return;
-    }
+    if (e.pointerType === 'mouse') return;
     dismissSquareTooltip();
   };
 
@@ -1991,9 +2049,12 @@ const PlayerView: React.FC = () => {
   const checkVisualPattern = (card: BingoCard): boolean => {
     const pattern = gameState.pattern;
     
-    // Helper function to check if a square is marked (visual check only)
+    // Helper function to check if a square is marked (visual check only).
+    // FREE always counts even if the player toggled the daub off for fun.
     const isSquareMarked = (square: BingoSquare): boolean => {
-      return square && square.marked === true;
+      if (!square) return false;
+      if (isPlayerFreeSpaceSquare(square)) return true;
+      return square.marked === true;
     };
     
     // Full card / blackout — real 5×5 grid, then every cell marked (fail closed if card is truncated/duplicate)
@@ -2090,13 +2151,12 @@ const PlayerView: React.FC = () => {
   const checkBingo = (card: BingoCard): boolean => {
     const pattern = gameState.pattern;
     
-    // Helper function to check if a marked square corresponds to a played song (or free space)
+    // Helper function to check if a marked square corresponds to a played song (or free space).
+    // FREE always counts even if the player toggled the daub off for fun.
     const isMarkedSquareValid = (square: BingoSquare): boolean => {
-      const isFree = !!(square.isFreeSpace || square.songId === '__FREE_SPACE__');
-      const isValid = square.marked && (isFree || playedSongIds.includes(square.songId));
-      if (square.marked && !isValid) {
-      }
-      return isValid;
+      if (!square) return false;
+      if (isPlayerFreeSpaceSquare(square)) return true;
+      return !!(square.marked && playedSongIds.includes(square.songId));
     };
     
     // Full card / blackout — grid integrity + every cell marked with a played song (matches server 0-0…4-4 loop)
@@ -2342,7 +2402,6 @@ const PlayerView: React.FC = () => {
               className={`bingo-square ${square.marked ? 'marked' : ''} ${isPatternSquare(square.position) ? 'pattern-highlight' : ''} ${square.isFreeSpace || square.songId === '__FREE_SPACE__' ? 'free-space' : ''}${titleCollisionPositions.has(square.position) ? ' bingo-square--title-collision' : ''}`}
               data-position={square.position}
               onClick={() => handleSquareClick(square.position)}
-              onPointerEnter={(e) => handleSquarePointerEnter(square, e)}
               onPointerDown={(e) => handlePointerDown(square, e)}
               onPointerUp={handleSquarePointerUp}
               onPointerCancel={handleSquarePointerLeave}
