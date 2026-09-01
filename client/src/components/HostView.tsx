@@ -4154,11 +4154,8 @@ const HostView: React.FC = () => {
         'info',
       );
       
-      if (!yt && !apple) {
-        setTimeout(() => {
-          syncVolumeToSpotify();
-        }, 500);
-      }
+      // Do not PUT /v1/me/player/volume on every song — ~75 calls/round burned shared
+      // Spotify quota. Volume is set at Start / host slider / resume; Spotify keeps it.
       // Host card marks arrive via server `player-cards-update` on each call — do not
       // re-request (that used to run recovery deals and burn playlist API quota).
     });
@@ -8018,6 +8015,12 @@ const HostView: React.FC = () => {
         return [];
       }
 
+      // Defense in depth: selection rebuilds must not paginate Spotify mid-round
+      // (live lock blocks Web API, but still wastes host HTTP + error storms).
+      if (opts?.reason === 'selection' && gameStateRef.current === 'playing') {
+        return songListRef.current;
+      }
+
       if (rowsNeedHostSpotify && !isSpotifyConnected) {
         console.warn('Cannot generate song list: Spotify not connected for selected playlists');
         setSongList([]);
@@ -8983,12 +8986,15 @@ const HostView: React.FC = () => {
 
   // Build master setlist when selection changes. Debounced: ticking several playlists in a row = one import wave.
   // Depends on playlistSelectionKey + Spotify connectivity gates + mixNeedsHostSpotify — NOT generateSongList — so callback identity churn does not reschedule this effect (was causing 3× identical playlist-tracks bursts).
+  // Live round: never rebuild — Spotify reconnect / selection identity churn must not hit playlist-tracks mid-show.
   useEffect(() => {
+    if (gameStateRef.current === 'playing') return;
     const extra = setlistDebounceExtraAfterSpotifyConnectMsRef.current;
     setlistDebounceExtraAfterSpotifyConnectMsRef.current = 0;
     const debounceMs = 750 + (extra > 0 ? extra : 0);
     const t = window.setTimeout(() => {
       if (finalizeMixInFlightRef.current) return;
+      if (gameStateRef.current === 'playing') return;
       void generateSongListRef.current({ reason: 'selection' });
     }, debounceMs);
     return () => window.clearTimeout(t);
