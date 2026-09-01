@@ -88,6 +88,8 @@ interface GameState {
   customMatchReverse?: boolean;
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
+  /** Audience label for custom shapes (server / host). */
+  customPatternName?: string;
 }
 
 interface Song {
@@ -874,6 +876,10 @@ const PlayerView: React.FC = () => {
         data?.pattern === 'custom'
           ? { rev: !!data.customMatchReverse, rot: !!data.customMatchAllowRotation, mir: !!data.customMatchAllowMirror }
           : { rev: false, rot: false, mir: false };
+      const customName =
+        data?.pattern === 'custom' && typeof data?.customPatternName === 'string'
+          ? data.customPatternName.trim().slice(0, 80)
+          : '';
       setGameState((prev) => ({
         ...prev,
         isPlaying: true,
@@ -893,11 +899,13 @@ const PlayerView: React.FC = () => {
               customMatchReverse: cre.rev,
               customMatchAllowRotation: cre.rot,
               customMatchAllowMirror: cre.mir,
+              customPatternName: customName,
             }
           : {
               customMatchReverse: false,
               customMatchAllowRotation: false,
               customMatchAllowMirror: false,
+              customPatternName: undefined,
             }),
       }));
       setBingoStatus('idle');
@@ -994,6 +1002,12 @@ const PlayerView: React.FC = () => {
             const nextRev = effectivePat === 'custom' ? !!payload.customMatchReverse : false;
             const nextRot = effectivePat === 'custom' ? !!payload.customMatchAllowRotation : false;
             const nextMir = effectivePat === 'custom' ? !!payload.customMatchAllowMirror : false;
+            const nextCustomName =
+              effectivePat === 'custom' && typeof payload?.customPatternName === 'string'
+                ? payload.customPatternName.trim().slice(0, 80)
+                : effectivePat === 'custom'
+                  ? prev.customPatternName || ''
+                  : undefined;
             const sameSong =
               (nextSong?.id || null) === (prev.currentSong?.id || null) &&
               (nextSong?.name || null) === (prev.currentSong?.name || null) &&
@@ -1008,7 +1022,8 @@ const PlayerView: React.FC = () => {
               (lr === undefined || lr === prev.linesRequired) &&
               nextRev === !!prev.customMatchReverse &&
               nextRot === !!prev.customMatchAllowRotation &&
-              nextMir === !!prev.customMatchAllowMirror
+              nextMir === !!prev.customMatchAllowMirror &&
+              nextCustomName === prev.customPatternName
             ) {
               return prev;
             }
@@ -1024,6 +1039,7 @@ const PlayerView: React.FC = () => {
               customMatchReverse: nextRev,
               customMatchAllowRotation: nextRot,
               customMatchAllowMirror: nextMir,
+              customPatternName: nextCustomName,
             };
           });
         } else if (typeof payload?.playerCount === 'number') {
@@ -1222,11 +1238,16 @@ const PlayerView: React.FC = () => {
                 customMatchReverse: !!data.customMatchReverse,
                 customMatchAllowRotation: !!data.customMatchAllowRotation,
                 customMatchAllowMirror: !!data.customMatchAllowMirror,
+                customPatternName:
+                  typeof data?.customPatternName === 'string'
+                    ? data.customPatternName.trim().slice(0, 80)
+                    : prev.customPatternName || '',
               }
             : {
                 customMatchReverse: false,
                 customMatchAllowRotation: false,
                 customMatchAllowMirror: false,
+                customPatternName: undefined,
               }),
         };
       });
@@ -2568,6 +2589,7 @@ const PlayerView: React.FC = () => {
               customMatchReverse={gameState.customMatchReverse}
               customMatchAllowRotation={gameState.customMatchAllowRotation}
               customMatchAllowMirror={gameState.customMatchAllowMirror}
+              customPatternName={gameState.customPatternName}
               patternComposite={gameState.patternComposite}
             />
           ) : null}
