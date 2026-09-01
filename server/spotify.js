@@ -85,6 +85,7 @@ const SPOTIFY_SOURCE_ROUTE_HINT = {
   getCurrentTrack: 'GET /v1/me/player/currently-playing',
   searchPlaylists: 'GET /v1/search (type=playlist)',
   searchTracks: 'GET /v1/search (type=track)',
+  searchTracksSongRequest: 'GET /v1/search (type=track, song-request)',
   setVolume: 'PUT /v1/me/player/volume',
   seekToPosition: 'PUT /v1/me/player/seek',
   setShuffleState: 'PUT /v1/me/player/shuffle',
@@ -1731,10 +1732,23 @@ class SpotifyService {
     }
   }
 
-  // Search for tracks (limit max 10, default 5; offset for paging)
+  // Search for tracks (limit max 10, default 5; offset for paging).
+  // Non-essential during live shows — use searchTracksForSongRequest for request approval.
   async searchTracks(query, limit = SPOTIFY_SEARCH_LIMIT_DEFAULT, offset = 0) {
     await this._ensureCanCallWebApi('searchTracks');
-    
+    return this._searchTracksImpl(query, limit, offset, 'searchTracks');
+  }
+
+  /**
+   * Track search for host song-request approval. Allowed during a live round (small, paced
+   * searches) so Approve is not dead mid-show; still blocked during 429 quarantine.
+   */
+  async searchTracksForSongRequest(query, limit = 5, offset = 0) {
+    await this._ensureCanCallWebApi('searchTracksSongRequest');
+    return this._searchTracksImpl(query, Math.min(5, clampSearchLimit(limit)), offset, 'searchTracksSongRequest');
+  }
+
+  async _searchTracksImpl(query, limit, offset, label) {
     try {
       const response = await this.spotifyApi.searchTracks(query, {
         limit: clampSearchLimit(limit),
@@ -1753,7 +1767,7 @@ class SpotifyService {
         explicit: track.explicit === true
       }));
     } catch (error) {
-      this._rethrowIfRateLimited(error, 'searchTracks');
+      this._rethrowIfRateLimited(error, label);
       console.error('Error searching tracks:', error);
       throw error;
     }

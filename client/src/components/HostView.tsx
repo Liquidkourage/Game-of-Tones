@@ -1819,6 +1819,17 @@ const HostView: React.FC = () => {
   const [showPlayerFeedbackModal, setShowPlayerFeedbackModal] = useState(false);
   const [songRequests, setSongRequests] = useState<SongRequestEntry[]>([]);
   const [requestModerationBusyId, setRequestModerationBusyId] = useState<string | null>(null);
+  /** Spotify matches for a pending request — host picks when search returns more than one. */
+  const [requestTrackPicker, setRequestTrackPicker] = useState<{
+    requestId: string;
+    tracks: Array<{
+      id: string;
+      name: string;
+      artist: string;
+      duration_ms?: number;
+      explicit?: boolean;
+    }>;
+  } | null>(null);
   const [youtubeMusicConnected, setYoutubeMusicConnected] = useState(false);
   const [youtubeStatusReady, setYoutubeStatusReady] = useState(false);
   const [appleMusicConnected, setAppleMusicConnected] = useState(false);
@@ -7833,52 +7844,113 @@ const HostView: React.FC = () => {
 
   /** Approve/reject anytime — grows the Requests pool for later; never rebuilds the live deck
    *  (see requestPoolSongs → generateSongList effect, which no-ops while playing). */
+  const emitModerateSongRequest = useCallback(
+    async (
+      request: SongRequestEntry,
+      status: 'approved' | 'rejected',
+      resolvedSong?: Song,
+    ) => {
+      if (!socket || !roomId) throw new Error('Not connected');
+      await new Promise<void>((resolve, reject) => {
+        socket.emit(
+          'moderate-song-request',
+          { roomId, requestId: request.id, status, resolvedSong },
+          (result: { ok?: boolean } | undefined) =>
+            result?.ok ? resolve() : reject(new Error('Request moderation failed')),
+        );
+      });
+    },
+    [socket, roomId],
+  );
+
+  const songFromSearchHit = (match: {
+    id: string;
+    name: string;
+    artist: string;
+    duration_ms?: number;
+    explicit?: boolean;
+  }): Song => ({
+    id: match.id,
+    name: match.name,
+    artist: match.artist,
+    duration: Number.isFinite(Number(match.duration_ms))
+      ? Math.round(Number(match.duration_ms) / 1000)
+      : undefined,
+    explicit: match.explicit === true,
+  });
+
+  const explainSongRequestSearchFailure = (response: Response, data: any): string => {
+    const code = String(data?.code || data?.error || '');
+    if (response.status === 401 || code === 'spotify_unauthorized' || code === 'Spotify not connected') {
+      return 'Spotify is not connected. Reconnect Spotify, then approve again.';
+    }
+    if (response.status === 429 || code === 'spotify_quarantine') {
+      return 'Spotify is rate-limited right now. Wait a bit, then approve again.';
+    }
+    if (code === 'live_show_api_locked') {
+      return 'Spotify search is temporarily locked. Try again in a moment.';
+    }
+    if (typeof data?.message === 'string' && data.message.trim()) {
+      return data.message.trim();
+    }
+    return `Spotify search failed (HTTP ${response.status}).`;
+  };
+
   const moderateSongRequest = useCallback(
     async (request: SongRequestEntry, status: 'approved' | 'rejected') => {
       if (!socket || !roomId || requestModerationBusyId) return;
       setRequestModerationBusyId(request.id);
+      setRequestTrackPicker((prev) => (prev?.requestId === request.id ? null : prev));
       try {
-        let resolvedSong: Song | undefined;
-        if (status === 'approved') {
-          if (!isSpotifyConnected) {
-            showToast('Connect Spotify before approving a request so it can be played.', 'warn');
-            return;
-          }
-          const query = [request.title, request.artist].filter(Boolean).join(' ');
-          const response = await hostFetch(
-            `${API_BASE || ''}/api/spotify/search-tracks?q=${encodeURIComponent(query)}&limit=1`,
-            { cache: 'no-store' },
-          );
-          const data = await response.json();
-          const match = Array.isArray(data?.tracks) ? data.tracks[0] : null;
-          if (!response.ok || !match?.id || !match?.name || !match?.artist) {
-            showToast(`No Spotify match found for “${request.title}”.`, 'warn');
-            return;
-          }
-          resolvedSong = {
-            id: match.id,
-            name: match.name,
-            artist: match.artist,
-            duration: Number.isFinite(Number(match.duration_ms))
-              ? Math.round(Number(match.duration_ms) / 1000)
-              : undefined,
-            explicit: match.explicit === true,
-          };
+        if (status === 'rejected') {
+          await emitModerateSongRequest(request, 'rejected');
+          showToast(`Rejected “${request.title}”.`, 'info');
+          return;
         }
-        await new Promise<void>((resolve, reject) => {
-          socket.emit(
-            'moderate-song-request',
-            { roomId, requestId: request.id, status, resolvedSong },
-            (result: { ok?: boolean } | undefined) =>
-              result?.ok ? resolve() : reject(new Error('Request moderation failed')),
-          );
-        });
-        showToast(
-          status === 'approved'
-            ? `Approved “${resolvedSong?.name}” for Requests.`
-            : `Rejected “${request.title}”.`,
-          status === 'approved' ? 'success' : 'info',
+
+        if (!isSpotifyConnected) {
+          showToast('Connect Spotify before approving a request so it can be played.', 'warn');
+          return;
+        }
+
+        const query = [request.title, request.artist].filter(Boolean).join(' ');
+        // purpose=song_request bypasses the mid-show library lock (still paced / quarantine-aware).
+        const response = await hostFetch(
+          `${API_BASE || ''}/api/spotify/search-tracks?q=${encodeURIComponent(query)}&limit=5&purpose=song_request`,
+          { cache: 'no-store' },
         );
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          showToast(explainSongRequestSearchFailure(response, data), 'warn');
+          return;
+        }
+
+        const tracks = Array.isArray(data?.tracks)
+          ? data.tracks.filter(
+              (t: any) =>
+                t &&
+                typeof t.id === 'string' &&
+                typeof t.name === 'string' &&
+                typeof t.artist === 'string',
+            )
+          : [];
+        if (tracks.length === 0) {
+          showToast(
+            `No Spotify match found for “${request.title}”. Try editing the title/artist on the player side, or reject.`,
+            'warn',
+          );
+          return;
+        }
+
+        if (tracks.length > 1) {
+          setRequestTrackPicker({ requestId: request.id, tracks });
+          showToast(`Pick the Spotify track for “${request.title}”.`, 'info');
+          return;
+        }
+
+        const resolvedSong = songFromSearchHit(tracks[0]);
+        await emitModerateSongRequest(request, 'approved', resolvedSong);
+        showToast(`Approved “${resolvedSong.name}” for Requests.`, 'success');
       } catch (error) {
         console.error('Song request moderation failed:', error);
         showToast('Could not update that request. Try again.', 'error');
@@ -7886,7 +7958,42 @@ const HostView: React.FC = () => {
         setRequestModerationBusyId(null);
       }
     },
-    [socket, roomId, requestModerationBusyId, isSpotifyConnected, showToast],
+    [
+      socket,
+      roomId,
+      requestModerationBusyId,
+      isSpotifyConnected,
+      showToast,
+      emitModerateSongRequest,
+    ],
+  );
+
+  const confirmSongRequestTrack = useCallback(
+    async (
+      request: SongRequestEntry,
+      match: {
+        id: string;
+        name: string;
+        artist: string;
+        duration_ms?: number;
+        explicit?: boolean;
+      },
+    ) => {
+      if (!socket || !roomId || requestModerationBusyId) return;
+      setRequestModerationBusyId(request.id);
+      try {
+        const resolvedSong = songFromSearchHit(match);
+        await emitModerateSongRequest(request, 'approved', resolvedSong);
+        setRequestTrackPicker(null);
+        showToast(`Approved “${resolvedSong.name}” for Requests.`, 'success');
+      } catch (error) {
+        console.error('Song request track confirm failed:', error);
+        showToast('Could not update that request. Try again.', 'error');
+      } finally {
+        setRequestModerationBusyId(null);
+      }
+    },
+    [socket, roomId, requestModerationBusyId, showToast, emitModerateSongRequest],
   );
 
   const generateSongList = useCallback(
@@ -12122,7 +12229,7 @@ const HostView: React.FC = () => {
                                         disabled={requestModerationBusyId === request.id}
                                         onClick={() => void moderateSongRequest(request, 'approved')}
                                       >
-                                        Approve
+                                        Find &amp; approve
                                       </button>
                                       <button
                                         type="button"
@@ -12132,6 +12239,49 @@ const HostView: React.FC = () => {
                                       >
                                         Reject
                                       </button>
+                                      {requestTrackPicker?.requestId === request.id ? (
+                                        <div
+                                          style={{
+                                            flexBasis: '100%',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: 6,
+                                            marginTop: 4,
+                                            padding: '8px 10px',
+                                            borderRadius: 10,
+                                            background: 'rgba(0,0,0,0.28)',
+                                            border: '1px solid rgba(255,255,255,0.12)',
+                                          }}
+                                        >
+                                          <span style={{ opacity: 0.8, fontSize: '0.72rem' }}>
+                                            Pick the Spotify track:
+                                          </span>
+                                          {requestTrackPicker.tracks.map((track) => (
+                                            <button
+                                              key={track.id}
+                                              type="button"
+                                              className="host-playlist-quick-add"
+                                              disabled={requestModerationBusyId === request.id}
+                                              onClick={() => void confirmSongRequestTrack(request, track)}
+                                              style={{
+                                                textAlign: 'left',
+                                                whiteSpace: 'normal',
+                                                lineHeight: 1.25,
+                                              }}
+                                            >
+                                              <strong>{track.name}</strong>
+                                              <span style={{ opacity: 0.75 }}> — {track.artist}</span>
+                                            </button>
+                                          ))}
+                                          <button
+                                            type="button"
+                                            className="host-playlist-quick-add"
+                                            onClick={() => setRequestTrackPicker(null)}
+                                          >
+                                            Cancel match
+                                          </button>
+                                        </div>
+                                      ) : null}
                                     </>
                                   ) : (
                                     <span

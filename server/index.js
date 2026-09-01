@@ -17155,8 +17155,11 @@ app.post('/api/spotify/delete-playlists', async (req, res) => {
 // Search for tracks
 app.get('/api/spotify/search-tracks', async (req, res) => {
   try {
-    const { q, limit: limitQ, offset: offsetQ } = req.query;
-    const limit = SpotifyService.clampSearchLimit(limitQ);
+    const { q, limit: limitQ, offset: offsetQ, purpose } = req.query;
+    const forSongRequest = String(purpose || '') === 'song_request';
+    const limit = forSongRequest
+      ? Math.min(5, SpotifyService.clampSearchLimit(limitQ ?? 5))
+      : SpotifyService.clampSearchLimit(limitQ);
     const offset = SpotifyService.normalizeSearchOffset(offsetQ);
     
     if (!hostSpotifyHasTokens(req)) {
@@ -17167,9 +17170,13 @@ app.get('/api/spotify/search-tracks', async (req, res) => {
       return res.status(400).json({ error: 'Query parameter q is required' });
     }
     
-    await spotifyForRequest(req).ensureValidToken();
-    
-    const tracks = await spotifyForRequest(req).searchTracks(q, limit, offset);
+    const sp = spotifyForRequest(req);
+    await sp.ensureValidToken();
+
+    // Request approval must work mid-show; general library search stays live-locked.
+    const tracks = forSongRequest
+      ? await sp.searchTracksForSongRequest(q, limit, offset)
+      : await sp.searchTracks(q, limit, offset);
     
     res.json({
       success: true,
