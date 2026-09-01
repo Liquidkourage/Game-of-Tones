@@ -6555,6 +6555,83 @@ button.conn-chip.conn-chip-compact {
   min-height: 0;
 }
 
+/* Compact win-pattern reminder above the live card */
+.player-container--v2 .player-pattern-hint {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 2vw, 12px);
+  margin: 0 auto clamp(4px, 0.8vmin, 8px);
+  padding: clamp(4px, 0.9vmin, 7px) clamp(8px, 2vw, 12px);
+  max-width: min(100%, 22rem);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-sizing: border-box;
+}
+
+.player-container--v2.player-container--light .player-pattern-hint {
+  background: rgba(15, 23, 42, 0.05);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+.player-container--v2 .player-pattern-hint__grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+  gap: 2px;
+  width: clamp(28px, 7.5vmin, 36px);
+  height: clamp(28px, 7.5vmin, 36px);
+  flex-shrink: 0;
+}
+
+.player-container--v2 .player-pattern-hint__cell {
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.player-container--v2.player-container--light .player-pattern-hint__cell {
+  background: rgba(15, 23, 42, 0.12);
+}
+
+.player-container--v2 .player-pattern-hint__cell.is-lit {
+  background: var(--player-accent, #14b8a6);
+  box-shadow: 0 0 6px rgba(20, 184, 166, 0.45);
+}
+
+.player-container--v2 .player-pattern-hint__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+}
+
+.player-container--v2 .player-pattern-hint__eyebrow {
+  font-size: clamp(0.58rem, 1.8vw, 0.68rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  line-height: 1.1;
+}
+
+.player-container--v2 .player-pattern-hint__label {
+  font-size: clamp(0.78rem, 2.4vw, 0.92rem);
+  font-weight: 800;
+  line-height: 1.15;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+}
+
+.player-container--v2.player-container--light .player-pattern-hint__label {
+  color: #0f172a;
+}
+
 .player-container--v2 .player-v2-action-bar {
   display: flex;
   flex-direction: column;

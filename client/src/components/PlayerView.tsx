@@ -14,6 +14,7 @@ import {
   type PlayerStats,
 } from '../utils/playerFetch';
 import PlayerAccountGate from './PlayerAccountGate';
+import PlayerPatternHint from './PlayerPatternHint';
 import {
   clearPlayerJoinIntent,
   clearPlayerSeat,
@@ -2298,10 +2299,9 @@ const PlayerView: React.FC = () => {
       return unionCompositeHighlightPositions(gameState.patternComposite).includes(position);
     }
 
-    // Any row, column, or diagonal can win - every cell can belong to some winning line.
-    // Full card (blackout): every cell is required.
+    // Line / blackout: don't wash the whole card — the pattern chip shows the goal.
     if (pattern === 'line' || pattern === 'full_card' || pattern === 'blackout') {
-      return true;
+      return false;
     }
 
     if (pattern === 'custom' && gameState.customPattern?.length) {
@@ -2560,6 +2560,17 @@ const PlayerView: React.FC = () => {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.35 }}
         >
+          {bingoCard && gameState.pattern ? (
+            <PlayerPatternHint
+              pattern={gameState.pattern}
+              linesRequired={gameState.linesRequired}
+              customPattern={gameState.customPattern}
+              customMatchReverse={gameState.customMatchReverse}
+              customMatchAllowRotation={gameState.customMatchAllowRotation}
+              customMatchAllowMirror={gameState.customMatchAllowMirror}
+              patternComposite={gameState.patternComposite}
+            />
+          ) : null}
           <div className="bingo-section-measure">
             {showMultiCardChrome ? (
               <div

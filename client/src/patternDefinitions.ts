@@ -968,6 +968,74 @@ export function getPatternDisplayName(pattern: BingoPattern | string): string {
   return BINGO_PATTERNS[key]?.label || pattern;
 }
 
+/** Audience-facing short label for the player pattern chip. */
+export function getPatternHintLabel(
+  pattern: BingoPattern | string,
+  opts?: {
+    linesRequired?: number;
+    patternComposite?: PatternCompositeSpec | null;
+    customPatternName?: string;
+  },
+): string {
+  const p = pattern === 'blackout' ? 'full_card' : pattern;
+  if (p === 'line') {
+    const n = normalizeLinesRequired(opts?.linesRequired ?? 1);
+    return n <= 1 ? 'Any 1 line' : `Any ${n} lines`;
+  }
+  if (p === 'full_card') return 'Full card';
+  if (p === 'custom') {
+    const name = opts?.customPatternName?.trim();
+    return name || 'Custom shape';
+  }
+  if (p === 'composite' && opts?.patternComposite) {
+    return describeCompositePatternAudienceSentence(opts.patternComposite) || 'Combined';
+  }
+  return getPatternDisplayName(p);
+}
+
+/**
+ * Cells to light on a tiny 5×5 hint grid (not win validation).
+ * Line uses a sample middle row so players see “complete a line,” not “mark everything.”
+ */
+export function patternHintCellPositions(opts: {
+  pattern: BingoPattern | string;
+  linesRequired?: number;
+  customPattern?: readonly string[] | null;
+  customMatchReverse?: boolean;
+  customMatchAllowRotation?: boolean;
+  customMatchAllowMirror?: boolean;
+  patternComposite?: PatternCompositeSpec | null;
+}): string[] {
+  const pattern = opts.pattern === 'blackout' ? 'full_card' : opts.pattern;
+
+  if (pattern === 'line') {
+    const need = normalizeLinesRequired(opts.linesRequired ?? 1);
+    if (need <= 1) return ['2-0', '2-1', '2-2', '2-3', '2-4'];
+    // Two sample lines (middle row + middle column) for multi-line rounds.
+    return ['2-0', '2-1', '2-2', '2-3', '2-4', '0-2', '1-2', '3-2', '4-2'];
+  }
+
+  if (pattern === 'full_card') {
+    return [...STANDARD_BINGO_POSITIONS];
+  }
+
+  if (pattern === 'custom' && opts.customPattern?.length) {
+    return customMaskHighlightPositions([...opts.customPattern], {
+      matchReverse: opts.customMatchReverse,
+      matchAllowRotation: opts.customMatchAllowRotation,
+      matchAllowMirror: opts.customMatchAllowMirror,
+    });
+  }
+
+  if (pattern === 'composite' && opts.patternComposite) {
+    return unionCompositeHighlightPositions(opts.patternComposite);
+  }
+
+  const def = BINGO_PATTERNS[pattern as BingoPattern];
+  if (def?.positions?.length) return [...def.positions];
+  return [];
+}
+
 // Helper function to validate pattern positions
 export function validatePatternPositions(positions: string[]): boolean {
   return positions.every(pos => /^[0-4]-[0-4]$/.test(pos));
