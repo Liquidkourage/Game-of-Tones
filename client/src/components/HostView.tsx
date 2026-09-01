@@ -7658,11 +7658,16 @@ const HostView: React.FC = () => {
     }
   };
 
+  /** Close round-complete celebration and reveal Tonight's winners on the projector. */
+  const revealWinnersBoardAfterRound = useCallback(() => {
+    if (!socket || !roomId) return;
+    setShowNightBoard(true);
+    socket.emit('reveal-winners-board', { roomId });
+  }, [socket, roomId]);
+
   /** Close round-complete celebration without starting the next round or ending the session. */
   const dismissRoundCompleteModal = useCallback(() => {
-    if (socket && roomId) {
-      socket.emit('dismiss-public-winner', { roomId });
-    }
+    revealWinnersBoardAfterRound();
     setEventRounds((prev) => {
       const cur = currentRoundIndexRef.current;
       if (cur < 0 || cur >= prev.length || prev[cur].status === 'completed') return prev;
@@ -7683,9 +7688,9 @@ const HostView: React.FC = () => {
     setGamePaused(true);
     gameStateRef.current = 'waiting';
     setGameState('waiting');
-    showToast('Round marked complete — use Round Planner to prep or start the next round when ready.', 'info');
-    addLog('Round complete modal dismissed — current round marked complete', 'info');
-  }, [socket, showToast, addLog, roomId]);
+    showToast('Round marked complete — winners list is on the projector until you set the next round.', 'info');
+    addLog('Round complete modal dismissed — winners board revealed', 'info');
+  }, [revealWinnersBoardAfterRound, showToast, addLog, roomId]);
 
 
 
@@ -10273,6 +10278,7 @@ const HostView: React.FC = () => {
       showToast('Not connected — cannot advance rounds', 'error');
       return;
     }
+    revealWinnersBoardAfterRound();
     completeCurrentRound();
     jumpToRound(nextIndex);
     setRoundComplete(null);
@@ -10282,13 +10288,14 @@ const HostView: React.FC = () => {
     setGameState('waiting');
     setHostGlassNav('game');
     showToast(
-      `${round?.name || 'Next round'} ready — tap Start Game when the room is set.`,
+      `${round?.name || 'Next round'} ready — winners list stays up until you Set round / Start Game.`,
       'success',
     );
     addLog(`Advanced to ${round?.name || 'next round'} for prep (no auto-start)`, 'info');
   }, [
     getNextPlannedRound,
     emitRoundPlaybackReset,
+    revealWinnersBoardAfterRound,
     completeCurrentRound,
     jumpToRound,
     showToast,

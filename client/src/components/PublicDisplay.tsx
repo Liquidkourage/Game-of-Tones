@@ -1564,12 +1564,7 @@ const PublicDisplay: React.FC = () => {
     Array<{ roundNumber: number; playerName: string; prize?: string; roundName?: string }>
   >([]);
   const [roomPhase, setRoomPhase] = useState<string>('waiting');
-  /** After a verified win, celebrate then clear the card (board auto-hides server-side). */
-  useEffect(() => {
-    if (!winnerCardModal) return;
-    const t = window.setTimeout(() => setWinnerCardModal(null), 8000);
-    return () => window.clearTimeout(t);
-  }, [winnerCardModal]);
+  // Winner card stays until the host advances (reveal-winners-board) or keep-playing timeout.
   const [sponsorScreen, setSponsorScreen] = useState<{
     mediaUrl: string;
     text: string;
@@ -2894,8 +2889,9 @@ const PublicDisplay: React.FC = () => {
               setTimeout(() => setShowWinnerBanner(false), celebrationTime);
             }
             if (Array.isArray(data.roundWinners)) setRoundWinnersBoard(data.roundWinners);
+            // End-round: card only until host advances. Keep-playing: never pin the night board.
             if (data.showNightBoard !== undefined) setShowNightBoard(!!data.showNightBoard);
-            else if (!continueRound) setShowNightBoard(true);
+            else if (!continueRound) setShowNightBoard(false);
             if (typeof data.roundName === 'string' && data.roundName.trim()) {
               setCurrentRoundName(data.roundName.trim());
             }
@@ -2913,8 +2909,9 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('round-complete', (data: any) => {
       setIsVerificationPending(false);
       if (Array.isArray(data?.roundWinners)) setRoundWinnersBoard(data.roundWinners);
+      // Winners list waits for host advance (reveal-winners-board) — do not auto-show here.
       if (data?.showNightBoard !== undefined) setShowNightBoard(!!data.showNightBoard);
-      else setShowNightBoard(true);
+      else setShowNightBoard(false);
       if (typeof data?.roundName === 'string' && data.roundName.trim()) {
         setCurrentRoundName(data.roundName.trim());
       }
@@ -2933,7 +2930,7 @@ const PublicDisplay: React.FC = () => {
       setWinnerCardModal(null);
       setShowWinnerBanner(false);
       setWinnerName('');
-      setShowNightBoard(false);
+      // Night board visibility is owned by night-board-visibility / game-started / set-round.
     });
 
     newSocket.on('sponsor-screen-updated', (data: any) => {
