@@ -8640,9 +8640,6 @@ const HostView: React.FC = () => {
       setShowNightBoard(visible);
       if (socket && roomId) {
         socket.emit('set-night-board-visible', { roomId, visible });
-        if (!visible) {
-          socket.emit('dismiss-public-winner', { roomId });
-        }
       }
     },
     [socket, roomId],
@@ -8653,9 +8650,10 @@ const HostView: React.FC = () => {
       showToast('Display is not connected yet.', 'error');
       return;
     }
+    setShowNightBoard(false);
     socket.emit('dismiss-public-winner', { roomId });
-    showToast('Winner popup hidden. The winners board setting is unchanged.', 'info');
-    addLog('Public winner popup dismissed from Display controls', 'info');
+    showToast('Winner overlays cleared on the projector.', 'info');
+    addLog('Public winner overlays dismissed from Display controls', 'info');
   }, [socket, roomId, showToast, addLog]);
 
   const roundBuilderFocusIndexRef = useRef(roundBuilderFocusIndex);
@@ -13913,10 +13911,10 @@ const HostView: React.FC = () => {
                         type="button"
                         className="btn-secondary host-display-cockpit__dismiss-winner"
                         onClick={dismissPublicWinnerPopup}
-                        title="Hide the winner celebration on the projector (does not complete the round)"
+                        title="Hide the winner card and Tonight's winners list on the projector"
                       >
                         <X className="w-4 h-4" aria-hidden />
-                        Hide popup
+                        Hide winners
                       </button>
                       <label className="host-display-cockpit__toggle">
                         <input

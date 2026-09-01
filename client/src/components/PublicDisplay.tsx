@@ -1564,12 +1564,12 @@ const PublicDisplay: React.FC = () => {
     Array<{ roundNumber: number; playerName: string; prize?: string; roundName?: string }>
   >([]);
   const [roomPhase, setRoomPhase] = useState<string>('waiting');
-  /** After a verified win, let the card celebrate then reveal the night board underneath. */
+  /** After a verified win, celebrate then clear the card (board auto-hides server-side). */
   useEffect(() => {
-    if (!winnerCardModal || !showNightBoard || roundWinnersBoard.length === 0) return;
-    const t = window.setTimeout(() => setWinnerCardModal(null), 9000);
+    if (!winnerCardModal) return;
+    const t = window.setTimeout(() => setWinnerCardModal(null), 8000);
     return () => window.clearTimeout(t);
-  }, [winnerCardModal, showNightBoard, roundWinnersBoard.length]);
+  }, [winnerCardModal]);
   const [sponsorScreen, setSponsorScreen] = useState<{
     mediaUrl: string;
     text: string;
@@ -2933,6 +2933,7 @@ const PublicDisplay: React.FC = () => {
       setWinnerCardModal(null);
       setShowWinnerBanner(false);
       setWinnerName('');
+      setShowNightBoard(false);
     });
 
     newSocket.on('sponsor-screen-updated', (data: any) => {
@@ -2999,6 +3000,8 @@ const PublicDisplay: React.FC = () => {
 
     newSocket.on('game-ended', () => {
       setWinnerCardModal(null);
+      setShowNightBoard(false);
+      setShowWinnerBanner(false);
       setGameState(prev => ({
         ...prev,
         isPlaying: false,

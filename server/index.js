@@ -3338,6 +3338,49 @@ function storeLastDisplayWinnerFromBingoCalled(room, payload) {
   };
 }
 
+/** How long Tonight's winners list stays on the projector after a round win. */
+const NIGHT_BOARD_AUTO_HIDE_MS = 14_000;
+
+function clearNightBoardAutoHideTimer(room) {
+  if (!room?._nightBoardAutoHideTimer) return;
+  clearTimeout(room._nightBoardAutoHideTimer);
+  room._nightBoardAutoHideTimer = null;
+}
+
+/**
+ * Show/hide the night winners board. When shown, auto-hide after a celebration window so the
+ * host does not have to hunt Display → Show board to clear the projector.
+ */
+function setRoomNightBoardVisible(room, roomId, visible, opts = {}) {
+  if (!room || !roomId) return;
+  clearNightBoardAutoHideTimer(room);
+  room.showNightBoard = visible === true;
+  io.to(roomId).emit('night-board-visibility', {
+    visible: room.showNightBoard,
+    roundWinners: room.roundWinners || [],
+  });
+  if (!room.showNightBoard) return;
+  const autoHideMs = opts.autoHideMs;
+  if (autoHideMs === false) return;
+  const ms =
+    typeof autoHideMs === 'number' && Number.isFinite(autoHideMs)
+      ? Math.max(4_000, autoHideMs)
+      : NIGHT_BOARD_AUTO_HIDE_MS;
+  room._nightBoardAutoHideTimer = setTimeout(() => {
+    room._nightBoardAutoHideTimer = null;
+    if (!rooms.has(roomId) || rooms.get(roomId) !== room) return;
+    if (!room.showNightBoard) return;
+    room.showNightBoard = false;
+    room.lastDisplayWinner = null;
+    io.to(roomId).emit('night-board-visibility', {
+      visible: false,
+      roundWinners: room.roundWinners || [],
+    });
+    io.to(roomId).emit('public-winner-dismissed');
+    routineServerLog(`🏆 Night board auto-hidden for room ${roomId}`);
+  }, ms);
+}
+
 const YOUTUBE_FALLBACK_DURATION_MS = 10 * 60 * 1000;
 
 function computeSnippetRandomStartMs(room, song) {
@@ -6370,18 +6413,21 @@ io.on('connection', (socket) => {
       const isCurrentHost =
         room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
       if (!isCurrentHost) return;
-      room.showNightBoard = visible === true;
-      io.to(roomId).emit('night-board-visibility', {
-        visible: room.showNightBoard,
-        roundWinners: room.roundWinners || [],
+      // Manual toggle: no auto-hide when host intentionally shows the board.
+      setRoomNightBoardVisible(room, roomId, visible === true, {
+        autoHideMs: visible === true ? false : undefined,
       });
+      if (visible !== true) {
+        room.lastDisplayWinner = null;
+        io.to(roomId).emit('public-winner-dismissed');
+      }
       routineServerLog(`🏆 Night board for room ${roomId}: ${room.showNightBoard ? 'visible' : 'hidden'}`);
     } catch (e) {
       console.error('❌ Error setting night board visibility:', e?.message || e);
     }
   });
 
-  // Host: dismiss the verified-winner card without clearing the night winners board.
+  // Host: dismiss winner card + winners list overlays on the projector.
   socket.on('dismiss-public-winner', (data = {}) => {
     try {
       const { roomId } = data;
@@ -6391,8 +6437,9 @@ io.on('connection', (socket) => {
         room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
       if (!isCurrentHost) return;
       room.lastDisplayWinner = null;
+      setRoomNightBoardVisible(room, roomId, false);
       io.to(roomId).emit('public-winner-dismissed');
-      routineServerLog(`🏆 Public winner card dismissed for room ${roomId}`);
+      routineServerLog(`🏆 Public winner overlays dismissed for room ${roomId}`);
     } catch (e) {
       console.error('❌ Error dismissing public winner card:', e?.message || e);
     }
@@ -7049,7 +7096,12 @@ io.on('connection', (socket) => {
         ...(winnerRoundName ? { roundName: winnerRoundName } : {}),
       };
       room.roundWinners.push(roundWinnerEntry);
-      room.showNightBoard = keepPlayingEarly !== true;
+      if (keepPlayingEarly === true) {
+        clearNightBoardAutoHideTimer(room);
+        room.showNightBoard = false;
+      } else {
+        setRoomNightBoardVisible(room, roomId, true);
+      }
 
       // NOW emit the actual winner event for public display
       const keepPlaying = continueRound === true;
@@ -7068,7 +7120,7 @@ io.on('connection', (socket) => {
         roundName: winnerRoundName || null,
         roundNumber: roundWinnerEntry.roundNumber,
         roundWinners: room.roundWinners,
-        showNightBoard: !keepPlaying,
+        showNightBoard: room.showNightBoard === true,
         continueRound: keepPlaying,
       };
       storeLastDisplayWinnerFromBingoCalled(room, bingoCalledPayload);
@@ -7234,6 +7286,9 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('bingo-verification-cleared', { reason: 'bingo_approved' });
 
       // Notify all clients that round is complete (not game ended)
+      if (room.showNightBoard !== true) {
+        setRoomNightBoardVisible(room, roomId, true);
+      }
       io.to(roomId).emit('round-complete', { 
         roomId, 
         winner: player.name,
@@ -7420,6 +7475,7 @@ io.on('connection', (socket) => {
     room.roundWinners = [];
     room.liveNightBoardRoundNumber = null;
     room.showNightBoard = false;
+    clearNightBoardAutoHideTimer(room);
     clearPublicDisplaySessionState(room);
     
     // Reset all player bingo status but keep their cards
@@ -7570,6 +7626,7 @@ io.on('connection', (socket) => {
     room.currentRoundPrize = '';
     room.currentRoundPlaylistNames = [];
     room.showNightBoard = false;
+    clearNightBoardAutoHideTimer(room);
     
     // CRITICAL: Clean up temporary playlist if it exists
     if (room.temporaryPlaylistId) {
@@ -7922,6 +7979,7 @@ io.on('connection', (socket) => {
           Array.isArray(playlists) ? playlists.map((playlist) => playlist?.name) : [],
         );
         room.showNightBoard = false;
+        clearNightBoardAutoHideTimer(room);
         // Never show sponsor during a live round.
         hideSponsorScreen(room);
         // Initialize call history and round
