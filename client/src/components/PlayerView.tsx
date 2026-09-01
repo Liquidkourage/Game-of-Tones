@@ -34,13 +34,10 @@ import {
   type PatternCompositeSpec,
   normalizePatternComposite,
   evaluateCompositeVisual,
-  evaluateCompositeStrict,
   unionCompositeHighlightPositions,
   normalizeLinesRequired,
   countCompletedLinesVisual,
-  countCompletedLinesStrict,
   evaluateCustomPatternVisual,
-  evaluateCustomPatternStrict,
   customMaskHighlightPositions,
 } from '../patternDefinitions';
 
@@ -75,7 +72,6 @@ interface BingoCard {
 
 interface GameState {
   isPlaying: boolean;
-  currentSong: Song | null;
   playerCount: number;
   hasBingo: boolean;
   pattern: string;
@@ -90,12 +86,6 @@ interface GameState {
   customMatchAllowMirror?: boolean;
   /** Audience label for custom shapes (server / host). */
   customPatternName?: string;
-}
-
-interface Song {
-  id: string;
-  name: string;
-  artist: string;
 }
 
 interface VenueBranding {
@@ -216,7 +206,6 @@ const PlayerView: React.FC = () => {
   const [bingoStatus, setBingoStatus] = useState<'idle' | 'checking' | 'success' | 'failed'>('idle');
   const [bingoMessage, setBingoMessage] = useState<string>('');
   const [hasValidBingo, setHasValidBingo] = useState<boolean>(false);
-  const [playedSongIds, setPlayedSongIds] = useState<string[]>([]);
   const [connectionToast, setConnectionToast] = useState<string>('');
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -227,16 +216,13 @@ const PlayerView: React.FC = () => {
   const [requestArtist, setRequestArtist] = useState('');
   const [requestStatus, setRequestStatus] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle');
   const [hybridPrizeInPersonOnly, setHybridPrizeInPersonOnly] = useState(false);
-  const previousPlayedSongIdsRef = useRef<string[]>([]); // Track previous state for missed songs calculation
-  const wasReconnectingRef = useRef<boolean>(false); // Track if we're in a reconnection state
+  const wasReconnectingRef = useRef<boolean>(false);
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: false,
-    currentSong: null,
     playerCount: 0,
     hasBingo: false,
     pattern: 'full_card'
   });
-  const [songsPlayed, setSongsPlayed] = useState<number>(0);
   /** 5×15 mode: playlist name per column (from server `fiveby15-pool`). */
   const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
   /** 1×75 mode: stem playlist title(s) from server `oneby75-pool`. */
@@ -761,14 +747,13 @@ const PlayerView: React.FC = () => {
       if (joinReady && playerName && playerName.trim()) {
         newSocket.emit('join-room', buildJoinPayload(playerName.trim()));
       }
-      // Ask server for state in case game already started
+      // Pattern / card restore only — server returns player-safe room-state (no call IDs).
       newSocket.emit('sync-state', { roomId, clientId });
-      
-      // Show reconnected toast if we were reconnecting
-      if (wasReconnectingRef.current && gameState.isPlaying) {
-        // Toast will be shown by room-state handler after calculating missed songs
-        // But show immediate feedback
-        setConnectionToast('🔄 Reconnecting...');
+
+      if (wasReconnectingRef.current) {
+        wasReconnectingRef.current = false;
+        setConnectionToast('✅ Reconnected');
+        setTimeout(() => setConnectionToast(''), 3000);
       }
     });
 
@@ -784,13 +769,15 @@ const PlayerView: React.FC = () => {
         newSocket.emit('join-room', buildJoinPayload(playerName.trim()));
       }
       newSocket.emit('sync-state', { roomId, clientId });
+      if (wasReconnectingRef.current) {
+        wasReconnectingRef.current = false;
+        setConnectionToast('✅ Reconnected');
+        setTimeout(() => setConnectionToast(''), 3000);
+      }
     });
     newSocket.on('disconnect', () => {
       setConnectionStatus('disconnected');
       wasReconnectingRef.current = true;
-      // Save current playedSongIds before disconnect to compare later
-      previousPlayedSongIdsRef.current = [...playedSongIds];
-      // Show disconnect toast
       if (gameState.isPlaying) {
         setConnectionToast('⚠️ Connection lost - attempting to reconnect...');
         setTimeout(() => setConnectionToast(''), 5000);
@@ -840,12 +827,7 @@ const PlayerView: React.FC = () => {
       }
     });
 
-    newSocket.on('player-joined', (data: any) => {
-      setGameState(prev => ({
-        ...prev,
-        playerCount: data.playerCount
-      }));
-    });
+    // Roster updates are host/display-only — do not subscribe on player phones.
 
     newSocket.on('bingo-column-letters-updated', (data: any) => {
       if (typeof data?.letters === 'string' && data.letters.length === 5) {
@@ -854,6 +836,7 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('fiveby15-pool', (data: any) => {
+      // Names only — ignore columns/ids/meta if a staff payload ever leaks.
       if (Array.isArray(data?.names) && data.names.length === 5) {
         setBingoColumnPlaylistNames(data.names);
         setOneBy75PlaylistNames([]);
@@ -861,6 +844,7 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('oneby75-pool', (data: any) => {
+      // Names only — ignore pool ids (call order).
       if (Array.isArray(data?.names) && data.names.length > 0) {
         setOneBy75PlaylistNames(data.names.map((n: unknown) => String(n || '')));
         setBingoColumnPlaylistNames([]);
@@ -910,12 +894,7 @@ const PlayerView: React.FC = () => {
       }));
       setBingoStatus('idle');
       setBingoMessage('');
-      // Reset songs played counter when game starts
-      setSongsPlayed(0);
-      // CRITICAL: Reset playedSongIds to empty array (server will sync via room-state)
-      setPlayedSongIds([]);
       // Reset reconnection tracking for new game
-      previousPlayedSongIdsRef.current = [];
       wasReconnectingRef.current = false;
     });
 
@@ -934,45 +913,7 @@ const PlayerView: React.FC = () => {
         if (typeof payload?.bingoColumnLetters === 'string' && payload.bingoColumnLetters.length === 5) {
           setBingoColumnLetters(payload.bingoColumnLetters.toUpperCase());
         }
-        // CRITICAL: Sync playedSongIds from server (single source of truth)
-        // This is the ONLY place where playedSongIds should be updated
-        if (Array.isArray(payload?.playedSongIds)) {
-          setPlayedSongIds((prev) => {
-            const next = payload.playedSongIds as string[];
-            // Same sequence → keep prev (avoids card re-fit flash on every room-state sync).
-            if (
-              prev.length === next.length &&
-              prev.every((id, i) => id === next[i])
-            ) {
-              if (wasReconnectingRef.current) {
-                wasReconnectingRef.current = false;
-                setConnectionToast('✅ Reconnected successfully');
-                setTimeout(() => setConnectionToast(''), 3000);
-              }
-              return prev;
-            }
-
-            if (wasReconnectingRef.current && previousPlayedSongIdsRef.current.length > 0) {
-              const missedSongs = next.filter(
-                (id: string) => !previousPlayedSongIdsRef.current.includes(id),
-              );
-              if (missedSongs.length > 0) {
-                setConnectionToast(
-                  `🔄 Reconnected! You missed ${missedSongs.length} song${missedSongs.length > 1 ? 's' : ''} while disconnected`,
-                );
-                setTimeout(() => setConnectionToast(''), 6000);
-              } else {
-                setConnectionToast('✅ Reconnected successfully');
-                setTimeout(() => setConnectionToast(''), 3000);
-              }
-              wasReconnectingRef.current = false;
-            } else if (wasReconnectingRef.current) {
-              wasReconnectingRef.current = false;
-            }
-
-            return next;
-          });
-        }
+        // Intentionally ignore playedSongIds / currentSong — call identity stays off player phones.
         
         if (payload?.isPlaying) {
           const pat = typeof payload?.pattern === 'string' && payload.pattern.length > 0 ? payload.pattern : undefined;
@@ -984,7 +925,6 @@ const PlayerView: React.FC = () => {
                 : undefined;
             const nextPlayerCount =
               typeof payload?.playerCount === 'number' ? payload.playerCount : prev.playerCount;
-            const nextSong = payload?.currentSong || prev.currentSong;
             const nextCustom =
               effectivePat === 'custom' &&
               Array.isArray(payload?.customMask) &&
@@ -1008,15 +948,10 @@ const PlayerView: React.FC = () => {
                 : effectivePat === 'custom'
                   ? prev.customPatternName || ''
                   : undefined;
-            const sameSong =
-              (nextSong?.id || null) === (prev.currentSong?.id || null) &&
-              (nextSong?.name || null) === (prev.currentSong?.name || null) &&
-              (nextSong?.artist || null) === (prev.currentSong?.artist || null);
             if (
               prev.isPlaying &&
               effectivePat === prev.pattern &&
               nextPlayerCount === prev.playerCount &&
-              sameSong &&
               nextCustom === prev.customPattern &&
               nextComposite === prev.patternComposite &&
               (lr === undefined || lr === prev.linesRequired) &&
@@ -1032,7 +967,6 @@ const PlayerView: React.FC = () => {
               isPlaying: true,
               pattern: effectivePat,
               playerCount: nextPlayerCount,
-              currentSong: nextSong,
               customPattern: nextCustom,
               patternComposite: nextComposite,
               ...(lr !== undefined ? { linesRequired: lr } : {}),
@@ -1062,42 +996,7 @@ const PlayerView: React.FC = () => {
       patchAllBingoCardsSquares((squares) => patchSquaresClearAlias(squares, data.songId));
     });
 
-    newSocket.on('song-playing', (data: any) => {
-      const displayArtist =
-        typeof data.customArtistName === 'string' && data.customArtistName.trim() !== ''
-          ? data.customArtistName.trim()
-          : data.artistName;
-      const displayName =
-        typeof data.customSongName === 'string' && data.customSongName.trim() !== ''
-          ? data.customSongName.trim()
-          : data.songName;
-      const songId = data?.songId != null ? String(data.songId) : '';
-      setGameState((prev) => {
-        if (
-          prev.currentSong?.id === songId &&
-          prev.currentSong?.name === displayName &&
-          prev.currentSong?.artist === displayArtist
-        ) {
-          return prev;
-        }
-        return {
-          ...prev,
-          currentSong: {
-            id: songId,
-            name: displayName,
-            artist: displayArtist,
-          },
-        };
-      });
-      // Absolute call index from server (re-emits of the same song must not bump / flash UI).
-      const playbackNumber = Number(data?.playbackNumber);
-      if (Number.isFinite(playbackNumber) && playbackNumber > 0) {
-        setSongsPlayed((prev) => (prev === playbackNumber ? prev : playbackNumber));
-      } else if (Array.isArray(data?.playedSongIds)) {
-        const n = data.playedSongIds.length;
-        setSongsPlayed((prev) => (prev === n ? prev : n));
-      }
-    });
+    // song-playing / call identity is host+display only — never subscribe on player phones.
 
     newSocket.on('bingo-card-error', (data: any) => {
       console.warn('bingo-card-error');
@@ -1364,11 +1263,7 @@ const PlayerView: React.FC = () => {
       }));
       setBingoStatus('idle');
       setBingoMessage('');
-      // Reset songs played counter
-      setSongsPlayed(0);
-      // CRITICAL: Reset playedSongIds to empty array (server will sync via room-state)
-      setPlayedSongIds([]);
-      
+
       // clearCard / "New round" → wipe; Restart Round keeps assignments and only clears marks
       const wipeCards =
         data?.clearCard === true ||
@@ -1416,30 +1311,13 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('game-reset', () => {
-      setGameState({ isPlaying: false, currentSong: null, playerCount: 0, hasBingo: false, pattern: 'full_card' });
+      setGameState({ isPlaying: false, playerCount: 0, hasBingo: false, pattern: 'full_card' });
       setBingoCards([]);
       setActiveCardIndex(0);
       // Clear persisted marks
       try {
         localStorage.removeItem(`player_marks_${roomId}`);
       } catch {}
-      // Reset songs played counter
-      setSongsPlayed(0);
-      // CRITICAL: Reset playedSongIds to empty array (server will sync via room-state)
-      setPlayedSongIds([]);
-    });
-
-    newSocket.on('player-left', (data: any) => {
-      setGameState(prev => ({
-        ...prev,
-        playerCount: data.playerCount
-      }));
-    });
-
-    // Optional hint reveal to players (disabled for now; we listen but do not change UI)
-    newSocket.on('call-revealed', (payload: any) => {
-      // If we later want to surface hints to players, gate by payload.revealToPlayers
-      // Currently no-op
     });
 
     // Hard refresh from host
@@ -1456,19 +1334,7 @@ const PlayerView: React.FC = () => {
     };
   }, [roomId, playerName, inPersonJoin]);
 
-  // Periodic sync during gameplay to ensure state stays in sync with server
-  useEffect(() => {
-    if (!socket || !gameState.isPlaying) return;
-    
-    // Request sync every 30 seconds during gameplay
-    const syncInterval = setInterval(() => {
-      if (socket && socket.connected && gameState.isPlaying) {
-        socket.emit('sync-state', { roomId, clientId });
-      }
-    }, 30000); // 30 seconds
-    
-    return () => clearInterval(syncInterval);
-  }, [socket, gameState.isPlaying, roomId]);
+  // No periodic sync-state while playing — that used to pull call IDs every 30s.
 
   // If name becomes available after initial connect, join the room
   useEffect(() => {
@@ -2209,109 +2075,6 @@ const PlayerView: React.FC = () => {
     return false;
   };
 
-  // Server-side validation check (checks if marked squares correspond to played songs)
-  const checkBingo = (card: BingoCard): boolean => {
-    const pattern = gameState.pattern;
-    
-    // Helper function to check if a marked square corresponds to a played song (or free space).
-    // FREE always counts even if the player toggled the daub off for fun.
-    const isMarkedSquareValid = (square: BingoSquare): boolean => {
-      if (!square) return false;
-      if (isPlayerFreeSpaceSquare(square)) return true;
-      return !!(square.marked && playedSongIds.includes(square.songId));
-    };
-    
-    // Full card / blackout — grid integrity + every cell marked with a played song (matches server 0-0…4-4 loop)
-    if (pattern === 'full_card' || pattern === 'blackout') {
-      if (!validateBingoCardGrid(card)) return false;
-      return STANDARD_BINGO_POSITIONS.every((pos) => {
-        const square = card.squares.find((s) => s.position === pos);
-        return square ? isMarkedSquareValid(square) : false;
-      });
-    }
-    
-    if (pattern === 'composite' && gameState.patternComposite) {
-      return evaluateCompositeStrict(card, gameState.patternComposite, playedSongIds);
-    }
-
-    // Four corners pattern - all 4 corners must be marked AND correspond to played songs
-    if (pattern === 'four_corners') {
-      const corners = ['0-0', '0-4', '4-0', '4-4'];
-      return corners.every(pos => {
-        const square = card.squares.find(s => s.position === pos);
-        return square && isMarkedSquareValid(square);
-      });
-    }
-    
-    // X pattern - both diagonals must be marked AND correspond to played songs
-    if (pattern === 'x') {
-      let diag1Complete = true;
-      let diag2Complete = true;
-      for (let i = 0; i < 5; i++) {
-        const square1 = card.squares.find(s => s.position === `${i}-${i}`);
-        const square2 = card.squares.find(s => s.position === `${i}-${4-i}`);
-        
-        if (!square1 || !isMarkedSquareValid(square1)) diag1Complete = false;
-        if (!square2 || !isMarkedSquareValid(square2)) diag2Complete = false;
-      }
-      return diag1Complete && diag2Complete;
-    }
-    
-    // T pattern - top row + middle column must be marked AND correspond to played songs
-    if (pattern === 't') {
-      const tPositions = ['0-0', '0-1', '0-2', '0-3', '0-4', '1-2', '2-2', '3-2', '4-2'];
-      return tPositions.every(pos => {
-        const square = card.squares.find(s => s.position === pos);
-        return square && isMarkedSquareValid(square);
-      });
-    }
-    
-    // L pattern - left column + bottom row must be marked AND correspond to played songs
-    if (pattern === 'l') {
-      const lPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '4-1', '4-2', '4-3', '4-4'];
-      return lPositions.every(pos => {
-        const square = card.squares.find(s => s.position === pos);
-        return square && isMarkedSquareValid(square);
-      });
-    }
-    
-    // U pattern - left column + right column + bottom row must be marked AND correspond to played songs
-    if (pattern === 'u') {
-      const uPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '0-4', '1-4', '2-4', '3-4', '4-4', '4-1', '4-2', '4-3'];
-      return uPositions.every(pos => {
-        const square = card.squares.find(s => s.position === pos);
-        return square && isMarkedSquareValid(square);
-      });
-    }
-    
-    // Plus pattern - middle row + middle column must be marked AND correspond to played songs
-    if (pattern === 'plus') {
-      const plusPositions = ['2-0', '2-1', '2-2', '2-3', '2-4', '0-2', '1-2', '3-2', '4-2'];
-      return plusPositions.every(pos => {
-        const square = card.squares.find(s => s.position === pos);
-        return square && isMarkedSquareValid(square);
-      });
-    }
-    
-    // Line pattern — host sets how many complete lines are required (each with legit marks)
-    if (pattern === 'line') {
-      const need = normalizeLinesRequired(gameState.linesRequired ?? 1);
-      return countCompletedLinesStrict(card, playedSongIds) >= need;
-    }
-
-    // Custom pattern with optional reverse / rotations / mirrors
-    if (pattern === 'custom' && gameState.customPattern?.length) {
-      return evaluateCustomPatternStrict(card, gameState.customPattern, playedSongIds, {
-        matchReverse: gameState.customMatchReverse,
-        matchAllowRotation: gameState.customMatchAllowRotation,
-        matchAllowMirror: gameState.customMatchAllowMirror,
-      });
-    }
-
-    // Default fallback
-    return false;
-  };
-
   // Helper function to determine if a square should be highlighted based on pattern
   const isPatternSquare = (position: string): boolean => {
     const pattern = gameState.pattern;
@@ -2940,9 +2703,7 @@ const PlayerView: React.FC = () => {
                     <div className="player-v2-sheet-label">Game status</div>
                     <div className="player-v2-sheet-note">
                       {currentPatternLabel}
-                      {gameState.isPlaying
-                        ? ` · Song ${Math.max(songsPlayed, playedSongIds.length)} / 75`
-                        : ''}
+                      {gameState.isPlaying ? ' · Live' : ''}
                     </div>
                   </div>
                 </div>

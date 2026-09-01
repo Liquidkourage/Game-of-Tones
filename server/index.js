@@ -832,6 +832,60 @@ function emitToHostAndDisplays(roomId, room, event, payload) {
   }
 }
 
+/** True for host / projector seats — may receive call identity, pool order, roster fan-out. */
+function isStaffRoomSocket(room, socketId) {
+  if (!room || !socketId) return false;
+  if (room.host === socketId) return true;
+  const player = room.players?.get(socketId);
+  if (!player) return false;
+  return !!(player.isHost || isDisplayConnectionPlayer(player));
+}
+
+/** Emit to non-host, non-display players only. */
+function emitToPlayersOnly(roomId, room, event, payload) {
+  if (!room?.players) return;
+  for (const [sid, player] of room.players) {
+    if (!player || player.isHost || isDisplayConnectionPlayer(player)) continue;
+    io.to(sid).emit(event, payload);
+  }
+}
+
+/**
+ * Strip currently-playing / call-list / reveal payloads from room-state for player phones.
+ * Players need pattern + board chrome only — not song IDs for auto-mark scripts.
+ */
+function roomStateSafeForPlayers(payload) {
+  if (!payload || typeof payload !== 'object') return payload;
+  const safe = { ...payload };
+  safe.currentSong = null;
+  safe.playedSongs = [];
+  safe.playedSongIds = [];
+  safe.totalPlayedCount = 0;
+  safe.currentSongIndex = 0;
+  safe.totalSongs = undefined;
+  // Projector letter-reveal / winner overlays are not needed on phones and can leak titles.
+  delete safe.publicDisplayRevealState;
+  delete safe.lastDisplayWinner;
+  delete safe.publicDisplayFontSize;
+  delete safe.publicDisplayCallListMode;
+  delete safe.letterRevealIntervalSec;
+  delete safe.publicDisplayTitleRevealMode;
+  delete safe.publicDisplayLetterRevealToast;
+  delete safe.playerFeedback;
+  delete safe.songRequests;
+  delete safe.playlists;
+  delete safe.selectedDeviceId;
+  delete safe.winners;
+  delete safe.roundWinners;
+  return safe;
+}
+
+/** Full room-state → host/display; call-safe subset → player phones. */
+function emitRoomStateSplit(roomId, room, fullPayload) {
+  emitToHostAndDisplays(roomId, room, 'room-state', fullPayload);
+  emitToPlayersOnly(roomId, room, 'room-state', roomStateSafeForPlayers(fullPayload));
+}
+
 /** Playlist rows safe for the whole room (no embedded track lists). */
 function playlistsPublicSummary(playlists) {
   if (!Array.isArray(playlists)) return [];
@@ -1132,7 +1186,7 @@ function markCurrentSongPlayed(roomId) {
     room.playlistSongs?.find((s) => s.id === songId),
     room.dbOrganizationId ?? null,
   );
-  io.to(roomId).emit('song-marked-played', {
+  emitToHostAndDisplays(roomId, room, 'song-marked-played', {
     songId,
     added,
     calledCount: room.calledSongIds.length,
@@ -1506,7 +1560,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
         const r = rooms.get(roomId);
         if (r) r.songStartAtMs = Date.now();
       } catch {}
-      io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, song, songIndex));
+      emitSongPlayingToRoom(roomId, room, song, songIndex);
       sendPlayerCardUpdates(roomId, true);
       routineServerLog(
         `✅ ${songUsesApplePlayback(song) ? 'Apple Music' : 'YouTube'} snippet (host browser): ${song.name}`,
@@ -3150,8 +3204,8 @@ function emitRoomCallLogReset(roomId, room) {
     mixFinalized: !!room.mixFinalized,
   };
   Object.assign(payload, publicDisplayRoomStateExtras(room));
-  io.to(roomId).emit('room-state', payload);
-  io.to(roomId).emit('display-reveal-state', publicDisplayRevealStateForClient(room));
+  emitRoomStateSplit(roomId, room, payload);
+  emitToHostAndDisplays(roomId, room, 'display-reveal-state', publicDisplayRevealStateForClient(room));
 }
 
 /** Room-state / sync-state fields for public display reconnect (letters, carousel, bingo UI). */
@@ -3306,6 +3360,8 @@ function syncClipClockFromPlaybackProgress(room, playbackProgressMs) {
 
 function emitCurrentSongPlayingToSocket(socket, room) {
   if (!socket || !room?.currentSong?.id || !room.snippetLength) return;
+  // Never push currently-playing identity to player phones (cheat / auto-mark vector).
+  if (!isStaffRoomSocket(room, socket.id)) return;
   const idx = room.currentSongIndex || 0;
   socket.emit('song-playing', buildSongPlayingPayload(room, room.currentSong, idx));
 }
@@ -3323,7 +3379,8 @@ function emitSongPlayingToRoom(roomId, room, song, currentIndex) {
             room.playlistSongs.findIndex((candidate) => candidate?.id === song.id),
           )
         : fallbackIndex;
-  io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, song, idx));
+  // Host + projector only — players mark from the PA / board, not socket call identity.
+  emitToHostAndDisplays(roomId, room, 'song-playing', buildSongPlayingPayload(room, song, idx));
 }
 
 function storeLastDisplayWinnerFromBingoCalled(room, payload) {
@@ -3725,7 +3782,8 @@ function syncRoomStateAfterSongStart(roomId, room) {
     syncTimestamp: Date.now(),
     ...publicDisplayRoomStateExtras(room),
   };
-  io.to(roomId).emit('room-state', syncPayload);
+  // Host + projector only — do not ping player phones on every song change (timing + call-list leak).
+  emitToHostAndDisplays(roomId, room, 'room-state', syncPayload);
   routineServerLog(`🔄 Synced room-state after song start: ${playedSongIds.length} played songs`);
 }
 
@@ -4228,7 +4286,7 @@ function emitFinalSongStartedIfNeeded(roomId, room, snippetLengthSeconds) {
   const snippetSec = Number.isFinite(snippetLengthSeconds)
     ? snippetLengthSeconds
     : room.snippetLength || 30;
-  io.to(roomId).emit('final-song-started', {
+  emitToHostAndDisplays(roomId, room, 'final-song-started', {
     roomId,
     songNumber: idx + 1,
     totalSongs: total,
@@ -5430,8 +5488,8 @@ io.on('connection', (socket) => {
       120_000,
     );
     
-    // Emit player joined event to all players in the room
-    io.to(roomId).emit('player-joined', {
+    // Host + projector only — players do not need roster fan-out on every join/card deal.
+    emitToHostAndDisplays(roomId, room, 'player-joined', {
       playerId: socket.id,
       playerName: playerName,
       isHost: effectiveIsHost,
@@ -5531,8 +5589,8 @@ io.on('connection', (socket) => {
           
           routineServerLog(`✅ Host reconnection state sync complete for ${playerName}`);
         } else {
-          // Non-host player: Emit current song to sync display timing
-          emitCurrentSongPlayingToSocket(socket, room);
+          // Non-host player: do NOT push currently-playing track (cheat vector).
+          // Cards + pattern arrive via room-joined / bingo-cards / safe room-state.
         }
 
         await restoreOrDealBingoCardForJoiner(room, roomId, socket, clientId, { allowDeal: true });
@@ -7811,49 +7869,68 @@ io.on('connection', (socket) => {
       }
       
       Object.assign(payload, publicDisplayRoomStateExtras(room));
-      if (room.fiveByFifteenColumnsIds && Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) {
-        const idToCol = {};
-        room.fiveByFifteenColumnsIds.forEach((colIds, colIdx) => {
-          colIds.forEach((id) => { idToCol[id] = colIdx; });
-        });
-        // Emit fiveby15-pool and map to ensure display has columns
-        socket.emit('fiveby15-pool', { 
-          columns: room.fiveByFifteenColumnsIds, 
-          names: room.fiveByFifteenPlaylistNames || [],
-          meta: room.fiveByFifteenMeta || {}
-        });
-        socket.emit('fiveby15-map', { idToColumn: idToCol });
+      const staffSync = isStaffRoomSocket(room, socket.id);
+
+      if (staffSync) {
+        if (room.fiveByFifteenColumnsIds && Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) {
+          const idToCol = {};
+          room.fiveByFifteenColumnsIds.forEach((colIds, colIdx) => {
+            colIds.forEach((id) => { idToCol[id] = colIdx; });
+          });
+          // Host/display: full columns + map
+          socket.emit('fiveby15-pool', {
+            columns: room.fiveByFifteenColumnsIds,
+            names: room.fiveByFifteenPlaylistNames || [],
+            meta: room.fiveByFifteenMeta || {}
+          });
+          socket.emit('fiveby15-map', { idToColumn: idToCol });
+        }
+
+        // Include oneby75 pool only when not in 5×15 (avoid wiping display columns via stale pool)
+        const hasFiveBy15Active =
+          room.fiveByFifteenColumnsIds &&
+          Array.isArray(room.fiveByFifteenColumnsIds) &&
+          room.fiveByFifteenColumnsIds.length === 5;
+        if (
+          !hasFiveBy15Active &&
+          room.oneBySeventyFivePool &&
+          Array.isArray(room.oneBySeventyFivePool) &&
+          room.oneBySeventyFivePool.length > 0
+        ) {
+          const oneBy75Ids = room.oneBySeventyFivePool.map(s => s.id).filter(Boolean);
+          const oneBy75Names = playlistNamesForOneBy75Emit(room);
+          socket.emit('oneby75-pool', {
+            ids: oneBy75Ids,
+            ...(oneBy75Names.length > 0 ? { names: oneBy75Names } : {}),
+          });
+        }
+
+        emitCurrentSongPlayingToSocket(socket, room);
+        socket.emit('display-reveal-state', publicDisplayRevealStateForClient(room));
+        io.to(socket.id).emit('room-state', payload);
+      } else {
+        // Players: column titles only (no pool ids / call order / now-playing).
+        const fiveNames = Array.isArray(room.fiveByFifteenPlaylistNames)
+          ? room.fiveByFifteenPlaylistNames
+          : [];
+        if (fiveNames.length === 5) {
+          socket.emit('fiveby15-pool', { names: fiveNames });
+        } else {
+          const oneBy75Names = playlistNamesForOneBy75Emit(room);
+          if (oneBy75Names.length > 0) {
+            socket.emit('oneby75-pool', { names: oneBy75Names });
+          }
+        }
+        io.to(socket.id).emit('room-state', roomStateSafeForPlayers(payload));
       }
-      
-      // Include oneby75 pool only when not in 5×15 (avoid wiping display columns via stale pool)
-      const hasFiveBy15Active =
-        room.fiveByFifteenColumnsIds &&
-        Array.isArray(room.fiveByFifteenColumnsIds) &&
-        room.fiveByFifteenColumnsIds.length === 5;
-      if (
-        !hasFiveBy15Active &&
-        room.oneBySeventyFivePool &&
-        Array.isArray(room.oneBySeventyFivePool) &&
-        room.oneBySeventyFivePool.length > 0
-      ) {
-        const oneBy75Ids = room.oneBySeventyFivePool.map(s => s.id).filter(Boolean);
-        const oneBy75Names = playlistNamesForOneBy75Emit(room);
-        socket.emit('oneby75-pool', {
-          ids: oneBy75Ids,
-          ...(oneBy75Names.length > 0 ? { names: oneBy75Names } : {}),
-        });
-      }
-      
-      emitCurrentSongPlayingToSocket(socket, room);
-      socket.emit('display-reveal-state', publicDisplayRevealStateForClient(room));
-      io.to(socket.id).emit('room-state', payload);
+
       const syncClientId = data.clientId || room.players.get(socket.id)?.clientId;
       if (syncClientId) {
         await restoreOrDealBingoCardForJoiner(room, roomId, socket, syncClientId, { allowDeal: false });
       }
       showLog.routineLogThrottled(
         `sync-state:${roomId}`,
-        `✅ SYNC-STATE room ${roomId}: ${payload.totalPlayedCount} played, ${payload.playerCount} players → ${socket.id}`,
+        `✅ SYNC-STATE room ${roomId}: ${payload.totalPlayedCount} played, ${payload.playerCount} players → ${socket.id}${staffSync ? ' (staff)' : ' (player-safe)'}`,
         routineServerLog,
         60_000,
       );
@@ -8996,8 +9073,12 @@ io.on('connection', (socket) => {
       } else {
         payload = { ...payload, songName: song.name, artistName: song.artist };
       }
-      // Emit one event; clients choose what to show
-      io.to(roomId).emit('call-revealed', payload);
+      // Call identity: host/display always; players only when host opts in (revealToPlayers).
+      if (payload.revealToPlayers) {
+        io.to(roomId).emit('call-revealed', payload);
+      } else {
+        emitToHostAndDisplays(roomId, room, 'call-revealed', payload);
+      }
       if (VERBOSE) routineServerLog('📣 Call revealed:', payload);
     } catch (e) {
       console.error('❌ Error revealing call:', e?.message || e);
@@ -9377,8 +9458,8 @@ io.on('connection', (socket) => {
 
         if (!rooms.has(roomId)) break;
 
-        // Notify remaining players
-        io.to(roomId).emit('player-left', {
+        // Host + projector only — no player-phone roster fan-out
+        emitToHostAndDisplays(roomId, room, 'player-left', {
           playerId: socket.id,
           playerName: player.name,
           playerCount: getNonHostPlayerCount(room)
@@ -11908,7 +11989,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         const r = rooms.get(roomId);
         if (r) r.songStartAtMs = Date.now();
       } catch {}
-      io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, firstSong, 0));
+      emitSongPlayingToRoom(roomId, room, firstSong, 0);
       syncRoomStateAfterSongStart(roomId, room);
       sendPlayerCardUpdates(roomId, true);
       routineServerLog(
@@ -12057,7 +12138,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       explicit: firstSong.explicit === true,
     };
 
-    io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, firstSong, 0));
+    emitSongPlayingToRoom(roomId, room, firstSong, 0);
     syncRoomStateAfterSongStart(roomId, room);
     sendPlayerCardUpdates(roomId, true);
 
@@ -17452,8 +17533,8 @@ app.post('/api/spotify/replace-song', async (req, res) => {
       routineServerLog('⚠️ Song was found but not updated in any data structure');
     }
     
-    // Broadcast the song replacement to all clients
-    io.to(roomId).emit('song-replaced', {
+    // Host/display only — players should not receive pool/call identity updates
+    emitToHostAndDisplays(roomId, room, 'song-replaced', {
       oldSongId,
       newSong,
       position: songIndex
