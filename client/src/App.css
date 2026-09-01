@@ -408,10 +408,6 @@ body {
   .App .call-columns-header {
     margin-bottom: 4px;
   }
-  .App .public-display-theme-toggle {
-    transform: scale(0.85);
-    transform-origin: top right;
-  }
 }
 
 /* Narrow portrait only — never collapse landscape XGA. */
