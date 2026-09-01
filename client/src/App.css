@@ -6632,6 +6632,13 @@ button.conn-chip.conn-chip-compact {
   color: #0f172a;
 }
 
+/* Short phones (SE-class): drop always-on chip so card + bingo bar fit without scroll. */
+@media (max-height: 700px) {
+  .player-container--v2 .player-pattern-hint {
+    display: none;
+  }
+}
+
 .player-container--v2 .player-v2-action-bar {
   display: flex;
   flex-direction: column;
