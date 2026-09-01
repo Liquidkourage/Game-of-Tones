@@ -2849,9 +2849,9 @@ const PlayerView: React.FC = () => {
                   type="button"
                   className="player-v2-options-button"
                   onClick={() => setOptionsOpen(true)}
-                  aria-label="Card options"
+                  aria-label="More"
                 >
-                  Options
+                  More
                 </button>
                 </div>
               </motion.div>
@@ -2923,7 +2923,7 @@ const PlayerView: React.FC = () => {
                 <div className="player-v2-sheet-header">
                   <div className="player-v2-sheet-header-copy">
                     <div className="player-v2-sheet-title" id="player-v2-sheet-title">
-                      Options
+                      More
                     </div>
                   </div>
                   <button
