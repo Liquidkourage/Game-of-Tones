@@ -817,6 +817,53 @@ function isDisplayConnectionPlayer(player) {
   return typeof player?.name === 'string' && /display/i.test(player.name);
 }
 
+/** Host + projector only — never broadcast pool/order payloads to player phones. */
+function emitToHostAndDisplays(roomId, room, event, payload) {
+  const targets = new Set();
+  if (room?.host) targets.add(room.host);
+  if (room?.players) {
+    for (const [sid, player] of room.players) {
+      if (!player) continue;
+      if (player.isHost || isDisplayConnectionPlayer(player)) targets.add(sid);
+    }
+  }
+  for (const sid of targets) {
+    io.to(sid).emit(event, payload);
+  }
+}
+
+/** Playlist rows safe for the whole room (no embedded track lists). */
+function playlistsPublicSummary(playlists) {
+  if (!Array.isArray(playlists)) return [];
+  return playlists.map((p) => ({
+    id: p?.id,
+    name: typeof p?.name === 'string' ? p.name : '',
+    catalog: p?.catalog === true,
+    youtubeMusic: p?.youtubeMusic === true,
+    appleMusic: p?.appleMusic === true,
+  }));
+}
+
+/**
+ * mix-finalized: players/display get a summary; host socket gets the full songList.
+ * (Room-wide songList was console-logged on player devices and enabled pool cheating.)
+ */
+function emitMixFinalized(roomId, room, hostSocket, playlists, songList) {
+  const summary = { playlists: playlistsPublicSummary(playlists) };
+  io.to(roomId).emit('mix-finalized', summary);
+  if (hostSocket) {
+    hostSocket.emit('mix-finalized', {
+      playlists,
+      songList: Array.isArray(songList) ? songList : [],
+    });
+  } else {
+    emitToHostAndDisplays(roomId, room, 'mix-finalized', {
+      playlists,
+      songList: Array.isArray(songList) ? songList : [],
+    });
+  }
+}
+
 /** Keep in-memory live rounds when the host tab closes/refreshes — do not wipe playback/display state. */
 function shouldRetainRoomAfterHostDisconnect(room) {
   if (!room) return false;
@@ -5736,7 +5783,7 @@ io.on('connection', (socket) => {
             return;
           }
           emitFinalizedOrderFromRoomState(roomId, room);
-          io.to(roomId).emit('mix-finalized', { playlists: room.finalizedPlaylists, songList: rebuiltCapped });
+          emitMixFinalized(roomId, room, socket, room.finalizedPlaylists, rebuiltCapped);
           return;
         }
         routineServerLog('⚠️ Mix already finalized for room (unchanged):', roomId);
@@ -5860,7 +5907,7 @@ io.on('connection', (socket) => {
 
       room.mixFinalized = true;
       
-      io.to(roomId).emit('mix-finalized', { playlists, songList: poolForCards });
+      emitMixFinalized(roomId, room, socket, playlists, poolForCards);
       
       routineServerLog('✅ Mix finalized for room:', roomId);
     } catch (error) {
@@ -8175,7 +8222,7 @@ io.on('connection', (socket) => {
           pattern: room.pattern,
           customMask: Array.from(room.customPattern || []),
           patternComposite: patternCompositeForClient(room),
-          playbackOrder: playbackOrderPayload,
+          // playbackOrder omitted from room broadcast — host gets it via finalized-order
           ...patternExtrasForClient(room),
           currentRoundName: room.currentRoundName || null,
           currentRoundPrize: room.currentRoundPrize || null,
@@ -8184,6 +8231,9 @@ io.on('connection', (socket) => {
           roundWinners: room.roundWinners || [],
           sponsorScreen: sponsorScreenForClient(room),
         });
+        if (playbackOrderPayload.length > 0) {
+          emitToHostAndDisplays(roomId, room, 'finalized-order', { order: playbackOrderPayload });
+        }
         io.to(roomId).emit('sponsor-screen-updated', { sponsorScreen: sponsorScreenForClient(room) });
 
         routineServerLog('🎵 Starting automatic playback (sequential 1→N through pool)...');
@@ -9438,9 +9488,14 @@ function emitOneBy75Pool(roomId, room) {
   const ids = pool.map((s) => s.id).filter(Boolean);
   if (ids.length === 0) return;
   const names = playlistNamesForOneBy75Emit(room);
-  const payload = { ids };
-  if (names.length > 0) payload.names = names;
-  io.to(roomId).emit('oneby75-pool', payload);
+  // Players only need playlist title(s) for card chrome — not the 75 ids.
+  const publicPayload = names.length > 0 ? { names } : {};
+  if (Object.keys(publicPayload).length > 0) {
+    io.to(roomId).emit('oneby75-pool', publicPayload);
+  }
+  const staffPayload = { ids };
+  if (names.length > 0) staffPayload.names = names;
+  emitToHostAndDisplays(roomId, room, 'oneby75-pool', staffPayload);
 }
 
 /**
@@ -9718,9 +9773,12 @@ function emitPublicDisplayPoolLayout(roomId, room) {
     Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5;
   if (hasFiveBy15) {
     routineServerLog(`📊 Emitting fiveby15-pool (${room.fiveByFifteenColumnsIds.length} columns)`);
-    io.to(roomId).emit('fiveby15-pool', {
+    const names = room.fiveByFifteenPlaylistNames || [];
+    // Players: column titles only. Host/display: full column ids + track meta.
+    io.to(roomId).emit('fiveby15-pool', { names });
+    emitToHostAndDisplays(roomId, room, 'fiveby15-pool', {
       columns: room.fiveByFifteenColumnsIds,
-      names: room.fiveByFifteenPlaylistNames || [],
+      names,
       meta: room.fiveByFifteenMeta || {},
     });
     const idToCol = {};
@@ -9729,7 +9787,7 @@ function emitPublicDisplayPoolLayout(roomId, room) {
         idToCol[id] = colIdx;
       });
     });
-    io.to(roomId).emit('fiveby15-map', { idToColumn: idToCol });
+    emitToHostAndDisplays(roomId, room, 'fiveby15-map', { idToColumn: idToCol });
     return;
   }
   if (room.oneBySeventyFivePool && Array.isArray(room.oneBySeventyFivePool) && room.oneBySeventyFivePool.length > 0) {
@@ -9745,8 +9803,8 @@ function emitFinalizedOrderFromRoomState(roomId, room) {
   try {
     const order = buildFinalizedOrderPayloadFromRoom(room);
     if (order.length > 0) {
-      io.to(roomId).emit('finalized-order', { order });
-      routineServerLog(`📻 finalized-order replay (${order.length} tracks) → room ${roomId}`);
+      emitToHostAndDisplays(roomId, room, 'finalized-order', { order });
+      routineServerLog(`📻 finalized-order replay (${order.length} tracks) → host/display ${roomId}`);
       return true;
     }
   } catch (e) {
@@ -10028,14 +10086,19 @@ async function generateBingoCards(roomId, playlists, songOrder = null, options =
             routineServerLog(`   Column ${idx} (left-to-right position ${idx + 1}): "${name}"`);
           });
           
-          io.to(roomId).emit('fiveby15-pool', { columns: roomRef.fiveByFifteenColumnsIds, names: colNames, meta: metaMap });
+          io.to(roomId).emit('fiveby15-pool', { names: colNames });
+          emitToHostAndDisplays(roomId, roomRef, 'fiveby15-pool', {
+            columns: roomRef.fiveByFifteenColumnsIds,
+            names: colNames,
+            meta: metaMap,
+          });
           
           // Build and emit id->column map for clients (needed for display)
           const idToCol = {};
           roomRef.fiveByFifteenColumnsIds.forEach((colIds, colIdx) => {
             colIds.forEach((id) => { idToCol[id] = colIdx; });
           });
-          io.to(roomId).emit('fiveby15-map', { idToColumn: idToCol });
+          emitToHostAndDisplays(roomId, roomRef, 'fiveby15-map', { idToColumn: idToCol });
           
           // Emit finalized global order for Host UI
           try {
@@ -10052,7 +10115,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null, options =
                 sourcePlaylistName: m?.sourcePlaylistName,
               };
             });
-            io.to(roomId).emit('finalized-order', { order: orderWithMeta });
+            emitToHostAndDisplays(roomId, roomRef, 'finalized-order', { order: orderWithMeta });
           } catch (_) {}
         }
       } catch (e) {
@@ -10128,7 +10191,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null, options =
                 ? { originPlaylistName: s.originPlaylistName.trim() }
                 : {}),
             }));
-            io.to(roomId).emit('finalized-order', { order: orderWithMeta });
+            emitToHostAndDisplays(roomId, roomRef, 'finalized-order', { order: orderWithMeta });
           }
         } catch (_) {}
       }
@@ -10148,7 +10211,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null, options =
             sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
             sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
           }));
-          io.to(roomId).emit('finalized-order', { order: orderWithMeta });
+          emitToHostAndDisplays(roomId, room, 'finalized-order', { order: orderWithMeta });
         }
       } catch (e) {
         console.warn('⚠️ Failed to emit finalized-order for fallback mode:', e?.message || e);
@@ -11422,11 +11485,16 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           room.fiveByFifteenColumnsIds = built.map(col => col.map(s => s.id));
           room.fiveByFifteenPlaylistNames = colNames;
           room.fiveByFifteenMeta = metaMap;
-          // Emit to clients so Public Display can render immediately (columns + names + meta + map)
-          io.to(roomId).emit('fiveby15-pool', { columns: room.fiveByFifteenColumnsIds, names: colNames, meta: metaMap });
+          // Emit to host/display so Public Display can render (players get names only)
+          io.to(roomId).emit('fiveby15-pool', { names: colNames });
+          emitToHostAndDisplays(roomId, room, 'fiveby15-pool', {
+            columns: room.fiveByFifteenColumnsIds,
+            names: colNames,
+            meta: metaMap,
+          });
           const idToCol = {};
           room.fiveByFifteenColumnsIds.forEach((colIds, colIdx) => { colIds.forEach(id => { idToCol[id] = colIdx; }); });
-          io.to(roomId).emit('fiveby15-map', { idToColumn: idToCol });
+          emitToHostAndDisplays(roomId, room, 'fiveby15-map', { idToColumn: idToCol });
         } catch (e) {
           console.warn('⚠️ Could not compute 5x15 columns at playback start:', e?.message || e);
         }

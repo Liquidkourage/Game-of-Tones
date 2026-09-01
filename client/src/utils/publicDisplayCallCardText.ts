@@ -282,24 +282,42 @@ export function getCallTitleCapMetrics(): CallTitleCapMetrics {
   return value;
 }
 
-/** Fixed-width slot for one letter — same px whether blank or revealed. */
+/**
+ * Fixed-width slot for one letter — same px whether blank or revealed.
+ * Inter-slot gap is real margin (CSS letter-spacing does not space inline-flex tiles).
+ */
 export function callLetterSlotStyle(
   ch: string,
-  opts: { scale?: number; weight?: number; fontFamily?: string } = {},
+  opts: {
+    scale?: number;
+    weight?: number;
+    fontFamily?: string;
+    /** When false, omit trailing gap (last glyph in a segment). Default true. */
+    withGap?: boolean;
+    letterSpacingEm?: number;
+  } = {},
 ): CSSProperties {
   const scale = opts.scale && opts.scale > 0 ? opts.scale : 1;
   const weight = opts.weight ?? TITLE_FONT_WEIGHT;
   const fontFamily = opts.fontFamily ?? PUBLIC_DISPLAY_CALL_TITLE_FONT_FAMILY;
-  const advEm = getCallCharAdvanceEm(ch, weight, fontFamily) * scale;
+  const gapEm =
+    (Number.isFinite(opts.letterSpacingEm)
+      ? (opts.letterSpacingEm as number)
+      : CALL_CARD_TITLE_LETTER_SPACING_EM) * scale;
+  // Slightly pad advance so heavy caps (W/M/G) + blank borders don't collide.
+  const advEm = getCallCharAdvanceEm(ch, weight, fontFamily) * scale + 0.04 * scale;
   const hEm = getCallTitleCapMetrics().heightEm * scale;
+  const withGap = opts.withGap !== false;
   return {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     width: `${advEm}em`,
     height: `${hEm}em`,
+    marginRight: withGap ? `${Math.max(0.05, gapEm)}em` : 0,
     verticalAlign: 'baseline',
     boxSizing: 'border-box',
+    flex: '0 0 auto',
   };
 }
 
@@ -399,11 +417,12 @@ function wordWidthUnits(
   if (!ctx) {
     units = chars.length * CAP_METRICS_FALLBACK.widthEm * FIT_REF_PX * ts;
   } else if (masked) {
-    // Sum fixed per-char slots (identical whether blank or revealed).
+    // Sum fixed per-char slots + pad (matches callLetterSlotStyle) so fit = paint.
     units = 0;
+    const padPx = 0.04 * FIT_REF_PX * ts;
     for (const ch of chars) {
       if (/[A-Za-z0-9]/.test(ch)) {
-        units += getCallCharAdvanceEm(ch, weight, fontFamily) * FIT_REF_PX * ts;
+        units += getCallCharAdvanceEm(ch, weight, fontFamily) * FIT_REF_PX * ts + padPx;
       } else {
         ctx.font = `${weight} ${FIT_REF_PX}px ${fontFamily}`;
         units += ctx.measureText(ch).width;

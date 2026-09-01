@@ -683,6 +683,12 @@ body {
   overflow: hidden;
 }
 
+/* 1×75 loop seam: thick red divider between last column and first (wrap). */
+.App .call-carousel-col.call-carousel-col--wrap-seam {
+  box-shadow: inset 6px 0 0 0 #e11d48;
+  padding-left: 10px;
+}
+
 .App .call-carousel-col-inner {
   display: grid;
   grid-template-rows: repeat(5, minmax(0, 1fr));
@@ -773,10 +779,11 @@ body {
 .App .public-display .call-song-name {
   font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  /* Letter-reveal tiles use per-slot gaps; don't apply CSS letter-spacing here. */
+  letter-spacing: 0;
   white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow-wrap: normal;
   text-overflow: clip;
   overflow: visible;
   display: block;
@@ -797,11 +804,11 @@ body {
 .App .public-display .call-song-artist {
   font-family: 'Archivo Narrow', 'Arial Narrow', 'Helvetica Condensed', sans-serif;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
   text-transform: uppercase;
   white-space: normal !important;
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow-wrap: normal;
   text-overflow: clip;
   overflow: visible;
   display: block;
@@ -6467,18 +6474,19 @@ button.conn-chip.conn-chip-compact {
   hyphens: none;
 }
 
-/* Narrow / fold cover: slightly tighter type; artists shown unless hide-artists is on */
+/* Narrow / fold cover: slightly tighter type */
 .player-container--v2.player-container--compact-cells {
   --player-v2-title-size: clamp(13px, 5.2cqi, 18px);
   --player-v2-artist-size: clamp(11px, 4.2cqi, 13px);
 }
 
-.player-container--v2.player-container--compact-cells.player-container--hide-artists .player-square-artist {
+/* Settings → Show artists Off (all viewports, not only ≤400px compact). */
+.player-container--v2.player-container--hide-artists .player-square-artist {
   display: none;
 }
 
-/* B: same-card duplicate titles keep artist visible so twins aren’t identical. */
-.player-container--v2.player-container--compact-cells.player-container--hide-artists .bingo-square--title-collision .player-square-artist {
+/* Same-card duplicate titles keep artist visible so twins aren’t identical. */
+.player-container--v2.player-container--hide-artists .bingo-square--title-collision .player-square-artist {
   display: block;
 }
 

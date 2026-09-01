@@ -9,7 +9,7 @@ export function detectBingoColumnIndex(playlistName: string): number | null {
   if (!raw) return null;
 
   const candidates = [
-    raw.replace(/^GoT\s*[-–:]*\s*/i, '').trim(),
+    raw.replace(/^GoT(?=$|[\s\-–—:])\s*[-–—:]*\s*/, '').trim(),
     raw,
   ].filter((s, i, arr) => s.length > 0 && arr.indexOf(s) === i);
 

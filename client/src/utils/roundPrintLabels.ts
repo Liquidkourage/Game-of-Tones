@@ -32,9 +32,13 @@ export function roundPrintablePdfSubtitle(meta: RoundPrintMeta): string {
   return `${meta.roomLabel} · ${meta.roundName} · ${pattern}`;
 }
 
-/** Strip common Game of Tones playlist prefixes for printable/display stems. */
+/**
+ * Strip common Game of Tones playlist prefixes for printable/display stems.
+ * Case-sensitive: "GoT" must not eat the "Got" in "Gotta…".
+ * Require end or whitespace/separator after the flag so "GoTGotta" is left alone.
+ */
 const PRINTABLE_PLAYLIST_PREFIX =
-  /^\s*(?:GoT|Game\s+of\s+Tones|GameOfTones)\s*[-–—:]*\s*/i;
+  /^\s*(?:GoT|Game\s+of\s+Tones|GameOfTones)(?=$|[\s\-–—:])\s*[-–—:]*\s*/;
 
 export function stemPlaylistDisplayName(raw: string): string {
   const trimmed = String(raw || '').trim();

@@ -98,9 +98,9 @@ interface VenueBranding {
   volumeCap?: number;
 }
 
-/** Match public display: trim optional "GoT" playlist prefix for column headers. */
+/** Match public display: trim optional "GoT" playlist prefix for column headers (case-sensitive). */
 function stripGotPlaylistPrefix(raw: string): string {
-  return raw.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
+  return raw.replace(/^\s*GoT(?=$|[\s\-–—:])\s*[-–—:]*\s*/, '').trim();
 }
 
 function formatPlayerRoundDate(iso: string | null | undefined): string {
@@ -289,7 +289,7 @@ const PlayerView: React.FC = () => {
     return 'dark';
   });
 
-  /** Narrow phones: show artist under title by default (was title-only; long-press still works). */
+  /** Show artist under title (Settings toggle). Off = title-only; long-press still shows artist. */
   const [showArtists, setShowArtists] = useState(() => {
     try {
       const stored = localStorage.getItem(SHOW_ARTISTS_STORAGE_KEY);
@@ -725,7 +725,6 @@ const PlayerView: React.FC = () => {
 
     // Socket event listeners
     newSocket.on('connect', () => {
-      console.log('Connected to server');
       setConnectionStatus('connected');
       setReconnectAttempts(0);
       // Join only if we have a name; otherwise wait for user input
@@ -787,7 +786,6 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('player-joined', (data: any) => {
-      console.log('Player joined:', data);
       setGameState(prev => ({
         ...prev,
         playerCount: data.playerCount
@@ -815,7 +813,6 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('game-started', (data: any) => {
-      console.log('Game started:', data);
       setBingoColumnPlaylistNames([]);
       setOneBy75PlaylistNames([]);
       const lr =
@@ -892,7 +889,6 @@ const PlayerView: React.FC = () => {
               if (missedSongs.length > 0) {
                 setConnectionToast(`🔄 Reconnected! You missed ${missedSongs.length} song${missedSongs.length > 1 ? 's' : ''} while disconnected`);
                 setTimeout(() => setConnectionToast(''), 6000);
-                console.log(`🔄 Reconnected: Missed ${missedSongs.length} songs`);
               } else {
                 setConnectionToast('✅ Reconnected successfully');
                 setTimeout(() => setConnectionToast(''), 3000);
@@ -902,12 +898,10 @@ const PlayerView: React.FC = () => {
             }
             
             if (serverCount !== localCount) {
-              console.log(`🔄 Sync detected mismatch: local=${localCount}, server=${serverCount} - syncing from server`);
             }
             // Always use server state as source of truth
             return payload.playedSongIds;
           });
-          console.log(`🔄 Synced ${payload.playedSongIds.length} played songs from server`);
         }
         
         if (payload?.isPlaying) {
@@ -971,7 +965,6 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('song-playing', (data: any) => {
-      console.log('Song playing:', data);
       const displayArtist =
         typeof data.customArtistName === 'string' && data.customArtistName.trim() !== ''
           ? data.customArtistName.trim()
@@ -993,7 +986,7 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('bingo-card-error', (data: any) => {
-      console.warn('bingo-card-error:', data);
+      console.warn('bingo-card-error');
       if (joinReady && playerName?.trim() && newSocket.connected) {
         newSocket.emit('join-room', buildJoinPayload(playerName.trim()));
       }
@@ -1037,7 +1030,6 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('bingo-card', (data: any) => {
-      console.log('Received bingo card:', data);
       // Prefer bingo-cards when both arrive; still handle legacy single-card emit.
       setBingoCards((prev) => {
         const isExplicitNewCard = data.isNewCard === true;
@@ -1091,9 +1083,8 @@ const PlayerView: React.FC = () => {
       });
     });
 
-    newSocket.on('mix-finalized', (data: any) => {
-      console.log('Mix finalized:', data);
-      // Cards are now available but game hasn't started yet
+    newSocket.on('mix-finalized', () => {
+      // Cards may be available; game has not started yet.
     });
 
     // Listen for pattern updates
@@ -1104,7 +1095,6 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('pattern-updated', (data: any) => {
-      console.log('Pattern updated:', data);
       const p = typeof data?.pattern === 'string' && data.pattern.length > 0 ? data.pattern : undefined;
       setGameState((prev) => {
         const nextPat = p ?? prev.pattern;
@@ -1146,7 +1136,6 @@ const PlayerView: React.FC = () => {
 
     // Handle bingo validation result (for the caller)
     newSocket.on('bingo-result', (data: any) => {
-      console.log('Bingo result:', data);
       if (data.success) {
         setBingoStatus('success');
         setBingoMessage(
@@ -1188,7 +1177,6 @@ const PlayerView: React.FC = () => {
 
     // Handle bingo verification pending
     newSocket.on('bingo-verification-pending', (data: any) => {
-      console.log('Bingo verification pending:', data);
       // Check if this is someone else's bingo call
       if (data.playerId !== newSocket.id) {
         // Play notification sound for other players
@@ -1201,7 +1189,6 @@ const PlayerView: React.FC = () => {
 
     // Handle confirmed bingo wins
     newSocket.on('bingo-called', (data: any) => {
-      console.log('Bingo confirmed:', data);
       // Only celebrate if this is a verified/confirmed bingo
       if (data.verified && !data.awaitingVerification) {
         // Check if this is someone else's verified bingo
@@ -1217,7 +1204,6 @@ const PlayerView: React.FC = () => {
 
     newSocket.on('game-ended', () => {
       setGameState(prev => ({ ...prev, isPlaying: false }));
-      console.log('🛑 Game ended');
     });
 
     // Listen for mark confirmation from server to ensure sync
@@ -1251,7 +1237,6 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('game-restarted', (data: any) => {
-      console.log('Game restarted:', data);
       // Reset player state
       setGameState(prev => ({
         ...prev,
@@ -1301,7 +1286,6 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('pattern-complete', (data: any) => {
-      console.log('Pattern complete:', data);
       if (data?.hasPattern === false) {
         setGameState((prev) => ({ ...prev, hasBingo: false }));
         setBingoMessage('');
@@ -1324,11 +1308,9 @@ const PlayerView: React.FC = () => {
       setSongsPlayed(0);
       // CRITICAL: Reset playedSongIds to empty array (server will sync via room-state)
       setPlayedSongIds([]);
-      console.log('🔁 Game reset');
     });
 
     newSocket.on('player-left', (data: any) => {
-      console.log('Player left:', data);
       setGameState(prev => ({
         ...prev,
         playerCount: data.playerCount
@@ -1363,7 +1345,6 @@ const PlayerView: React.FC = () => {
     const syncInterval = setInterval(() => {
       if (socket && socket.connected && gameState.isPlaying) {
         socket.emit('sync-state', { roomId, clientId });
-        console.log('🔄 Periodic sync requested');
       }
     }, 30000); // 30 seconds
     
@@ -1442,7 +1423,7 @@ const PlayerView: React.FC = () => {
     let pendingRefit = false;
 
     /** Title leads. Artist uses its own scale (not × titleScale); hierarchy enforced after fit. */
-    const titleOnlyCells = compactCardCells && !showArtists;
+    const titleOnlyCells = !showArtists;
     const TITLE_SCALE_MAX = titleOnlyCells ? 1.08 : 1.16;
     const TITLE_SCALE_PREFERRED_MIN = titleOnlyCells ? 0.7 : 0.88;
     const TITLE_SCALE_ABSOLUTE_MIN = titleOnlyCells ? 0.5 : 0.64;
@@ -1870,7 +1851,6 @@ const PlayerView: React.FC = () => {
       playNote(783.99, now + 0.2, 0.4); // G5
       playNote(1046.5, now + 0.3, 0.5); // C6
     } catch (error) {
-      console.log('Audio not supported');
     }
   };
 
@@ -1894,7 +1874,6 @@ const PlayerView: React.FC = () => {
       oscillator.start(now);
       oscillator.stop(now + 0.3);
     } catch (error) {
-      console.log('Audio not supported');
     }
   };
 
@@ -1921,7 +1900,6 @@ const PlayerView: React.FC = () => {
       playNote(659.25, now, 0.2);       // E5
       playNote(783.99, now + 0.15, 0.2); // G5
     } catch (error) {
-      console.log('Audio not supported');
     }
   };
 
@@ -2012,11 +1990,6 @@ const PlayerView: React.FC = () => {
   // Check if a visual pattern is complete (only checks if squares are marked, not if songs played)
   const checkVisualPattern = (card: BingoCard): boolean => {
     const pattern = gameState.pattern;
-    
-    console.log('🎯 checkVisualPattern called:', {
-      pattern,
-      markedSquares: card.squares.filter(s => s.marked).length
-    });
     
     // Helper function to check if a square is marked (visual check only)
     const isSquareMarked = (square: BingoSquare): boolean => {
@@ -2117,18 +2090,11 @@ const PlayerView: React.FC = () => {
   const checkBingo = (card: BingoCard): boolean => {
     const pattern = gameState.pattern;
     
-    console.log('🎯 checkBingo called:', {
-      pattern,
-      playedSongIds: playedSongIds.length,
-      markedSquares: card.squares.filter(s => s.marked).length
-    });
-    
     // Helper function to check if a marked square corresponds to a played song (or free space)
     const isMarkedSquareValid = (square: BingoSquare): boolean => {
       const isFree = !!(square.isFreeSpace || square.songId === '__FREE_SPACE__');
       const isValid = square.marked && (isFree || playedSongIds.includes(square.songId));
       if (square.marked && !isValid) {
-        console.log('❌ Invalid mark:', square.position, square.songId, 'not in played list');
       }
       return isValid;
     };
@@ -2439,7 +2405,7 @@ const PlayerView: React.FC = () => {
   return (
     <>
     <div
-      className={`player-container player-container--v2 ${bingoCard ? 'has-card' : ''}${venueBranding ? ' player-container--venue' : ''}${compactCardCells ? ' player-container--compact-cells' : ''}${compactCardCells && !showArtists ? ' player-container--hide-artists' : ''}${cardTheme === 'light' ? ' player-container--light' : ''}`}
+      className={`player-container player-container--v2 ${bingoCard ? 'has-card' : ''}${venueBranding ? ' player-container--venue' : ''}${compactCardCells ? ' player-container--compact-cells' : ''}${!showArtists ? ' player-container--hide-artists' : ''}${cardTheme === 'light' ? ' player-container--light' : ''}`}
       style={{
         '--player-card-font-scale': cardFontPercent / 100,
         '--player-visual-bottom-gap': `${visualBottomGapPx}px`,

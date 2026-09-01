@@ -1088,6 +1088,40 @@ const PublicDisplay: React.FC = () => {
     };
   }, [venueBranding]);
 
+  // Keep projector screen awake (Wake Lock API; re-acquire after tab focus).
+  useEffect(() => {
+    let wakeLock: { release?: () => Promise<void>; addEventListener?: (type: string, fn: () => void) => void } | null =
+      null;
+    const requestWakeLock = async () => {
+      try {
+        const nav = navigator as Navigator & {
+          wakeLock?: { request: (type: 'screen') => Promise<typeof wakeLock> };
+        };
+        if (nav.wakeLock?.request) {
+          wakeLock = await nav.wakeLock.request('screen');
+          wakeLock?.addEventListener?.('release', () => {
+            wakeLock = null;
+          });
+        }
+      } catch {
+        // Unsupported / denied — ignore
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && !wakeLock) void requestWakeLock();
+    };
+    void requestWakeLock();
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      try {
+        void wakeLock?.release?.();
+      } catch {
+        /* ignore */
+      }
+    };
+  }, []);
+
   /** Re-measure header offset when venue co-brand text loads (changes header height). */
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -3607,26 +3641,44 @@ const PublicDisplay: React.FC = () => {
   ) => {
     if (!text) return null;
     const blankFill = unrevealedLetterFillStyle(letterBoxScale);
+    const spacingEm =
+      fontWeight >= 800
+        ? CALL_CARD_ARTIST_LETTER_SPACING_EM
+        : CALL_CARD_TITLE_LETTER_SPACING_EM;
     // Soft breaks on spaces / hyphens / dashes / slashes only — never mid-letter.
     const segments = callCardWrapSegments(text);
     return (
-      <span style={{ whiteSpace: 'normal' }}>
+      <span style={{ whiteSpace: 'normal', letterSpacing: 0 }}>
         {segments.map((seg, si) => {
           if (seg === ' ') {
             return <span key={`ws-${si}`}>{' '}</span>;
           }
           const chars = Array.from(seg);
+          const letterIdxs = chars
+            .map((ch, i) => (/^[A-Za-z0-9]$/.test(ch) ? i : -1))
+            .filter((i) => i >= 0);
+          const lastLetterIdx = letterIdxs.length ? letterIdxs[letterIdxs.length - 1] : -1;
           return (
             <span
               key={`seg-${si}`}
-              style={{ whiteSpace: 'nowrap', display: 'inline-block' }}
+              style={{
+                whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                letterSpacing: 0,
+              }}
             >
               {chars.map((ch, ci) => {
                 const u = ch.toUpperCase();
                 if (/^[A-Z0-9]$/.test(u)) {
                   const revealed = set.has(u);
                   const isHighlight = revealed && !!highlightChar && u === highlightChar;
-                  const slot = callLetterSlotStyle(u, { scale: letterBoxScale, weight: fontWeight });
+                  const slot = callLetterSlotStyle(u, {
+                    scale: letterBoxScale,
+                    weight: fontWeight,
+                    letterSpacingEm: spacingEm,
+                    withGap: ci !== lastLetterIdx,
+                  });
                   return (
                     <span key={`c-${si}-${ci}`} style={slot}>
                       {revealed ? (
@@ -3785,10 +3837,11 @@ const PublicDisplay: React.FC = () => {
       fontWeight: kind === 'title' ? 700 : 800,
       lineHeight: lh,
       fontSize: `${fontSize}px`,
-      letterSpacing:
-        kind === 'title'
-          ? `${CALL_CARD_TITLE_LETTER_SPACING_EM}em`
-          : `${CALL_CARD_ARTIST_LETTER_SPACING_EM}em`,
+      // Masked tiles carry their own inter-slot gaps — parent letter-spacing would not apply
+      // to inline-flex and caused W/G to collide with neighboring blanks.
+      letterSpacing: masked ? 0 : kind === 'title'
+        ? `${CALL_CARD_TITLE_LETTER_SPACING_EM}em`
+        : `${CALL_CARD_ARTIST_LETTER_SPACING_EM}em`,
       color: kind === 'title' ? '#ffffff' : '#e0e0e0',
       textShadow:
         kind === 'title' ? '0 2px 6px rgba(0,0,0,0.8)' : '0 2px 4px rgba(0,0,0,0.6)',
@@ -4858,12 +4911,15 @@ const PublicDisplay: React.FC = () => {
               if (shouldScroll) snapCarouselAfterForwardLoop();
             }}
           >
-            {scrollGroups.map((group, gi) => (
+            {scrollGroups.map((group, gi) => {
+              // Wrap seam: last play-order column | first column (loop copy).
+              const isWrapStart = shouldScroll && total > 0 && gi === total;
+              return (
               <div
                 key={`scroll-${gi}`}
                 className={`call-carousel-col${
                   isFullCardPattern && uncapFullCardCallLayout ? ' call-carousel-col--full-card' : ''
-                }`}
+                }${isWrapStart ? ' call-carousel-col--wrap-seam' : ''}`}
                 style={colStyle}
               >
                 <div
@@ -4876,7 +4932,8 @@ const PublicDisplay: React.FC = () => {
                   {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </motion.div>
         </div>
       </div>

@@ -1216,25 +1216,27 @@ function stripPlaylistDescriptionHtml(raw: string): string {
   return raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-/** Match public display: trim optional "GoT" playlist prefix for column headers. */
+/** Match public display: trim optional "GoT" playlist prefix for column headers (case-sensitive). */
 function stripGotPlaylistPrefix(raw: string): string {
-  return raw.replace(/^\s*GoT\s*[-�:]*\s*/i, '').trim();
+  return raw.replace(/^\s*GoT(?=$|[\s\-–—:])\s*[-–—:]*\s*/, '').trim();
 }
 
-/** "Short" names: trim a leading title flag (e.g. "GoT - ", "Tempo: ") from a playlist name. */
+/**
+ * "Short" names: trim a leading title flag (e.g. "GoT - ", "Tempo: ") from a playlist name.
+ * Case-sensitive so "GoT" does not strip the "Got" in "Gotta…".
+ * Require end or whitespace/separator after the flag (don't eat into the next word).
+ */
 function stripTitleFlagPrefix(raw: string, flags: string[]): string {
   const name = String(raw || '').trim();
   const sorted = [...flags].sort((a, b) => b.length - a.length);
   for (const flag of sorted) {
     const f = flag.trim();
     if (!f) continue;
-    if (name.toLowerCase().startsWith(f.toLowerCase())) {
-      const stripped = name
-        .slice(f.length)
-        .replace(/^\s*[-–:]*\s*/, '')
-        .trim();
-      return stripped || name;
-    }
+    if (!name.startsWith(f)) continue;
+    const rest = name.slice(f.length);
+    if (rest.length > 0 && !/^[\s\-–—:]/.test(rest)) continue;
+    const stripped = rest.replace(/^\s*[-–—:]*\s*/, '').trim();
+    return stripped || name;
   }
   return name;
 }
@@ -1301,12 +1303,12 @@ function parsePlaylistTitleFlags(raw: string): string[] {
     .filter(Boolean);
 }
 
-/** True when a playlist title carries one of the host's flags (auto-created "<flag> output" playlists excluded). */
+/** True when a playlist title carries one of the host's flags (case-sensitive; auto-created "<flag> output" playlists excluded). */
 function playlistMatchesTitleFlags(name: string, flags: string[]): boolean {
   if (flags.length === 0) return true;
-  const nameLower = (name || '').toLowerCase();
-  if (flags.some((flag) => nameLower.includes(`${flag.toLowerCase()} output`))) return false;
-  return flags.some((flag) => nameLower.includes(flag.toLowerCase()));
+  const title = name || '';
+  if (flags.some((flag) => title.includes(`${flag} output`))) return false;
+  return flags.some((flag) => title.includes(flag));
 }
 
 /** Picks/All library filter (same rules as visible playlist effect). YouTube/Apple Music playlists always pass through. */
