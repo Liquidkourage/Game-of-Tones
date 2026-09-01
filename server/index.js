@@ -5258,6 +5258,35 @@ io.on('connection', (socket) => {
 
     const priorPlayer =
       !effectiveIsHost && clientId ? findPriorPlayerByClientId(room, clientId, socket.id) : null;
+
+    // Guest name is not a credential — block joining as another active player's display name.
+    if (!effectiveIsHost && typeof playerName === 'string' && playerName.trim()) {
+      const want = playerName.trim().toLowerCase();
+      let nameTakenBy = null;
+      for (const [sid, p] of room.players) {
+        if (sid === socket.id) continue;
+        if (priorPlayer && sid === priorPlayer.id) continue;
+        if (!p || p.isHost || isDisplayConnectionPlayer(p)) continue;
+        if (String(p.name || '').trim().toLowerCase() !== want) continue;
+        const sameClient = clientId && p.clientId && p.clientId === clientId;
+        const sameAccount =
+          joinedPlayerUserId != null &&
+          p.playerUserId != null &&
+          Number(p.playerUserId) === Number(joinedPlayerUserId);
+        if (sameClient || sameAccount) continue;
+        nameTakenBy = p;
+        break;
+      }
+      if (nameTakenBy) {
+        socket.emit('join-denied', {
+          roomId,
+          reason: 'name_taken',
+          message: `“${playerName.trim()}” is already playing in this room. Pick a different name.`,
+        });
+        return;
+      }
+    }
+
     if (priorPlayer && priorPlayer.id !== socket.id) {
       room.players.delete(priorPlayer.id);
     }

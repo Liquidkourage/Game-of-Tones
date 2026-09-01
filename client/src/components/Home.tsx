@@ -6,6 +6,7 @@ import { API_BASE } from '../config';
 import { hostFetch, setHostJwt, browserGoogleLoginUrl, clearHostJwt, postHostLogout } from '../utils/hostFetch';
 import type { HostGlassNavId } from '../host/hostGlassNav';
 import { clearActiveHostRoom, readActiveHostRoom } from '../utils/hostRoomRecovery';
+import { writePlayerJoinIntent } from '../utils/playerSeat';
 
 /** Express/HTML error pages are not JSON; show a short message instead of raw markup. */
 function formatHttpErrorBody(raw: string, status: number): string {
@@ -406,10 +407,14 @@ const Home: React.FC = () => {
   };
 
   const completeJoin = (code: string, name: string, asRemote: boolean) => {
+    const roomCode = code.trim().toUpperCase();
+    const displayName = name.trim();
+    writePlayerJoinIntent(roomCode, displayName);
     const q = new URLSearchParams();
-    q.set('name', name.trim());
+    // Prefill only — PlayerView will not auto-join from ?name= without join intent / seat.
+    q.set('name', displayName);
     if (asRemote) q.set('remote', '1');
-    navigate(`/player/${encodeURIComponent(code.trim().toUpperCase())}?${q.toString()}`);
+    navigate(`/player/${encodeURIComponent(roomCode)}?${q.toString()}`);
   };
 
   const joinGame = async () => {

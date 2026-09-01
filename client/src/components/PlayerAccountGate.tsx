@@ -17,6 +17,9 @@ type Props = {
   initialMode?: Mode;
   theme?: PlayerUiTheme;
   onThemeChange?: (theme: PlayerUiTheme) => void;
+  /** Prefill guest name from URL/home — not enough to skip the gate alone. */
+  initialGuestName?: string;
+  initialError?: string | null;
 };
 
 const PlayerAccountGate: React.FC<Props> = ({
@@ -25,15 +28,29 @@ const PlayerAccountGate: React.FC<Props> = ({
   initialMode = 'login',
   theme = 'dark',
   onThemeChange,
+  initialGuestName = '',
+  initialError = null,
 }) => {
-  const [mode, setMode] = useState<Mode>(initialMode);
+  const [mode, setMode] = useState<Mode>(() => (initialGuestName.trim() ? 'guest' : initialMode));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [guestName, setGuestName] = useState('');
+  const [guestName, setGuestName] = useState(() => initialGuestName.trim());
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => initialError);
   const light = theme === 'light';
+
+  React.useEffect(() => {
+    if (initialError) setError(initialError);
+  }, [initialError]);
+
+  React.useEffect(() => {
+    const n = initialGuestName.trim();
+    if (n) {
+      setGuestName((prev) => prev || n);
+      setMode((m) => (m === 'login' || m === 'signup' ? 'guest' : m));
+    }
+  }, [initialGuestName]);
 
   const submitAccount = async () => {
     setBusy(true);

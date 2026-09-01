@@ -14,6 +14,15 @@ import {
   type PlayerStats,
 } from '../utils/playerFetch';
 import PlayerAccountGate from './PlayerAccountGate';
+import {
+  clearPlayerJoinIntent,
+  clearPlayerSeat,
+  getOrCreatePlayerClientId,
+  loadPlayerSeat,
+  readPlayerJoinIntent,
+  savePlayerSeat,
+  stripNameFromPlayerUrl,
+} from '../utils/playerSeat';
 import { youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import { patchSquaresWithAlias, patchSquaresClearAlias } from '../utils/songAliasDisplay';
 import { softHyphenateLongWords, stripSoftHyphens } from '../utils/softHyphenateLongWords';
@@ -121,39 +130,39 @@ const PlayerView: React.FC = () => {
   const [searchParams] = useSearchParams();
   /** false when joined with ?remote=1 — server treats as online-only for hybrid prize rules */
   const inPersonJoin = searchParams.get('remote') !== '1';
-  const [playerName, setPlayerName] = useState<string>(() => {
-    const fromStorage = (() => { try { return localStorage.getItem('player_name') || ''; } catch { return ''; } })();
-    const fromUrl = searchParams.get('name') || '';
-    return fromUrl.trim() || fromStorage.trim();
+  /**
+   * ?name= is only a prefill hint — never a credential. Auto-join only with a per-room seat
+   * on this device, or a one-shot Home→player join intent (sessionStorage).
+   */
+  const [urlNamePrefill] = useState(() => (searchParams.get('name') || '').trim());
+  const [clientId] = useState<string>(() => getOrCreatePlayerClientId());
+  const [playerBootstrap] = useState(() => {
+    const intentName = readPlayerJoinIntent(roomId);
+    const seat = loadPlayerSeat(roomId);
+    const seatOk =
+      !!(seat && seat.clientId === getOrCreatePlayerClientId() && seat.displayName.trim());
+    let storedName = '';
+    try {
+      storedName = (localStorage.getItem('player_name') || '').trim();
+    } catch {
+      /* ignore */
+    }
+    const name = (intentName || (seatOk ? seat!.displayName : '') || storedName).trim();
+    return {
+      name,
+      joinReady: !!(intentName || seatOk) && name.length > 0,
+      fromIntent: !!intentName,
+    };
   });
-  const [joinReady, setJoinReady] = useState(() => {
-    const fromStorage = (() => {
-      try {
-        return localStorage.getItem('player_name') || '';
-      } catch {
-        return '';
-      }
-    })();
-    const fromUrl = searchParams.get('name') || '';
-    return (fromUrl.trim() || fromStorage.trim()).length > 0;
-  });
+  const [playerName, setPlayerName] = useState<string>(() => playerBootstrap.name);
+  const [joinReady, setJoinReady] = useState(() => playerBootstrap.joinReady);
+  const [joinGateError, setJoinGateError] = useState<string | null>(null);
   const [playerAccount, setPlayerAccount] = useState<PlayerAccountUser | null>(null);
   const [playerStats, setPlayerStats] = useState<PlayerStats | null>(null);
   const [playerRecentRounds, setPlayerRecentRounds] = useState<PlayerRoundHistory[]>([]);
   const [displayNameDraft, setDisplayNameDraft] = useState('');
   const [displayNameBusy, setDisplayNameBusy] = useState(false);
   const [displayNameError, setDisplayNameError] = useState<string | null>(null);
-  const [clientId] = useState<string>(() => {
-    try {
-      const existing = localStorage.getItem('client_id');
-      if (existing) return existing;
-      const next = Math.random().toString(36).slice(2);
-      localStorage.setItem('client_id', next);
-      return next;
-    } catch {
-      return Math.random().toString(36).slice(2);
-    }
-  });
 
   const [socket, setSocket] = useState<any>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
@@ -570,12 +579,22 @@ const PlayerView: React.FC = () => {
       } catch {
         /* ignore */
       }
+      savePlayerSeat(roomId, clientId, session.user.displayName);
+      stripNameFromPlayerUrl();
       setJoinReady(true);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [roomId, clientId]);
+
+  useEffect(() => {
+    if (!joinReady) return;
+    stripNameFromPlayerUrl();
+    if (playerBootstrap.fromIntent) {
+      clearPlayerJoinIntent(roomId);
+    }
+  }, [joinReady, roomId, playerBootstrap.fromIntent]);
 
   useEffect(() => {
     if (playerAccount) setDisplayNameDraft(playerAccount.displayName);
@@ -617,18 +636,14 @@ const PlayerView: React.FC = () => {
     } catch {
       /* ignore */
     }
+    savePlayerSeat(roomId, clientId, trimmed);
+    stripNameFromPlayerUrl();
+    setJoinGateError(null);
     setPlayerName(trimmed);
     if (account) setPlayerAccount(account);
     if (stats !== undefined) setPlayerStats(stats);
     if (recentRounds !== undefined) setPlayerRecentRounds(recentRounds);
     setJoinReady(true);
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.set('name', trimmed);
-      window.history.replaceState({}, '', url.toString());
-    } catch {
-      /* ignore */
-    }
   };
 
   const saveDisplayName = async () => {
@@ -789,6 +804,31 @@ const PlayerView: React.FC = () => {
       if (data?.venueBranding !== undefined) {
         setVenueBranding(data.venueBranding ?? null);
       }
+      const joinedName =
+        typeof data?.playerName === 'string' ? data.playerName.trim() : '';
+      if (joinedName) {
+        savePlayerSeat(roomId, clientId, joinedName);
+        clearPlayerJoinIntent(roomId);
+        try {
+          localStorage.setItem('player_name', joinedName);
+        } catch {
+          /* ignore */
+        }
+        stripNameFromPlayerUrl();
+      }
+    });
+
+    newSocket.on('join-denied', (data: any) => {
+      const reason = data?.reason || '';
+      const message =
+        (typeof data?.message === 'string' && data.message.trim()) ||
+        (reason === 'name_taken'
+          ? 'That name is already in this game. Pick a different name.'
+          : 'Could not join this game.');
+      clearPlayerSeat(roomId);
+      setJoinGateError(message);
+      setJoinReady(false);
+      setBingoCards([]);
     });
 
     newSocket.on('venue-branding', (data: any) => {
@@ -2480,6 +2520,8 @@ const PlayerView: React.FC = () => {
         <PlayerAccountGate
           theme={cardTheme}
           onThemeChange={chooseCardTheme}
+          initialGuestName={urlNamePrefill || playerName}
+          initialError={joinGateError}
           onGuestContinue={(name) => {
             finishGuestOrAccountJoin(name);
             if (socket && socket.connected) {
@@ -3102,6 +3144,8 @@ const PlayerView: React.FC = () => {
                             setPlayerAccount(null);
                             setPlayerStats(null);
                             setPlayerRecentRounds([]);
+                            clearPlayerSeat(roomId);
+                            clearPlayerJoinIntent(roomId);
                             setJoinReady(false);
                           });
                         }}
