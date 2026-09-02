@@ -1580,7 +1580,15 @@ class SpotifyService {
       routineSpotifyLog(`▶️ Resumed playback on ${deviceId}`);
     } catch (error) {
       this._rethrowIfRateLimited(error, 'resumePlayback');
-      console.error('Error resuming playback:', error);
+      // Restriction 403 is common Connect noise — don't dump a full stack every poll.
+      if (this.isRestrictionError(error)) {
+        console.warn(
+          '⚠️ resumePlayback restriction:',
+          error?.body?.error?.message || error?.message || 'Restriction violated',
+        );
+      } else {
+        console.error('Error resuming playback:', error);
+      }
       throw error;
     }
   }
