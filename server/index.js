@@ -4476,6 +4476,62 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     routineServerLog(`✅ Playback started successfully for: ${nextSong.name}`);
     routineServerLog(`✅ Simple advance: ${nextSong.name} by ${nextSong.artist}`);
     room._spotifyAdvanceSoftRetries = 0;
+
+    // Spotify often returns 2xx while the speaker is still silent (Restriction / Connect lag).
+    // Confirm is_playing before we trust the snippet timer; retry a hard start if needed.
+    let audioConfirmed = false;
+    try {
+      for (let i = 0; i < 4; i++) {
+        await new Promise((r) => setTimeout(r, 400));
+        if (!roomStillPlaying(roomId)) return;
+        const state = await spPlay.getCurrentPlaybackState();
+        const playing = !!state?.is_playing;
+        const currentId = state?.item?.id;
+        const correctTrack = !currentId || currentId === nextSong.id;
+        if (playing && correctTrack) {
+          audioConfirmed = true;
+          break;
+        }
+        routineServerLog(
+          `🔎 Simple playback verify ${i + 1}/4: is_playing=${playing} correct_track=${correctTrack}`,
+        );
+        try {
+          if (room.temporaryPlaylistId) {
+            await spPlay.startPlaybackFromPlaylist(
+              resolvedDeviceId,
+              room.temporaryPlaylistId,
+              room.currentSongIndex,
+              room.currentSongStartMs || 0,
+            );
+          } else {
+            await spPlay.startPlayback(
+              resolvedDeviceId,
+              [`spotify:track:${nextSong.id}`],
+              room.currentSongStartMs || 0,
+            );
+          }
+        } catch (verifyStartErr) {
+          const msg = verifyStartErr?.body?.error?.message || verifyStartErr?.message || '';
+          if (!/restriction/i.test(msg)) {
+            console.warn('⚠️ Simple verify re-start failed:', msg);
+          }
+        }
+      }
+    } catch (verifyErr) {
+      console.warn('⚠️ Simple playback verify error:', verifyErr?.message || verifyErr);
+    }
+
+    if (!audioConfirmed && roomStillPlaying(roomId)) {
+      console.warn(
+        `⚠️ Call #${room.currentSongIndex + 1} on board but Spotify audio not confirmed — host may hear silence`,
+      );
+      io.to(roomId).emit('playback-warning', {
+        message:
+          'TEMPO called the song, but Spotify did not confirm audio on the locked speaker. Hit Skip, or open Connection and re-transfer to that device.',
+        type: 'audio_unconfirmed',
+      });
+    }
+
     if (roomStillPlaying(roomId)) {
       startSimpleProgression(roomId, resolvedDeviceId, room.snippetLength);
     }
@@ -4492,12 +4548,20 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     if (roomStillPlaying(roomId) && !room._spotifyAdvanceLocked) {
       try {
         if (!spErr.isQuarantined()) {
-          routineServerLog('🔄 Attempting to resume playback after song advance failure...');
-          await spErr.resumePlayback(resolvedDeviceId);
-          routineServerLog('✅ Resume attempt completed');
+          routineServerLog('🔄 Attempting hard re-start after song advance failure...');
+          try {
+            await spErr.startPlayback(
+              resolvedDeviceId,
+              [`spotify:track:${nextSong.id}`],
+              room.currentSongStartMs || 0,
+            );
+          } catch {
+            await spErr.resumePlayback(resolvedDeviceId);
+          }
+          routineServerLog('✅ Recovery start/resume attempt completed');
         }
       } catch (resumeError) {
-        console.warn('⚠️ Failed to resume playback:', showLog.spotifyErrorSummary(resumeError));
+        console.warn('⚠️ Failed to recover playback:', showLog.spotifyErrorSummary(resumeError));
         if (isSpotifyRateLimitOrQuarantineError(resumeError, spErr)) {
           lockRoomSpotifyPlayback(roomId, room, 'resume_after_advance_429', spErr);
           return;
@@ -4514,6 +4578,11 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     if (retries >= 2) {
       console.warn('⚠️ Soft advance retries exhausted — host must Skip/Resume manually');
       clearRoomTimer(roomId);
+      io.to(roomId).emit('playback-error', {
+        message:
+          'Spotify would not start this track on the locked speaker after retries. The call is on the board — use Skip to continue, or re-select the device under Connection.',
+        type: 'advance_exhausted',
+      });
       return;
     }
     room._spotifyAdvanceSoftRetries = retries + 1;
@@ -12390,9 +12459,18 @@ async function playNextSong(roomId, deviceId) {
       if (!playing || !correctTrack) {
         // Attempt to correct to the intended track once
         try { await spotifyFor(roomId).withRetries('startPlayback(correct-next)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs), { attempts: 2, backoffMs: 300 }); } catch {}
+        try {
+          const after = await spotifyFor(roomId).getCurrentPlaybackState();
+          playing = !!after?.is_playing;
+          correctTrack = after?.item?.id === nextSong.id;
+        } catch (_) {}
       }
       if (!playing) {
-        io.to(roomId).emit('playback-warning', { message: 'Playback did not resume on next track. Verify Spotify device and try transferring playback again.' });
+        io.to(roomId).emit('playback-warning', {
+          message:
+            'TEMPO called the song, but Spotify did not confirm audio on the locked speaker. Hit Skip, or re-transfer the device under Connection.',
+          type: 'audio_unconfirmed',
+        });
       }
     } catch (e) {
       console.warn('⚠️ Playback verification (next) error:', e?.message || e);
