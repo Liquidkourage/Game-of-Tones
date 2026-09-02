@@ -850,18 +850,21 @@ body {
   filter: none !important;
 }
 
-/* Pattern demo bingo: flush squares (no gutters) */
-.App .public-display .bingo-grid {
+/* Pattern demo bingo: flush equal squares inside a true square board */
+.App .public-display .bingo-card-display.public-pattern-panel .bingo-grid {
   gap: 0 !important;
+  transform: none !important;
 }
 
 .App .public-display .bingo-grid .bingo-square {
   border-radius: 0;
   border: none;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  transform: none !important;
 }
 
 .App .public-display .bingo-grid .bingo-square.winning {
+  transform: none !important;
   box-shadow:
     inset 0 0 0 2px rgba(34, 197, 94, 0.95),
     0 0 20px rgba(74, 222, 128, 0.8);
@@ -880,7 +883,13 @@ body {
 
 
 .App .bingo-card-header.center { justify-content: center; }
-.App .bingo-grid { transform: translateY(-5%) scale(var(--bingo-scale)); transform-origin: center center; }
+.App .bingo-grid {
+  transform: translateY(-5%) scale(var(--bingo-scale));
+  transform-origin: center center;
+}
+.App .public-display .bingo-card-display.public-pattern-panel .bingo-grid {
+  transform: none !important;
+}
 
 /* Button Styles */
 .btn {

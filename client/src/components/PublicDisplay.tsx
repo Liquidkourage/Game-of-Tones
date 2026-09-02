@@ -4238,146 +4238,142 @@ const PublicDisplay: React.FC = () => {
 
   const renderBingoCard = () => {
     const { bingoCard } = gameState;
-    console.log('Winners section rendering, winners:', gameState.winners);
-    const grid = [];
-    
-    for (let row = 0; row < bingoCard.size; row++) {
-      const rowSquares = [];
-      for (let col = 0; col < bingoCard.size; col++) {
-        const square = bingoCard.squares.find(s => 
-          s.position.row === row && s.position.col === col
+    const size = Math.max(1, Number(bingoCard?.size) || 5);
+    const cells: React.ReactNode[] = [];
+
+    // Flat 5×5 (or size×size) children — no .bingo-row wrappers (avoids display:contents layout bugs).
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        const square = bingoCard.squares.find(
+          (s) => s.position.row === row && s.position.col === col,
         );
-        
-        if (square) {
-          let isWinningLine = isWinningSquare(row, col);
-          let linePatternDemoClass = '';
-          if (pattern === 'line' && linesRequired > 1 && isWinningLine) {
-            const tuple =
-              linePatternDemoTuples[
-                linePatternDemoTuples.length === 0 ? 0 : linePatternDemoIndex % linePatternDemoTuples.length
-              ] ?? [0];
-            const hitSlots: number[] = [];
-            tuple.forEach((lineIdx, slot) => {
-              if (WINNING_LINE_PREDICATES[lineIdx]?.(row, col)) hitSlots.push(slot);
-            });
-            if (hitSlots.length > 1) linePatternDemoClass = ' winning-line-overlap';
-            else if (hitSlots.length === 1) linePatternDemoClass = ` winning-line-slot-${hitSlots[0] % 4}`;
-          }
 
-          const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
+        if (!square) {
+          cells.push(
+            <div
+              key={`${row}-${col}-empty`}
+              className="bingo-square bingo-square--empty"
+              aria-hidden
+            />,
+          );
+          continue;
+        }
 
-          let compositeClauseColorClass = '';
-          if (pattern === 'composite' && patternComposite && isWinningLine) {
-            const posKey = `${row}-${col}`;
-            if (compositeShapeClausesUseUnionHighlight(patternComposite)) {
-              patternComposite.clauses.forEach((clause, clauseIndex) => {
-                if (compositeClauseColorClass) return;
-                if (clauseHighlightPositions(clause).includes(posKey)) {
-                  compositeClauseColorClass = ` composite-clause-color-${clauseIndex % COMPOSITE_CLAUSE_COLOR_SLOTS}`;
-                }
-              });
-            } else if (compositeDemoSequences.length >= 2) {
-              const frame =
-                compositeDemoSequences[
-                  compositeDemoSequences.length === 0 ? 0 : compositePatternDemoIndex % compositeDemoSequences.length
-                ];
-              if (frame?.positions.includes(posKey)) {
-                compositeClauseColorClass = ` composite-clause-color-${frame.clauseIndex % COMPOSITE_CLAUSE_COLOR_SLOTS}`;
+        let isWinningLine = isWinningSquare(row, col);
+        let linePatternDemoClass = '';
+        if (pattern === 'line' && linesRequired > 1 && isWinningLine) {
+          const tuple =
+            linePatternDemoTuples[
+              linePatternDemoTuples.length === 0 ? 0 : linePatternDemoIndex % linePatternDemoTuples.length
+            ] ?? [0];
+          const hitSlots: number[] = [];
+          tuple.forEach((lineIdx, slot) => {
+            if (WINNING_LINE_PREDICATES[lineIdx]?.(row, col)) hitSlots.push(slot);
+          });
+          if (hitSlots.length > 1) linePatternDemoClass = ' winning-line-overlap';
+          else if (hitSlots.length === 1) linePatternDemoClass = ` winning-line-slot-${hitSlots[0] % 4}`;
+        }
+
+        const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
+
+        let compositeClauseColorClass = '';
+        if (pattern === 'composite' && patternComposite && isWinningLine) {
+          const posKey = `${row}-${col}`;
+          if (compositeShapeClausesUseUnionHighlight(patternComposite)) {
+            patternComposite.clauses.forEach((clause, clauseIndex) => {
+              if (compositeClauseColorClass) return;
+              if (clauseHighlightPositions(clause).includes(posKey)) {
+                compositeClauseColorClass = ` composite-clause-color-${clauseIndex % COMPOSITE_CLAUSE_COLOR_SLOTS}`;
               }
-            } else {
-              compositeClauseColorClass = ' composite-clause-color-0';
+            });
+          } else if (compositeDemoSequences.length >= 2) {
+            const frame =
+              compositeDemoSequences[
+                compositeDemoSequences.length === 0
+                  ? 0
+                  : compositePatternDemoIndex % compositeDemoSequences.length
+              ];
+            if (frame?.positions.includes(posKey)) {
+              compositeClauseColorClass = ` composite-clause-color-${frame.clauseIndex % COMPOSITE_CLAUSE_COLOR_SLOTS}`;
             }
+          } else {
+            compositeClauseColorClass = ' composite-clause-color-0';
           }
+        }
 
-          const pulseFullCardFamily = isWinningLine && isFullCardPattern;
+        const pulseFullCardFamily = isWinningLine && isFullCardPattern;
 
-          const pulseShapeGlow =
-            isWinningLine &&
-            !pulseFullCardFamily &&
-            (pattern === 'custom' ||
-              (pattern === 'composite' &&
-                (compositeShapeClausesUseUnionHighlight(patternComposite) ||
-                  compositeDemoSequences.length < 2)));
+        const pulseShapeGlow =
+          isWinningLine &&
+          !pulseFullCardFamily &&
+          (pattern === 'custom' ||
+            (pattern === 'composite' &&
+              (compositeShapeClausesUseUnionHighlight(patternComposite) ||
+                compositeDemoSequences.length < 2)));
 
-          const fullCardPulseDelay = pulseFullCardFamily ? fullCardPulseDelaySec(row, col) : 0;
+        const fullCardPulseDelay = pulseFullCardFamily ? fullCardPulseDelaySec(row, col) : 0;
 
-          rowSquares.push(
-            <motion.div
-              key={`${row}-${col}`}
-              className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}${linePatternDemoClass}${compositeClauseColorClass}`}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{
-                opacity: 1,
-                scale: 1,
-                ...(pulseFullCardFamily && {
-                  boxShadow: [
-                    '0 0 1px rgba(0, 255, 150, 0.35)',
-                    '0 0 26px rgba(0, 255, 230, 1)',
-                    '0 0 48px rgba(220, 255, 250, 0.92)',
-                    '0 0 26px rgba(0, 255, 230, 1)',
-                    '0 0 1px rgba(0, 255, 150, 0.35)',
-                  ],
-                  scale: [1, 1.045, 1.065, 1.045, 1],
-                }),
-                ...(pulseShapeGlow && {
-                  boxShadow: [
-                    '0 0 0 rgba(0, 255, 136, 0.3)',
-                    '0 0 20px rgba(0, 255, 136, 0.6)',
-                    '0 0 0 rgba(0, 255, 136, 0.3)',
-                  ],
-                }),
-              }}
-              transition={{
-                opacity: { duration: 0.3, delay: (row + col) * 0.05 },
-                scale: pulseFullCardFamily
+        cells.push(
+          <motion.div
+            key={`${row}-${col}`}
+            className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}${linePatternDemoClass}${compositeClauseColorClass}`}
+            initial={{ opacity: 0 }}
+            animate={{
+              opacity: 1,
+              // Keep cells in-grid — never scale the square box (was crushing neighbors).
+              ...(pulseFullCardFamily && {
+                boxShadow: [
+                  '0 0 1px rgba(0, 255, 150, 0.35)',
+                  '0 0 26px rgba(0, 255, 230, 1)',
+                  '0 0 48px rgba(220, 255, 250, 0.92)',
+                  '0 0 26px rgba(0, 255, 230, 1)',
+                  '0 0 1px rgba(0, 255, 150, 0.35)',
+                ],
+              }),
+              ...(pulseShapeGlow && {
+                boxShadow: [
+                  '0 0 0 rgba(0, 255, 136, 0.3)',
+                  '0 0 20px rgba(0, 255, 136, 0.6)',
+                  '0 0 0 rgba(0, 255, 136, 0.3)',
+                ],
+              }),
+            }}
+            transition={{
+              opacity: { duration: 0.3, delay: (row + col) * 0.05 },
+              boxShadow: pulseFullCardFamily
+                ? {
+                    duration: FULL_CARD_PULSE_DURATION_SEC,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                    delay: fullCardPulseDelay,
+                  }
+                : pulseShapeGlow
                   ? {
-                      duration: FULL_CARD_PULSE_DURATION_SEC,
+                      duration: 2,
                       repeat: Infinity,
                       ease: 'easeInOut',
-                      delay: fullCardPulseDelay,
                     }
                   : { duration: 0.3, delay: (row + col) * 0.05 },
-                boxShadow: pulseFullCardFamily
-                  ? {
-                      duration: FULL_CARD_PULSE_DURATION_SEC,
-                      repeat: Infinity,
-                      ease: 'easeInOut',
-                      delay: fullCardPulseDelay,
-                    }
-                  : pulseShapeGlow
-                    ? {
-                        duration: 2,
-                        repeat: Infinity,
-                        ease: 'easeInOut',
-                      }
-                    : { duration: 0.3, delay: (row + col) * 0.05 },
-              }}
-              whileHover={{ scale: 1.05 }}
-            >
-                             <div className="square-content">
-                 {square.isPlayed && (
-                   <motion.div 
-                     className="played-indicator"
-                     initial={{ scale: 0 }}
-                     animate={{ scale: 1 }}
-                     transition={{ duration: 0.3 }}
-                   >
-                     <Music className="played-icon" />
-                   </motion.div>
-                 )}
-               </div>
-            </motion.div>
-          );
-        }
+            }}
+          >
+            <div className="square-content">
+              {square.isPlayed && (
+                <motion.div
+                  className="played-indicator"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <Music className="played-icon" />
+                </motion.div>
+              )}
+            </div>
+          </motion.div>,
+        );
       }
-      grid.push(
-        <div key={row} className="bingo-row">
-          {rowSquares}
-        </div>
-      );
     }
-    
-    return grid;
+
+    return cells;
   };
 
   const renderPlaylistNamesHeaderRow = (
@@ -6323,7 +6319,13 @@ const PublicDisplay: React.FC = () => {
                 )}
               </div>
               <div className="bingo-card-content">
-                <div className="bingo-grid">
+                <div
+                  className="bingo-grid"
+                  style={{
+                    gridTemplateColumns: `repeat(${Math.max(1, Number(gameState.bingoCard?.size) || 5)}, minmax(0, 1fr))`,
+                    gridTemplateRows: `repeat(${Math.max(1, Number(gameState.bingoCard?.size) || 5)}, minmax(0, 1fr))`,
+                  }}
+                >
                   {renderBingoCard()}
                 </div>
               </div>

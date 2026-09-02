@@ -1502,6 +1502,10 @@ code {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Size queries so the pattern board can be the largest square that fits. */
+  container-type: size;
+  container-name: pattern-board-slot;
+  width: 100%;
 }
 
 .bingo-card-display.public-pattern-panel .public-pattern-panel__tempo-balls {
@@ -1755,39 +1759,58 @@ code {
 /* Public display: enforce fixed 5x5 grid */
 .bingo-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  grid-template-rows: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-rows: repeat(5, minmax(0, 1fr));
   gap: 0;
-  /* Size the grid to fit its container while maintaining square aspect ratio */
-  /* Use the smaller dimension to ensure it fits */
-  width: min(100%, 100%);
-  height: min(100%, 100%);
+  box-sizing: border-box;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* Largest square that fits the pattern panel slot (equal cells ⇒ true 5×5 squares). */
+.bingo-card-display.public-pattern-panel .bingo-grid {
+  width: min(100cqw, 100cqh);
+  height: min(100cqw, 100cqh);
+  max-width: 100%;
+  max-height: 100%;
   aspect-ratio: 1 / 1;
   align-self: center;
   justify-self: center;
-  transform: translateY(-5%) scale(var(--bingo-scale));
-  transform-origin: center center;
-  /* Ensure the grid never overflows its container */
-  max-width: 100%;
-  max-height: 100%;
-  box-sizing: border-box;
-  /* Force the grid to respect container bounds */
-  overflow: hidden;
+  /* No scale transform — that left empty flanks and fought equal track sizing. */
+  transform: none;
+}
+
+@supports not (width: 1cqw) {
+  .bingo-card-display.public-pattern-panel .bingo-grid {
+    width: min(100%, 100%);
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+    aspect-ratio: 1 / 1;
+  }
 }
 
 .bingo-row { display: contents; }
 
 .bingo-square {
-  flex: 1;
-  aspect-ratio: 1;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 2px;
   position: relative;
-  transition: all 0.3s ease;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
   cursor: pointer;
   min-width: 0;
   min-height: 0;
+  width: 100%;
+  height: 100%;
+  /* Grid tracks own the square geometry — don't re-aspect each cell. */
+  aspect-ratio: auto;
+  box-sizing: border-box;
+}
+
+.bingo-square--empty {
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .bingo-square:hover { /* disabled hover glow on player */ }
@@ -1820,7 +1843,8 @@ code {
   background: linear-gradient(135deg, rgba(74, 222, 128, 0.6), rgba(34, 197, 94, 0.6));
   border-color: #22c55e;
   box-shadow: 0 0 20px rgba(74, 222, 128, 0.8);
-  transform: scale(1.05);
+  /* Stay in-cell — scale was overlapping neighbors and reading as crushed columns. */
+  transform: none;
 }
 
 /* Line-pattern demo when linesRequired > 1: multiple completing lines in distinct hues */
@@ -1855,14 +1879,14 @@ code {
 /* Combined pattern demo: dim non-focused clauses while cycling readable sub-shapes */
 .public-display .bingo-square.winning.composite-demo-dim {
   opacity: 0.52;
-  transform: scale(1.02);
+  transform: none;
   filter: saturate(0.75);
   box-shadow: 0 0 10px rgba(74, 222, 128, 0.35);
 }
 
 .public-display .bingo-square.winning.composite-demo-focus {
   opacity: 1;
-  transform: scale(1.07);
+  transform: none;
   filter: saturate(1.05);
   box-shadow:
     0 0 28px rgba(250, 250, 250, 0.85),
