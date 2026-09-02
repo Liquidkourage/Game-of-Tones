@@ -3500,7 +3500,8 @@ function normalizeTrackDurationMs(raw) {
 
 /**
  * Spotify rows in room.playlistSongs often omit `duration` after ID-only finalized reorder merges.
- * Use duration_ms when present, then duration, then the same fallback as YouTube snippet math.
+ * Use duration_ms when present, then duration. Returns null when unknown — callers must NOT
+ * invent a long fake length (that seeks past EOF → silent play + early-fail skip cascades).
  */
 function resolveSpotifyTrackDurationMsForRandomStart(song, contextLabel) {
   const fromMs = normalizeTrackDurationMs(song?.duration_ms);
@@ -3508,9 +3509,9 @@ function resolveSpotifyTrackDurationMsForRandomStart(song, contextLabel) {
   const fromSecOrMs = normalizeTrackDurationMs(song?.duration);
   if (fromSecOrMs != null) return fromSecOrMs;
   routineServerLog(
-    `⚠️ Random start (${contextLabel || 'spotify'}): missing/zero duration on "${song?.name || song?.id || '?'}" (raw=${song?.duration_ms ?? song?.duration}) — using ${YOUTUBE_FALLBACK_DURATION_MS}ms fallback for offset math`
+    `⚠️ Random start (${contextLabel || 'spotify'}): missing/zero duration on "${song?.name || song?.id || '?'}" (raw=${song?.duration_ms ?? song?.duration}) — using intro-only offset (no 10min fallback)`,
   );
-  return YOUTUBE_FALLBACK_DURATION_MS;
+  return null;
 }
 
 /** Randomized start offset (ms) for Spotify transport — mirrors early/full-track logic with resilient duration. */
@@ -3519,6 +3520,17 @@ function computeSpotifySnippetRandomStartMs(room, song, contextLabel) {
   const snippetMs = (room.snippetLength || 30) * 1000;
   const bufferMs = 1500;
   const durationMs = resolveSpotifyTrackDurationMsForRandomStart(song, contextLabel);
+
+  // Unknown duration: only allow a short intro window so we never seek past the real track end.
+  if (durationMs == null) {
+    const maxUnknownMs = 45000;
+    const safeWindow = Math.max(0, maxUnknownMs - snippetMs - bufferMs);
+    if (room.randomStarts === 'early' || room.randomStarts === 'random') {
+      if (safeWindow > 3000) return Math.floor(Math.random() * safeWindow);
+    }
+    return 0;
+  }
+
   let startMs = 0;
   if (room.randomStarts === 'early') {
     const maxStartMs = 90000;
@@ -3542,8 +3554,10 @@ function computeBumpSnippetStartMs(room, song, { avoidMs = null, contextLabel = 
   // Always normalize via the shared resolver — seconds-vs-ms mixups collapse the window to 0
   // and make bump replay the same intro (startMs = 0).
   const durationMs = resolveSpotifyTrackDurationMsForRandomStart(song, contextLabel);
+  // Unknown duration: stay in the first ~45s so bump never seeks past EOF.
+  const effectiveDurationMs = durationMs == null ? 45000 : durationMs;
 
-  const safeWindow = Math.max(0, durationMs - snippetMs - bufferMs - 30000);
+  const safeWindow = Math.max(0, effectiveDurationMs - snippetMs - bufferMs - 30000);
   const avoid = Number.isFinite(Number(avoidMs)) ? Math.max(0, Number(avoidMs)) : null;
   const minDeltaMs = 12000;
 
