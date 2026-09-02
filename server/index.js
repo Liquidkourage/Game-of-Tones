@@ -12442,7 +12442,8 @@ async function playNextSong(roomId, deviceId) {
 
     routineServerLog(`✅ Call recorded and playback started for: ${nextSong.name} by ${nextSong.artist} on device ${targetDeviceId}`);
 
-    // Verify playback actually started and is the correct track; attempt resume/correct if needed
+    // Verify playback actually started and is the correct track.
+    // Prefer hard startPlayback over resume — resume often 403s with Restriction violated and does nothing.
     try {
       let playing = false;
       let correctTrack = false;
@@ -12453,11 +12454,22 @@ async function playNextSong(roomId, deviceId) {
         const currentId = state?.item?.id;
         correctTrack = currentId === nextSong.id;
         if (!QUIET_MODE) logger.log(`🔎 Playback verify (next) attempt ${i + 1}: is_playing=${playing} correct_track=${correctTrack}`, 'next-verify', 5);
-        if (playing) break;
-        try { await spotifyFor(roomId).withRetries('resumePlayback(verify-next)', () => spotifyFor(roomId).resumePlayback(targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch {}
+        if (playing && correctTrack) break;
+        try {
+          await spotifyFor(roomId).withRetries(
+            'startPlayback(verify-next)',
+            () =>
+              spotifyFor(roomId).startPlayback(
+                targetDeviceId,
+                [`spotify:track:${nextSong.id}`],
+                startMs,
+              ),
+            { attempts: 2, backoffMs: 200 },
+          );
+        } catch {}
       }
       if (!playing || !correctTrack) {
-        // Attempt to correct to the intended track once
+        // Attempt to correct to the intended track once more
         try { await spotifyFor(roomId).withRetries('startPlayback(correct-next)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs), { attempts: 2, backoffMs: 300 }); } catch {}
         try {
           const after = await spotifyFor(roomId).getCurrentPlaybackState();
