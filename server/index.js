@@ -3237,6 +3237,20 @@ function sanitizeRoundPlaylistNames(raw) {
   );
 }
 
+/** Once 5×15 columns exist, their names are authoritative for projector/headers (not mix UI order). */
+function authoritativeRoundPlaylistNames(room) {
+  const five = sanitizeRoundPlaylistNames(room?.fiveByFifteenPlaylistNames);
+  if (five.filter((name) => String(name || '').trim()).length === 5) return five;
+  return sanitizeRoundPlaylistNames(room?.currentRoundPlaylistNames);
+}
+
+function syncCurrentRoundPlaylistNamesFromFiveByFifteen(room) {
+  if (!room) return;
+  const five = sanitizeRoundPlaylistNames(room.fiveByFifteenPlaylistNames);
+  if (five.filter((name) => String(name || '').trim()).length !== 5) return;
+  room.currentRoundPlaylistNames = five;
+}
+
 function sanitizeHttpUrl(raw, maxLen = 2000) {
   if (typeof raw !== 'string') return '';
   const trimmed = raw.trim().slice(0, maxLen);
@@ -3297,7 +3311,7 @@ function publicDisplayRoomStateExtras(room) {
   const head = pending ? room.bingoVerificationQueue[0]?.verificationData : null;
   const prize = sanitizeRoundPrizeText(room.currentRoundPrize || '');
   const roundName = sanitizeRoundNameText(room.currentRoundName || '');
-  const playlistNames = sanitizeRoundPlaylistNames(room.currentRoundPlaylistNames);
+  const playlistNames = authoritativeRoundPlaylistNames(room);
   return {
     publicDisplayRevealState: publicDisplayRevealStateForClient(room),
     bingoVerificationPending: pending,
@@ -6556,11 +6570,19 @@ io.on('connection', (socket) => {
       if (!isCurrentHost) return;
       room.currentRoundName = sanitizeRoundNameText(data.roundName);
       room.currentRoundPrize = sanitizeRoundPrizeText(data.prize);
-      room.currentRoundPlaylistNames = sanitizeRoundPlaylistNames(data.playlistNames);
+      // Do not let mix/display-meta overwrite 5×15 column headers once columns are locked.
+      const fiveLocked = sanitizeRoundPlaylistNames(room.fiveByFifteenPlaylistNames).filter((n) =>
+        String(n || '').trim(),
+      ).length === 5;
+      if (!fiveLocked) {
+        room.currentRoundPlaylistNames = sanitizeRoundPlaylistNames(data.playlistNames);
+      } else {
+        syncCurrentRoundPlaylistNamesFromFiveByFifteen(room);
+      }
       const payload = {
         currentRoundName: room.currentRoundName || null,
         currentRoundPrize: room.currentRoundPrize || null,
-        currentRoundPlaylistNames: room.currentRoundPlaylistNames,
+        currentRoundPlaylistNames: authoritativeRoundPlaylistNames(room),
       };
       io.to(roomId).emit('round-display-meta', payload);
       routineServerLog(
@@ -8165,9 +8187,19 @@ io.on('connection', (socket) => {
         room.randomStarts = randomStarts || 'none';
         room.currentRoundName = sanitizeRoundNameText(incomingRoundName) || `Round ${(room.roundWinners?.length || 0) + 1}`;
         room.currentRoundPrize = sanitizeRoundPrizeText(incomingRoundPrize);
-        room.currentRoundPlaylistNames = sanitizeRoundPlaylistNames(
-          Array.isArray(playlists) ? playlists.map((playlist) => playlist?.name) : [],
-        );
+        {
+          const fromPlaylists = sanitizeRoundPlaylistNames(
+            Array.isArray(playlists) ? playlists.map((playlist) => playlist?.name) : [],
+          );
+          const fiveLocked = sanitizeRoundPlaylistNames(room.fiveByFifteenPlaylistNames).filter((n) =>
+            String(n || '').trim(),
+          ).length === 5;
+          // Prefer finalize column names when Start Game still has a live 5×15 pool
+          // (mixPlaylistSelection order can scramble personal vs catalog).
+          room.currentRoundPlaylistNames = fiveLocked
+            ? sanitizeRoundPlaylistNames(room.fiveByFifteenPlaylistNames)
+            : fromPlaylists;
+        }
         room.showNightBoard = false;
         clearNightBoardAutoHideTimer(room);
         // Never show sponsor during a live round.
@@ -8508,7 +8540,7 @@ io.on('connection', (socket) => {
           ...patternExtrasForClient(room),
           currentRoundName: room.currentRoundName || null,
           currentRoundPrize: room.currentRoundPrize || null,
-          currentRoundPlaylistNames: room.currentRoundPlaylistNames,
+          currentRoundPlaylistNames: authoritativeRoundPlaylistNames(room),
           showNightBoard: false,
           roundWinners: room.roundWinners || [],
           sponsorScreen: sponsorScreenForClient(room),
@@ -10378,6 +10410,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null, options =
         if (roomRef) {
           roomRef.fiveByFifteenColumnsIds = fiveCols.map(col => col.map(s => s.id));
           roomRef.fiveByFifteenPlaylistNames = colNames;
+          syncCurrentRoundPlaylistNamesFromFiveByFifteen(roomRef);
           roomRef.fiveByFifteenMeta = metaMap;
           // Finalize a single global shuffled order of the 75 picks
           const globalOrder = properShuffle(fiveCols.flat().map(s => s.id));
@@ -11814,6 +11847,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           room.fiveByFifteenColumns = fiveCols;
           room.fiveByFifteenColumnsIds = built.map(col => col.map(s => s.id));
           room.fiveByFifteenPlaylistNames = colNames;
+          syncCurrentRoundPlaylistNamesFromFiveByFifteen(room);
           room.fiveByFifteenMeta = metaMap;
           // Emit to host/display so Public Display can render (players get names only)
           io.to(roomId).emit('fiveby15-pool', { names: colNames });

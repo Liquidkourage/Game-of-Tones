@@ -1800,6 +1800,15 @@ const PublicDisplay: React.FC = () => {
       clearCallListSessionState();
     };
 
+    /** Once fiveby15-pool columns are live, headers follow that list only — not display-meta / mix order. */
+    const applyPlaylistNamesFromDisplayMeta = (names: unknown) => {
+      if (!Array.isArray(names)) return;
+      if (fiveBy15ColumnsRef.current && fiveBy15ColumnsRef.current.length === 5) return;
+      const sliced = names.slice(0, 5).map((name) => String(name ?? ''));
+      if (!sliced.some((name) => name.trim())) return;
+      setPlaylistNames(sliced);
+    };
+
     // Connection event handlers
 
     newSocket.on('connect', () => {
@@ -1997,12 +2006,7 @@ const PublicDisplay: React.FC = () => {
           if (typeof payload.currentRoundPrize === 'string' && payload.currentRoundPrize.trim()) {
             setCurrentRoundPrize(payload.currentRoundPrize.trim());
           }
-          if (
-            Array.isArray(payload.currentRoundPlaylistNames) &&
-            payload.currentRoundPlaylistNames.some((name: unknown) => String(name || '').trim())
-          ) {
-            setPlaylistNames(payload.currentRoundPlaylistNames.slice(0, 5));
-          }
+          applyPlaylistNamesFromDisplayMeta(payload.currentRoundPlaylistNames);
           if (payload.showNightBoard !== undefined) {
             setShowNightBoard(!!payload.showNightBoard);
           }
@@ -2309,7 +2313,8 @@ const PublicDisplay: React.FC = () => {
           });
         }
 
-        if (Array.isArray(data?.names)) setPlaylistNames(data.names);
+        // Keep fiveby15-pool headers when this oneby75 payload is only a 5-name keep-alive.
+        if (Array.isArray(data?.names) && !keepFiveBy15) setPlaylistNames(data.names);
       }
     });
 
@@ -2727,9 +2732,8 @@ const PublicDisplay: React.FC = () => {
         }
       snippetCountdownSongIdRef.current = null;
       clearPoolLayoutState();
-      if (Array.isArray(data?.currentRoundPlaylistNames)) {
-        setPlaylistNames(data.currentRoundPlaylistNames.slice(0, 5));
-      }
+      // Pool cleared above — safe to seed headers from game-started until fiveby15-pool arrives.
+      applyPlaylistNamesFromDisplayMeta(data?.currentRoundPlaylistNames);
       ensureGrid();
       // Always request sync to ensure we have columns and latest state
       // Use longer delay to ensure server has finished generating cards and emitting columns
@@ -2946,9 +2950,7 @@ const PublicDisplay: React.FC = () => {
             : null,
         );
       }
-      if (Array.isArray(data?.currentRoundPlaylistNames)) {
-        setPlaylistNames(data.currentRoundPlaylistNames.slice(0, 5));
-      }
+      applyPlaylistNamesFromDisplayMeta(data?.currentRoundPlaylistNames);
     });
 
     newSocket.on('mix-finalized', (payload: any) => {
