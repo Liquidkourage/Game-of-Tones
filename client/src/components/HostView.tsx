@@ -340,10 +340,15 @@ function songsFromServerPlaybackPayload(order: unknown): Song[] {
     .map((o: any) => {
       const id = o?.id;
       if (id == null || String(id).trim() === '') return null;
+      const durationRaw = o?.duration_ms ?? o?.duration;
+      const durationNum = Number(durationRaw);
+      const duration =
+        Number.isFinite(durationNum) && durationNum > 0 ? durationNum : undefined;
       return {
         id: String(id),
         name: typeof o?.name === 'string' ? o.name : '',
         artist: typeof o?.artist === 'string' ? o.artist : '',
+        ...(duration != null ? { duration } : {}),
         explicit: o?.explicit === true,
         youtubeMusic: o?.youtubeMusic === true,
         appleMusic: o?.appleMusic === true,
@@ -387,6 +392,10 @@ function normalizeSyncedSongForHost(song: any): Song | null {
     id,
     name: displayTitleFromSyncedSong(song),
     artist: displayArtistFromSyncedSong(song),
+    ...(Number.isFinite(Number(song.duration_ms ?? song.duration)) &&
+    Number(song.duration_ms ?? song.duration) > 0
+      ? { duration: Number(song.duration_ms ?? song.duration) }
+      : {}),
     explicit: song.explicit === true,
     youtubeMusic: song.youtubeMusic === true,
     sourcePlaylistId: song.sourcePlaylistId != null ? String(song.sourcePlaylistId) : undefined,

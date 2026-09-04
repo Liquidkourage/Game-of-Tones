@@ -3512,16 +3512,26 @@ function normalizeTrackDurationMs(raw) {
   return Math.round(n);
 }
 
+/** Prefer duration_ms, then duration (ms or seconds). Used for Random Starts + pool meta. */
+function pickSongDurationMs(song) {
+  if (!song || typeof song !== 'object') return null;
+  return normalizeTrackDurationMs(song.duration_ms) ?? normalizeTrackDurationMs(song.duration);
+}
+
+/** Spread onto song/meta payloads so ID rematerialize keeps Random Starts honest. */
+function durationFieldsFromSong(song) {
+  const ms = pickSongDurationMs(song);
+  return ms != null ? { duration: ms } : {};
+}
+
 /**
  * Spotify rows in room.playlistSongs often omit `duration` after ID-only finalized reorder merges.
  * Use duration_ms when present, then duration. Returns null when unknown — callers must NOT
  * invent a long fake length (that seeks past EOF → silent play + early-fail skip cascades).
  */
 function resolveSpotifyTrackDurationMsForRandomStart(song, contextLabel) {
-  const fromMs = normalizeTrackDurationMs(song?.duration_ms);
-  if (fromMs != null) return fromMs;
-  const fromSecOrMs = normalizeTrackDurationMs(song?.duration);
-  if (fromSecOrMs != null) return fromSecOrMs;
+  const resolved = pickSongDurationMs(song);
+  if (resolved != null) return resolved;
   routineServerLog(
     `⚠️ Random start (${contextLabel || 'spotify'}): missing/zero duration on "${song?.name || song?.id || '?'}" (raw=${song?.duration_ms ?? song?.duration}) — using intro-only offset (no 10min fallback)`,
   );
@@ -4516,6 +4526,18 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
         const playing = !!state?.is_playing;
         const currentId = state?.item?.id;
         const correctTrack = !currentId || currentId === nextSong.id;
+        // Learn real length from Connect for bump / later seeks if pool meta lacked it.
+        const liveDur = normalizeTrackDurationMs(state?.item?.duration_ms);
+        if (liveDur != null && pickSongDurationMs(nextSong) == null) {
+          nextSong.duration = liveDur;
+          if (room.playlistSongs?.[room.currentSongIndex]?.id === nextSong.id) {
+            room.playlistSongs[room.currentSongIndex].duration = liveDur;
+          }
+          if (room.fiveByFifteenMeta && typeof room.fiveByFifteenMeta === 'object' && nextSong.id) {
+            const prev = room.fiveByFifteenMeta[nextSong.id] || {};
+            room.fiveByFifteenMeta[nextSong.id] = { ...prev, duration: liveDur };
+          }
+        }
         if (playing && correctTrack) {
           audioConfirmed = true;
           break;
@@ -8521,6 +8543,7 @@ io.on('connection', (socket) => {
           explicit: s.explicit === true,
           youtubeMusic: s.youtubeMusic === true,
             appleMusic: s.appleMusic === true,
+          ...durationFieldsFromSong(s),
           sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
           sourcePlaylistName:
             typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
@@ -9892,11 +9915,25 @@ function normalizeShowDeckForRoom(room, showDeck, opts = {}) {
 /**
  * Bingo pool #1…N for host + 1×75 display; playback runs this list in order (not re-shuffled per song).
  */
+function enrichSongDurationFromRoomMeta(room, song) {
+  if (!song || typeof song !== 'object' || !song.id) return song;
+  if (pickSongDurationMs(song) != null) return song;
+  const meta =
+    room?.fiveByFifteenMeta && typeof room.fiveByFifteenMeta === 'object'
+      ? room.fiveByFifteenMeta[song.id]
+      : null;
+  const ms = pickSongDurationMs(meta);
+  if (ms == null) return song;
+  return { ...song, duration: ms };
+}
+
 function applyShowPoolOrderToRoom(room, roomId, showDeck) {
   if (!room || !Array.isArray(showDeck) || showDeck.length === 0) return;
   // The Start Game deck is the round's source of truth. Never reorder it to a stale
   // finalize/card-layout cache; card generation uses the same track set.
-  const normalized = normalizeShowDeckForRoom(room, showDeck);
+  const normalized = normalizeShowDeckForRoom(room, showDeck).map((s) =>
+    enrichSongDurationFromRoomMeta(room, s),
+  );
   if (normalized.length === 0) return;
   room.finalizedSongOrder = normalized.map((s) => ({ ...s }));
   room.finalizedSongs = normalized.map((s) => ({ ...s }));
@@ -9944,34 +9981,32 @@ function syncRoomPlaybackOrderAfterStartGame(room, roomId, playbackOrderSongs) {
  * Rebuild host/public `finalized-order` payload from room caches (5×15 meta + id order, 1×75 pool, or full objects).
  * Used when replaying to hosts who missed the original emit (refresh, race, skip-refinalize client path).
  */
+function finalizedOrderRowPayload(s, idOverride) {
+  const id = idOverride != null ? idOverride : s?.id;
+  if (id == null || String(id).trim() === '') return null;
+  return {
+    id,
+    name: s?.name || '',
+    artist: s?.artist || '',
+    explicit: s?.explicit === true,
+    youtubeMusic: s?.youtubeMusic === true,
+    appleMusic: s?.appleMusic === true,
+    sourcePlaylistId: s?.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
+    sourcePlaylistName: typeof s?.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
+    ...durationFieldsFromSong(s),
+  };
+}
+
 function buildFinalizedOrderPayloadFromRoom(room) {
   if (!room || !room.mixFinalized) return [];
 
   const fos = room.finalizedSongOrder;
   if (Array.isArray(fos) && fos.length > 0 && typeof fos[0] === 'object') {
-    return fos.map((s) => ({
-      id: s.id,
-      name: s.name || '',
-      artist: s.artist || '',
-      explicit: s.explicit === true,
-      youtubeMusic: s.youtubeMusic === true,
-            appleMusic: s.appleMusic === true,
-      sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
-      sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
-    }));
+    return fos.map((s) => finalizedOrderRowPayload(s)).filter(Boolean);
   }
 
   if (Array.isArray(room.playlistSongs) && room.playlistSongs.length > 0 && room.gameState === 'playing') {
-    return room.playlistSongs.map((s) => ({
-      id: s.id,
-      name: s.name || '',
-      artist: s.artist || '',
-      explicit: s.explicit === true,
-      youtubeMusic: s.youtubeMusic === true,
-            appleMusic: s.appleMusic === true,
-      sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
-      sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
-    }));
+    return room.playlistSongs.map((s) => finalizedOrderRowPayload(s)).filter(Boolean);
   }
   const meta5 = room.fiveByFifteenMeta;
 
@@ -9986,16 +10021,7 @@ function buildFinalizedOrderPayloadFromRoom(room) {
       .map((id) => {
         const m = meta5[id];
         if (!m) return null;
-        return {
-          id,
-          name: m.name || '',
-          artist: m.artist || '',
-          explicit: m.explicit === true,
-          youtubeMusic: m.youtubeMusic === true,
-          appleMusic: m.appleMusic === true,
-          sourcePlaylistId: m.sourcePlaylistId,
-          sourcePlaylistName: m.sourcePlaylistName,
-        };
+        return finalizedOrderRowPayload(m, id);
       })
       .filter(Boolean);
     if (order.length > 0) return order;
@@ -10031,38 +10057,28 @@ function buildFinalizedOrderPayloadFromRoom(room) {
 
     return idOrder
       .map((id) => {
-        const s = idToSong.get(id);
-        return {
+        const s = idToSong.get(id) || {};
+        const row = finalizedOrderRowPayload(
+          {
+            ...s,
+            sourcePlaylistId:
+              s?.sourcePlaylistId != null && String(s.sourcePlaylistId).trim() !== ''
+                ? String(s.sourcePlaylistId)
+                : solePlaylistId || undefined,
+            sourcePlaylistName:
+              typeof s?.sourcePlaylistName === 'string' && s.sourcePlaylistName.trim() !== ''
+                ? s.sourcePlaylistName
+                : solePlaylistName || undefined,
+          },
           id,
-          name: s?.name || '',
-          artist: s?.artist || '',
-          explicit: s?.explicit === true,
-          youtubeMusic: s?.youtubeMusic === true,
-          appleMusic: s?.appleMusic === true,
-          sourcePlaylistId:
-            s?.sourcePlaylistId != null && String(s.sourcePlaylistId).trim() !== ''
-              ? String(s.sourcePlaylistId)
-              : solePlaylistId || undefined,
-          sourcePlaylistName:
-            typeof s?.sourcePlaylistName === 'string' && s.sourcePlaylistName.trim() !== ''
-              ? s.sourcePlaylistName
-              : solePlaylistName || undefined,
-        };
+        );
+        return row;
       })
       .filter(Boolean);
   }
 
   if (Array.isArray(fos) && fos.length > 0 && typeof fos[0] === 'object') {
-    return fos.map((s) => ({
-      id: s.id,
-      name: s.name || '',
-      artist: s.artist || '',
-      explicit: s.explicit === true,
-      youtubeMusic: s.youtubeMusic === true,
-            appleMusic: s.appleMusic === true,
-      sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
-      sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
-    }));
+    return fos.map((s) => finalizedOrderRowPayload(s)).filter(Boolean);
   }
 
   if (
@@ -10076,26 +10092,9 @@ function buildFinalizedOrderPayloadFromRoom(room) {
     );
     return fos.map((id) => {
       const s = idToSong.get(id);
-      if (!s) {
-        return {
-          id,
-          name: '',
-          artist: '',
-          explicit: false,
-          youtubeMusic: false,
-        };
-      }
-      return {
-        id,
-        name: s.name || '',
-        artist: s.artist || '',
-        explicit: s.explicit === true,
-        youtubeMusic: s.youtubeMusic === true,
-            appleMusic: s.appleMusic === true,
-        sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
-        sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
-      };
-    });
+      if (!s) return finalizedOrderRowPayload({}, id);
+      return finalizedOrderRowPayload(s, id);
+    }).filter(Boolean);
   }
 
   return [];
@@ -10394,6 +10393,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null, options =
                 explicit: s.explicit === true,
                 youtubeMusic: s.youtubeMusic === true,
             appleMusic: s.appleMusic === true,
+                ...durationFieldsFromSong(s),
                 sourcePlaylistId:
                   s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : String(plRow?.id ?? ''),
                 sourcePlaylistName:
@@ -10812,6 +10812,7 @@ function pickChosen25ForPrintableFiveByFifteen(room, useFreeSpace) {
             explicit: meta[id].explicit === true,
             youtubeMusic: meta[id].youtubeMusic === true,
               appleMusic: meta[id].appleMusic === true,
+            ...durationFieldsFromSong(meta[id]),
           };
         }
         return s;
@@ -11075,6 +11076,7 @@ function buildCanonicalSongMapFromRoom(room) {
       explicit: m.explicit === true,
       youtubeMusic: m.youtubeMusic === true,
           appleMusic: m.appleMusic === true,
+      ...durationFieldsFromSong(m),
     };
   }
   function resolveBareId(id) {
@@ -11140,6 +11142,7 @@ function songsForPlaylistFromRoomCache(room, playlistId) {
               explicit: meta[id].explicit === true,
               youtubeMusic: meta[id].youtubeMusic === true,
               appleMusic: meta[id].appleMusic === true,
+              ...durationFieldsFromSong(meta[id]),
               sourcePlaylistId: String(playlistId),
             };
           }
@@ -11179,7 +11182,7 @@ function normalizeSongSnapshotForPrint(raw) {
         typeof item.originPlaylistName === 'string' && item.originPlaylistName.trim() !== ''
           ? item.originPlaylistName.trim()
           : undefined,
-      duration: typeof item.duration === 'number' ? item.duration : undefined,
+      ...durationFieldsFromSong(item),
       youtubeRawTitle: typeof item.youtubeRawTitle === 'string' ? item.youtubeRawTitle : undefined,
       catalogDisplayVerified: item.catalogDisplayVerified === true,
     });
@@ -11839,6 +11842,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
                   explicit: s.explicit === true,
                   youtubeMusic: s.youtubeMusic === true,
             appleMusic: s.appleMusic === true,
+                  ...durationFieldsFromSong(s),
                 };
               }
             });
