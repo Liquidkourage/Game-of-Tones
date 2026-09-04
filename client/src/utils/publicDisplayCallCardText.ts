@@ -29,8 +29,11 @@ export const CALL_CARD_ARTIST_LETTER_SPACING_EM = 0.02;
 export const CALL_CARD_TITLE_ARTIST_GAP_PX = 4;
 /** Tiny canvas↔DOM slack only — gap between title/artist is a full title line. */
 export const CALL_CARD_STACK_PAD_PX = 4;
-/** Canvas↔DOM slack — keep artist from being clipped when paint runs slightly taller. */
-export const CALL_CARD_FIT_HEIGHT_SAFETY_PX = 12;
+/**
+ * Canvas↔DOM slack — keep title/artist from being clipped mid-glyph when paint runs
+ * slightly taller than the measure (common on 1×75 short rows + host font zoom).
+ */
+export const CALL_CARD_FIT_HEIGHT_SAFETY_PX = 18;
 
 /** Box is the only lid — high enough that short titles can fill a tall card. */
 const FIT_MAX_SCALE = 12;
