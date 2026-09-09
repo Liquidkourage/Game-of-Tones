@@ -41,8 +41,26 @@ async function upsertUserByGoogle(db, { googleSub, email, displayName }) {
 async function getUserById(db, id) {
   if (!db) return null;
   const r = await db.query(
-    'SELECT id, google_sub, email, display_name, created_at FROM users WHERE id = $1',
+    'SELECT id, google_sub, email, display_name, created_at, organization_id FROM users WHERE id = $1',
     [id]
+  );
+  return r.rows[0] || null;
+}
+
+/** Lookup by normalized email (allowlist candidates). */
+async function getUserByEmail(db, email) {
+  if (!db) return null;
+  await ensureUsersTable(db);
+  const norm = normalizeHostEmail(email);
+  if (!norm) return null;
+  const candidates = emailAllowlistCandidates(norm);
+  const r = await db.query(
+    `SELECT id, google_sub, email, display_name, created_at, organization_id
+     FROM users
+     WHERE LOWER(TRIM(email)) = ANY($1::text[])
+     ORDER BY id ASC
+     LIMIT 1`,
+    [candidates.length ? candidates : [norm]],
   );
   return r.rows[0] || null;
 }
@@ -181,6 +199,7 @@ module.exports = {
   ensureHostAllowlistTable,
   upsertUserByGoogle,
   getUserById,
+  getUserByEmail,
   getUserByGoogleSub,
   normalizeHostEmail,
   canonicalEmailForAllowlist,

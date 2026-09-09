@@ -123,6 +123,9 @@ async function ensureOrganizationsTable(db) {
   await db.query(`
     ALTER TABLE organizations ADD COLUMN IF NOT EXISTS monthly_credits_granted_period TEXT
   `);
+  await db.query(`
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS pending_owner_email TEXT
+  `);
   try {
     await db.query(`ALTER TABLE organizations ALTER COLUMN spotify_client_id DROP NOT NULL`);
   } catch {
@@ -215,6 +218,67 @@ async function createOrganization(db, { name, spotifyClientId, spotifyClientSecr
     [n, cid, enc]
   );
   return r.rows[0];
+}
+
+/**
+ * Admin provisioning: create an org with optional tenant Spotify credentials
+ * and optional pending owner email (applied on first Google login).
+ */
+async function createProvisionedOrganization(db, { name, spotifyClientId, spotifyClientSecret, pendingOwnerEmail }) {
+  if (!db) throw new Error('DATABASE_URL required');
+  await ensureOrganizationsTable(db);
+  const usersStore = require('./users');
+  const n = String(name || '').trim();
+  if (!n || n.length < 2) throw new Error('Organization name is required (at least 2 characters)');
+  const cid = String(spotifyClientId || '').trim();
+  const csec = String(spotifyClientSecret || '').trim();
+  if ((cid && !csec) || (!cid && csec)) {
+    throw new Error('Provide both Spotify client id and secret, or leave both blank for the platform Spotify app');
+  }
+  let enc = null;
+  let clientId = null;
+  if (cid && csec) {
+    clientId = cid;
+    enc = orgPlaintextSecretsMode() ? csec : credentialCrypto.encryptSecret(csec);
+  }
+  const pending = usersStore.normalizeHostEmail(pendingOwnerEmail || '');
+  const r = await db.query(
+    `INSERT INTO organizations (name, spotify_client_id, spotify_client_secret_encrypted, pending_owner_email)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, name, spotify_client_id, created_at, owner_user_id, pending_owner_email`,
+    [n, clientId, enc, pending || null],
+  );
+  return r.rows[0];
+}
+
+async function setOrganizationOwner(db, organizationId, userId) {
+  if (!db) throw new Error('DATABASE_URL required');
+  await ensureOrganizationsTable(db);
+  const orgId = Number(organizationId);
+  const uid = Number(userId);
+  if (!Number.isFinite(orgId) || !Number.isFinite(uid)) throw new Error('Invalid organization or user');
+  const check = await db.query('SELECT id FROM organizations WHERE id = $1', [orgId]);
+  if (check.rows.length === 0) throw new Error('organization not found');
+  await db.query(
+    `UPDATE organizations
+     SET owner_user_id = $2, pending_owner_email = NULL
+     WHERE id = $1`,
+    [orgId, uid],
+  );
+  await db.query('UPDATE users SET organization_id = $2 WHERE id = $1', [uid, orgId]);
+  return { ok: true, organizationId: orgId, ownerUserId: uid };
+}
+
+async function setPendingOwnerEmail(db, organizationId, email) {
+  if (!db) throw new Error('DATABASE_URL required');
+  await ensureOrganizationsTable(db);
+  const usersStore = require('./users');
+  const orgId = Number(organizationId);
+  const norm = usersStore.normalizeHostEmail(email || '');
+  if (!Number.isFinite(orgId)) throw new Error('organizationId is required');
+  if (!norm || !norm.includes('@')) throw new Error('Valid pending owner email is required');
+  await db.query(`UPDATE organizations SET pending_owner_email = $2 WHERE id = $1`, [orgId, norm]);
+  return { ok: true, organizationId: orgId, pendingOwnerEmail: norm };
 }
 
 async function setUserOrganizationId(db, userId, organizationId) {
@@ -611,7 +675,10 @@ async function applyPendingInvitesForUser(db, userId, email) {
 
   const u = await db.query('SELECT organization_id FROM users WHERE id = $1', [userId]);
   if (u.rows.length === 0) return null;
-  if (u.rows[0].organization_id != null) return u.rows[0].organization_id;
+  if (u.rows[0].organization_id != null) {
+    await maybePromotePendingOwner(db, userId, norm, u.rows[0].organization_id);
+    return u.rows[0].organization_id;
+  }
 
   const candidates = usersStore.emailAllowlistCandidates(norm);
   const inv = await db.query(
@@ -621,11 +688,50 @@ async function applyPendingInvitesForUser(db, userId, email) {
      LIMIT 1`,
     [candidates.length ? candidates : [norm]]
   );
-  if (inv.rows.length === 0) return null;
+  if (inv.rows.length === 0) {
+    // Admin setup may have set pending_owner_email without a separate invite row.
+    const pendingOwner = await db.query(
+      `SELECT id FROM organizations
+       WHERE pending_owner_email = ANY($1::text[])
+         AND owner_user_id IS NULL
+       ORDER BY id DESC
+       LIMIT 1`,
+      [candidates.length ? candidates : [norm]],
+    );
+    if (pendingOwner.rows.length === 0) return null;
+    const orgId = pendingOwner.rows[0].id;
+    await db.query('UPDATE users SET organization_id = $2 WHERE id = $1', [userId, orgId]);
+    await usersStore.addHostAllowlistEmail(db, norm);
+    await maybePromotePendingOwner(db, userId, norm, orgId);
+    return orgId;
+  }
   const orgId = inv.rows[0].organization_id;
   await db.query('UPDATE users SET organization_id = $2 WHERE id = $1', [userId, orgId]);
   await usersStore.addHostAllowlistEmail(db, norm);
+  await maybePromotePendingOwner(db, userId, norm, orgId);
   return orgId;
+}
+
+async function maybePromotePendingOwner(db, userId, normalizedEmail, organizationId) {
+  if (!db || userId == null || organizationId == null) return;
+  const usersStore = require('./users');
+  const candidates = usersStore.emailAllowlistCandidates(normalizedEmail);
+  const r = await db.query(
+    `SELECT owner_user_id, pending_owner_email FROM organizations WHERE id = $1`,
+    [organizationId],
+  );
+  if (r.rows.length === 0) return;
+  const row = r.rows[0];
+  if (row.owner_user_id != null) return;
+  const pending = usersStore.normalizeHostEmail(row.pending_owner_email || '');
+  if (!pending) return;
+  const pendingCandidates = new Set(usersStore.emailAllowlistCandidates(pending));
+  const match = (candidates.length ? candidates : [normalizedEmail]).some((c) => pendingCandidates.has(c));
+  if (!match) return;
+  await db.query(
+    `UPDATE organizations SET owner_user_id = $2, pending_owner_email = NULL WHERE id = $1 AND owner_user_id IS NULL`,
+    [organizationId, userId],
+  );
 }
 
 async function patchOrganizationVenueSettings(db, orgId, patch) {
@@ -690,6 +796,9 @@ module.exports = {
   primeTenantSpotifyCredentials,
   listOrganizations,
   createOrganization,
+  createProvisionedOrganization,
+  setOrganizationOwner,
+  setPendingOwnerEmail,
   createSelfServeOrganization,
   setUserOrganizationId,
   getOrganizationById,

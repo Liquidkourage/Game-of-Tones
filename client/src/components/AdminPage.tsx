@@ -109,6 +109,25 @@ const AdminPage: React.FC = () => {
   const [grantSavedAt, setGrantSavedAt] = useState<number | null>(null);
   const [grantCreditTotal, setGrantCreditTotal] = useState<number | null>(null);
 
+  const [setupEmail, setSetupEmail] = useState('');
+  const [setupOrgMode, setSetupOrgMode] = useState<'new' | 'existing'>('new');
+  const [setupOrgName, setSetupOrgName] = useState('');
+  const [setupOrgId, setSetupOrgId] = useState('');
+  const [setupCredits, setSetupCredits] = useState('1');
+  const [setupCoHosts, setSetupCoHosts] = useState('');
+  const [setupClientId, setSetupClientId] = useState('');
+  const [setupSecret, setSetupSecret] = useState('');
+  const [setupEventTitle, setSetupEventTitle] = useState('');
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [setupResult, setSetupResult] = useState<{
+    email: string;
+    organization: { id: number; name: string | null; created: boolean };
+    ownerStatus: string;
+    creditsGranted: number;
+    remainingHostSteps: string[];
+    userExisted: boolean;
+  } | null>(null);
+
   const refreshList = useCallback(async () => {
     setListError(null);
     try {
@@ -510,6 +529,80 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  const setupHost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = setupEmail.trim();
+    if (!email || !email.includes('@')) return;
+    if (setupOrgMode === 'new' && setupOrgName.trim().length < 2) return;
+    if (setupOrgMode === 'existing' && !setupOrgId.trim()) return;
+    setBusy(true);
+    setSetupError(null);
+    setSetupResult(null);
+    try {
+      const credits = Math.round(Number(setupCredits.trim()));
+      const coHostEmails = setupCoHosts
+        .split(/[\n,;]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const payload: Record<string, unknown> = {
+        email,
+        makeOwner: true,
+        credits: Number.isFinite(credits) && credits > 0 ? credits : 0,
+        coHostEmails,
+      };
+      if (setupOrgMode === 'new') {
+        payload.orgName = setupOrgName.trim();
+        if (setupClientId.trim() && setupSecret.trim()) {
+          payload.spotifyClientId = setupClientId.trim();
+          payload.spotifyClientSecret = setupSecret.trim();
+        }
+      } else {
+        payload.organizationId = parseInt(setupOrgId.trim(), 10);
+      }
+      if (setupEventTitle.trim()) {
+        payload.venueSettings = { eventTitle: setupEventTitle.trim() };
+      }
+      const res = await hostFetch(`${API_BASE || ''}/api/admin/setup-host`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        email?: string;
+        userExisted?: boolean;
+        organization?: { id: number; name: string | null; created: boolean };
+        ownerStatus?: string;
+        creditsGranted?: number;
+        remainingHostSteps?: string[];
+      };
+      if (!res.ok) {
+        setSetupError(j.message || `Setup failed (${res.status})`);
+        return;
+      }
+      setSetupResult({
+        email: j.email || email,
+        organization: j.organization || { id: 0, name: null, created: false },
+        ownerStatus: j.ownerStatus || 'unknown',
+        creditsGranted: typeof j.creditsGranted === 'number' ? j.creditsGranted : 0,
+        remainingHostSteps: Array.isArray(j.remainingHostSteps) ? j.remainingHostSteps : [],
+        userExisted: !!j.userExisted,
+      });
+      setSetupEmail('');
+      setSetupOrgName('');
+      setSetupOrgId('');
+      setSetupCoHosts('');
+      setSetupClientId('');
+      setSetupSecret('');
+      setSetupEventTitle('');
+      setSetupCredits('1');
+      void refreshList();
+      void refreshOrgs();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (me === null && !loadError) {
     return (
       <div className="admin-page">
@@ -632,6 +725,168 @@ const AdminPage: React.FC = () => {
             host.
           </p>
         )}
+
+        <section className="admin-page__table-wrap" style={{ marginBottom: '2rem' }}>
+          <h2 className="admin-page__h2">Set up host</h2>
+          <p className="admin-page__muted" style={{ marginBottom: '1rem' }}>
+            One shot: allowlist their email, create or attach an org as owner, grant credits, optional co-hosts / venue title.
+            They still need to Google-sign-in and connect Spotify themselves.
+          </p>
+          <form className="admin-page__form" onSubmit={(ev) => void setupHost(ev)}>
+            <label className="admin-page__label">
+              Host email
+              <input
+                className="admin-page__input"
+                type="email"
+                value={setupEmail}
+                onChange={(ev) => setSetupEmail(ev.target.value)}
+                placeholder="host@venue.com"
+                required
+                autoComplete="off"
+              />
+            </label>
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+              <label className="admin-page__label" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
+                <input
+                  type="radio"
+                  name="setup-org-mode"
+                  checked={setupOrgMode === 'new'}
+                  onChange={() => setSetupOrgMode('new')}
+                />
+                New organization
+              </label>
+              <label className="admin-page__label" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
+                <input
+                  type="radio"
+                  name="setup-org-mode"
+                  checked={setupOrgMode === 'existing'}
+                  onChange={() => setSetupOrgMode('existing')}
+                />
+                Attach to existing org
+              </label>
+            </div>
+            {setupOrgMode === 'new' ? (
+              <>
+                <label className="admin-page__label">
+                  Organization name
+                  <input
+                    className="admin-page__input"
+                    type="text"
+                    value={setupOrgName}
+                    onChange={(ev) => setSetupOrgName(ev.target.value)}
+                    placeholder="Venue / company name"
+                    required
+                    minLength={2}
+                  />
+                </label>
+                <label className="admin-page__label">
+                  Tenant Spotify client id (optional)
+                  <input
+                    className="admin-page__input"
+                    type="text"
+                    value={setupClientId}
+                    onChange={(ev) => setSetupClientId(ev.target.value)}
+                    placeholder="Leave blank to use platform Spotify app"
+                    autoComplete="off"
+                  />
+                </label>
+                <label className="admin-page__label">
+                  Tenant Spotify client secret (optional)
+                  <input
+                    className="admin-page__input"
+                    type="password"
+                    value={setupSecret}
+                    onChange={(ev) => setSetupSecret(ev.target.value)}
+                    placeholder="Required only if client id is set"
+                    autoComplete="new-password"
+                  />
+                </label>
+              </>
+            ) : (
+              <label className="admin-page__label">
+                Organization id
+                <select
+                  className="admin-page__input"
+                  value={setupOrgId}
+                  onChange={(ev) => setSetupOrgId(ev.target.value)}
+                  required
+                >
+                  <option value="">Select org…</option>
+                  {(orgs || []).map((o) => (
+                    <option key={o.id} value={String(o.id)}>
+                      #{o.id} — {o.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="admin-page__label">
+              Event credits to grant
+              <input
+                className="admin-page__input"
+                type="number"
+                min={0}
+                step={1}
+                value={setupCredits}
+                onChange={(ev) => setSetupCredits(ev.target.value)}
+              />
+            </label>
+            <label className="admin-page__label">
+              Co-host emails (optional, comma or newline)
+              <textarea
+                className="admin-page__input"
+                rows={2}
+                value={setupCoHosts}
+                onChange={(ev) => setSetupCoHosts(ev.target.value)}
+                placeholder="dj@venue.com, manager@venue.com"
+              />
+            </label>
+            <label className="admin-page__label">
+              Venue event title (optional)
+              <input
+                className="admin-page__input"
+                type="text"
+                value={setupEventTitle}
+                onChange={(ev) => setSetupEventTitle(ev.target.value)}
+                placeholder="Shown on branded surfaces"
+              />
+            </label>
+            {setupError && (
+              <p className="admin-page__error" style={{ marginBottom: '0.5rem' }}>
+                {setupError}
+              </p>
+            )}
+            {setupResult && (
+              <div className="admin-page__banner admin-page__banner--on" style={{ marginBottom: '1rem' }}>
+                <p style={{ margin: '0 0 0.5rem' }}>
+                  <strong>Ready:</strong> {setupResult.email} → org #{setupResult.organization.id}
+                  {setupResult.organization.name ? ` (${setupResult.organization.name})` : ''}
+                  {setupResult.organization.created ? ' · created' : ' · attached'} · {setupResult.ownerStatus}
+                  {setupResult.creditsGranted > 0 ? ` · +${setupResult.creditsGranted} credits` : ''}
+                  {setupResult.userExisted ? ' · user already existed' : ' · waiting for first Google login'}
+                </p>
+                {setupResult.remainingHostSteps.length > 0 ? (
+                  <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>
+                    {setupResult.remainingHostSteps.map((step) => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            )}
+            <button type="submit" className="btn btn-primary" disabled={busy}>
+              {busy ? (
+                <>
+                  <Loader2 size={18} className="admin-page__spinner" aria-hidden /> Working…
+                </>
+              ) : (
+                <>
+                  <UserPlus size={18} aria-hidden /> Set up host
+                </>
+              )}
+            </button>
+          </form>
+        </section>
 
         <section className="admin-page__table-wrap admin-page__tenant-section" style={{ marginBottom: '2rem' }}>
           <h2 className="admin-page__h2">Tenant Spotify apps (enterprise)</h2>

@@ -14095,6 +14095,152 @@ app.post('/api/admin/host-allowlist', async (req, res) => {
   }
 });
 
+/**
+ * One-shot host provisioning: allowlist + org (create or attach) + owner + optional credits/venue/co-hosts.
+ * Does not create a Google user or connect Spotify — those remain host-side.
+ */
+app.post('/api/admin/setup-host', async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const email = usersStore.normalizeHostEmail(typeof body.email === 'string' ? body.email : '');
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'invalid_email', message: 'Provide a valid host email.' });
+    }
+
+    const orgName = typeof body.orgName === 'string' ? body.orgName.trim() : '';
+    const existingOrgIdRaw = body.organizationId;
+    const existingOrgId =
+      existingOrgIdRaw === null || existingOrgIdRaw === undefined || existingOrgIdRaw === ''
+        ? null
+        : parseInt(String(existingOrgIdRaw), 10);
+    if (existingOrgId != null && !Number.isFinite(existingOrgId)) {
+      return res.status(400).json({ error: 'invalid_org', message: 'organizationId must be a number.' });
+    }
+    if (!orgName && existingOrgId == null) {
+      return res.status(400).json({
+        error: 'org_required',
+        message: 'Provide orgName (create new) or organizationId (attach existing).',
+      });
+    }
+
+    const spotifyClientId = typeof body.spotifyClientId === 'string' ? body.spotifyClientId.trim() : '';
+    const spotifyClientSecret =
+      typeof body.spotifyClientSecret === 'string' ? body.spotifyClientSecret.trim() : '';
+    const creditsRaw = Math.round(Number(body.credits));
+    const credits = Number.isFinite(creditsRaw) && creditsRaw > 0 ? creditsRaw : 0;
+    const makeOwner = body.makeOwner !== false;
+    const coHostEmails = Array.isArray(body.coHostEmails)
+      ? body.coHostEmails
+          .map((e) => usersStore.normalizeHostEmail(String(e || '')))
+          .filter((e) => e && e.includes('@') && e !== email)
+      : [];
+    const venuePatch =
+      body.venueSettings && typeof body.venueSettings === 'object' ? body.venueSettings : null;
+
+    await usersStore.addHostAllowlistEmail(db, email);
+
+    let organization;
+    let createdOrg = false;
+    if (existingOrgId != null) {
+      organization = await organizationsStore.getOrganizationById(db, existingOrgId);
+      if (!organization) {
+        return res.status(404).json({ error: 'org_not_found', message: `Organization ${existingOrgId} not found.` });
+      }
+      if (makeOwner) {
+        await organizationsStore.setPendingOwnerEmail(db, existingOrgId, email);
+      }
+    } else {
+      organization = await organizationsStore.createProvisionedOrganization(db, {
+        name: orgName,
+        spotifyClientId: spotifyClientId || undefined,
+        spotifyClientSecret: spotifyClientSecret || undefined,
+        pendingOwnerEmail: makeOwner ? email : null,
+      });
+      createdOrg = true;
+    }
+
+    const orgId = Number(organization.id);
+    await organizationsStore.inviteHostToOrganization(db, {
+      organizationId: orgId,
+      email,
+      invitedByUserId: null,
+    });
+
+    const existingUser = await usersStore.getUserByEmail(db, email);
+    let ownerStatus = 'pending_first_login';
+    let userId = existingUser?.id ?? null;
+    if (existingUser) {
+      await organizationsStore.setUserOrganizationId(db, existingUser.id, orgId);
+      if (makeOwner) {
+        await organizationsStore.setOrganizationOwner(db, orgId, existingUser.id);
+        ownerStatus = 'owner_set';
+      } else {
+        ownerStatus = 'member_attached';
+      }
+      userId = existingUser.id;
+    }
+
+    for (const co of coHostEmails) {
+      try {
+        await organizationsStore.inviteHostToOrganization(db, {
+          organizationId: orgId,
+          email: co,
+          invitedByUserId: userId,
+        });
+      } catch (coErr) {
+        console.warn('setup-host co-host invite failed:', co, coErr?.message || coErr);
+      }
+    }
+
+    if (venuePatch) {
+      try {
+        await organizationsStore.patchOrganizationVenueSettings(db, orgId, venuePatch);
+      } catch (venueErr) {
+        console.warn('setup-host venue patch failed:', venueErr?.message || venueErr);
+      }
+    }
+
+    let creditSummary = null;
+    if (credits > 0) {
+      await billingStore.eventCredits.grantCredits(db, orgId, {
+        amount: credits,
+        source: 'admin',
+        note: `Admin setup-host for ${email}`,
+      });
+      creditSummary = await billingStore.eventCredits.getCreditSummary(db, orgId);
+    }
+
+    const remainingHostSteps = [
+      existingUser ? null : 'Sign in with Google as Host (creates their account)',
+      'Connect Spotify Premium in TEMPO',
+      'Create a room and run a show',
+    ].filter(Boolean);
+
+    return res.json({
+      ok: true,
+      email,
+      userId,
+      userExisted: !!existingUser,
+      organization: {
+        id: orgId,
+        name: organization.name || orgName || null,
+        created: createdOrg,
+        hasTenantSpotify: !!(organization.spotify_client_id || spotifyClientId),
+      },
+      ownerStatus,
+      creditsGranted: credits,
+      credits: creditSummary,
+      coHostsInvited: coHostEmails,
+      remainingHostSteps,
+    });
+  } catch (e) {
+    console.error('POST /api/admin/setup-host:', e);
+    res.status(400).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
 app.get('/api/admin/host-allowlist', async (req, res) => {
   try {
     if (!(await requireAdmin(req, res))) return;
