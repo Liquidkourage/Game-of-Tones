@@ -20,27 +20,27 @@ const GAME_LAYOUT_OPTIONS: {
   {
     id: 'classic',
     name: 'Classic',
-    blurb: 'Four-card grid with full round summary and Up next.',
+    blurb: 'Full host chrome — prep cockpit, four-card Game grid, secondary panels open.',
   },
   {
     id: 'focus',
     name: 'Focus',
-    blurb: 'Now Playing full-width; hide summary live; shorter Up next.',
+    blurb: 'Declutter whole host UI; Game centers Now Playing; hide secondary panels.',
   },
   {
     id: 'transport',
     name: 'Transport',
-    blurb: 'Now Playing + call log; Bump / Mark played in Quick → More.',
+    blurb: 'Playback-first host shell; Now Playing + call log; Bump/Mark in Quick → More.',
   },
   {
     id: 'compact',
     name: 'Compact',
-    blurb: 'Dense stack; Tonight closed live; summary as a status chip.',
+    blurb: 'Denser spacing across every tab; Game stacks tight with a status chip.',
   },
   {
     id: 'show_desk',
     name: 'Show desk',
-    blurb: 'Bingo verify sticky on top; Quick emphasizes Reject / Resume / End.',
+    blurb: 'Show-night desk across the host UI; bingo verify + Reject/Resume/End up front.',
   },
 ];
 
@@ -173,18 +173,18 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
 
   return (
     <div className="host-settings-workspace">
-      <section className="host-glass-panel host-settings-cockpit" aria-label="Game layout">
+      <section className="host-glass-panel host-settings-cockpit" aria-label="Host layout">
         <div className="host-settings-cockpit__header host-settings-cockpit__header--stack">
           <h2 className="host-settings-cockpit__title">
             <LayoutTemplate className="host-settings-workspace__title-icon" aria-hidden />
-            Game layout
+            Host layout
           </h2>
         </div>
         <p className="host-game-layout-picker__lead">
-          Arranges the Game tab. Classic keeps today’s prep cockpit; other presets preview the
-          dashboard below it (and reshape the live round). Pick Classic anytime to revert.
+          Arranges the whole host UI (Game, Rounds, Setup, Display, and chrome) — not only a live
+          round. Classic restores today’s full layout anytime.
         </p>
-        <div className="host-game-layout-picker" role="radiogroup" aria-label="Game layout">
+        <div className="host-game-layout-picker" role="radiogroup" aria-label="Host layout">
           {GAME_LAYOUT_OPTIONS.map((opt) => {
             const selected = selectedLayout === opt.id;
             return (

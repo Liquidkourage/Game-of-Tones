@@ -2685,3 +2685,109 @@
     grid-row: auto;
   }
 }
+
+/* --- Host-wide layout chrome (all tabs, not only live Game) --- */
+
+.host-view[data-game-layout='focus'] .host-glass-workspace,
+.host-view[data-game-layout='transport'] .host-glass-workspace,
+.host-view[data-game-layout='show_desk'] .host-glass-workspace {
+  gap: 10px;
+}
+
+.host-view[data-game-layout='compact'] .host-glass-workspace {
+  gap: 8px;
+}
+
+.host-view[data-game-layout='focus'] .host-game-mode-banner__hint,
+.host-view[data-game-layout='transport'] .host-game-mode-banner__hint,
+.host-view[data-game-layout='show_desk'] .host-game-mode-banner__hint {
+  display: none;
+}
+
+.host-view[data-game-layout='focus'] .host-game-mode-banner,
+.host-view[data-game-layout='compact'] .host-game-mode-banner,
+.host-view[data-game-layout='transport'] .host-game-mode-banner,
+.host-view[data-game-layout='show_desk'] .host-game-mode-banner {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+/* Hide secondary / advanced panels outside Classic */
+.host-view[data-game-layout='focus'] .host-rounds-tab-workspace__advanced,
+.host-view[data-game-layout='transport'] .host-rounds-tab-workspace__advanced,
+.host-view[data-game-layout='compact'] .host-rounds-tab-workspace__advanced,
+.host-view[data-game-layout='show_desk'] .host-rounds-tab-workspace__advanced,
+.host-view[data-game-layout='focus'] .host-display-more,
+.host-view[data-game-layout='transport'] .host-display-more,
+.host-view[data-game-layout='compact'] .host-display-more,
+.host-view[data-game-layout='show_desk'] .host-display-more {
+  display: none;
+}
+
+/* Focus / Show desk: quieter Settings secondary drawers (still available via Classic) */
+.host-view[data-game-layout='focus'] .host-settings-more,
+.host-view[data-game-layout='show_desk'] .host-settings-more {
+  display: none;
+}
+
+/* Compact: denser panels and Quick bar across the shell */
+.host-view[data-game-layout='compact'] .host-glass-panel,
+.host-view[data-game-layout='compact'] .host-r4-card {
+  padding: 8px 10px;
+}
+
+.host-view[data-game-layout='compact'] .host-rounds-tab-workspace__grid,
+.host-view[data-game-layout='focus'] .host-rounds-tab-workspace__grid {
+  gap: 10px;
+}
+
+.host-view[data-game-layout='compact'] .host-setup-tab-workspace,
+.host-view[data-game-layout='focus'] .host-setup-tab-workspace {
+  gap: 10px;
+}
+
+.host-view[data-game-layout='compact'] .host-quick-bar__btn,
+.host-view[data-game-layout='focus'] .host-quick-bar__btn {
+  padding: 6px 10px;
+  font-size: 0.82rem;
+}
+
+.host-view[data-game-layout='compact'] .host-sidebar__btn,
+.host-view[data-game-layout='focus'] .host-sidebar__btn {
+  padding: 8px 10px;
+  gap: 8px;
+}
+
+.host-view[data-game-layout='compact'] .host-header--r4,
+.host-view[data-game-layout='focus'] .host-header--r4 {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.host-view[data-game-layout='focus'] .host-game-tonight,
+.host-view[data-game-layout='transport'] .host-game-tonight,
+.host-view[data-game-layout='show_desk'] .host-game-tonight {
+  margin-bottom: 0;
+}
+
+.host-view[data-game-layout='focus'] .host-players-workspace,
+.host-view[data-game-layout='compact'] .host-players-workspace {
+  gap: 10px;
+}
+
+.host-view[data-game-layout='transport'] .host-display-cockpit,
+.host-view[data-game-layout='show_desk'] .host-display-cockpit {
+  padding: 10px 12px;
+}
+
+.host-view[data-game-layout='focus'] .host-settings-workspace,
+.host-view[data-game-layout='compact'] .host-settings-workspace,
+.host-view[data-game-layout='transport'] .host-settings-workspace,
+.host-view[data-game-layout='show_desk'] .host-settings-workspace {
+  gap: 10px;
+}
+
+.host-view[data-game-layout='focus'] .host-settings-cockpit__row,
+.host-view[data-game-layout='compact'] .host-settings-cockpit__row {
+  padding-top: 8px;
+}

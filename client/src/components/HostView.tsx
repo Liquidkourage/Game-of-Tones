@@ -3286,17 +3286,20 @@ const HostView: React.FC = () => {
   }, [showConnectionModal]);
 
   /** Collapse Tonight once when playback starts; leave it alone if the host re-opens it.
-   *  Compact / Show desk keep Tonight forced closed while live. */
+   *  Focused host layouts keep Tonight closed so the dashboard stays primary. */
   useEffect(() => {
     const playing = gameState === 'playing';
-    const forceCollapsed =
-      playing && (gameLayout === 'compact' || gameLayout === 'show_desk');
-    if (forceCollapsed) {
+    const declutterLayout =
+      gameLayout === 'compact' ||
+      gameLayout === 'show_desk' ||
+      gameLayout === 'focus' ||
+      gameLayout === 'transport';
+    if (declutterLayout) {
       setTonightOpen(false);
     } else if (playing && !tonightWasPlayingRef.current) {
       setTonightOpen(false);
     }
-    if (!playing) {
+    if (!playing && !declutterLayout) {
       setTonightOpen(true);
     }
     tonightWasPlayingRef.current = playing;
@@ -11087,12 +11090,12 @@ const HostView: React.FC = () => {
     }
   }, [gameState, setupPlaylistReady, prepRoundReadyForGoLive, onHostGlassNav]);
 
+  /** Classic keeps the prep cockpit. Other host layouts use the Game dashboard in waiting too. */
   const showHostSetupCockpit =
-    gameState === 'waiting' && !hostRoomHydrating && hostGlassNav === 'game';
-  /**
-   * Classic prep keeps the cockpit only. Other layouts also show the Game dashboard
-   * during waiting so the preset is visible before Start Game.
-   */
+    gameState === 'waiting' &&
+    !hostRoomHydrating &&
+    hostGlassNav === 'game' &&
+    gameLayout === 'classic';
   const showGameDashboard =
     hostGlassNav === 'game' &&
     !hostRoomHydrating &&
@@ -13457,16 +13460,10 @@ const HostView: React.FC = () => {
                 <details
                   className="host-game-tonight host-glass-panel"
                   open={
-                    (gameLayout === 'compact' || gameLayout === 'show_desk') &&
-                    gameState === 'playing'
-                      ? false
-                      : tonightOpen
+                    gameLayout === 'classic' ? tonightOpen : false
                   }
                   onToggle={(e) => {
-                    if (
-                      (gameLayout === 'compact' || gameLayout === 'show_desk') &&
-                      gameState === 'playing'
-                    ) {
+                    if (gameLayout !== 'classic') {
                       e.preventDefault();
                       setTonightOpen(false);
                       return;

@@ -38,7 +38,7 @@ export type HostPreferencesV1 = {
    * get acknowledgment without pausing the round (same shape as hybrid online bingo).
    */
   bingoWinPolicy: BingoWinPolicy;
-  /** Game-tab live layout preset. Default classic = current 4-card grid. */
+  /** Host UI layout preset (Game + other tabs). Default classic = full chrome. */
   gameLayout: GameLayout;
 };
 
