@@ -251,10 +251,9 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
     }));
   }, [poolSongs, currentSong]);
 
-  const upNextShown =
-    gameLayout === 'focus' && gameState === 'playing' ? upNext.slice(0, 6) : upNext;
+  const upNextShown = gameLayout === 'focus' ? upNext.slice(0, 6) : upNext;
 
-  const compactSummaryLive = gameLayout === 'compact' && gameState === 'playing';
+  const compactSummary = gameLayout === 'compact';
   const hideBumpMarkOnTransport = gameLayout === 'transport' && gameState === 'playing';
 
   const progressPct =
@@ -498,11 +497,11 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
       {/* Round summary */}
       <section
         className={`host-r4-card host-glass-panel host-r4-round${
-          compactSummaryLive ? ' host-r4-round--chip' : ''
+          compactSummary ? ' host-r4-round--chip' : ''
         }`}
         aria-label="Round summary"
       >
-        {compactSummaryLive ? (
+        {compactSummary ? (
           <p className="host-r4-round__chip">
             <strong>{ringPlayed}</strong> played · <strong>{remainingCount}</strong> left
             {roundName ? <span className="host-r4-round__chip-name"> · {roundName}</span> : null}

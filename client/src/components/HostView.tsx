@@ -11089,6 +11089,14 @@ const HostView: React.FC = () => {
 
   const showHostSetupCockpit =
     gameState === 'waiting' && !hostRoomHydrating && hostGlassNav === 'game';
+  /**
+   * Classic prep keeps the cockpit only. Other layouts also show the Game dashboard
+   * during waiting so the preset is visible before Start Game.
+   */
+  const showGameDashboard =
+    hostGlassNav === 'game' &&
+    !hostRoomHydrating &&
+    (gameState !== 'waiting' || gameLayout !== 'classic');
   const moveRoundLockedIndex = gameState === 'playing' ? currentRoundIndex : null;
 
   /** Game tab mode banner: same anchor in prep / live / between-rounds states. */
@@ -13444,7 +13452,7 @@ const HostView: React.FC = () => {
               </HostSetupTabWorkspace>
             ) : null}
 
-            {hostGlassNav === 'game' && !showHostSetupCockpit && (
+            {showGameDashboard ? (
               <>
                 <details
                   className="host-game-tonight host-glass-panel"
@@ -13627,7 +13635,7 @@ const HostView: React.FC = () => {
                   <div data-host-tutorial="bingo-verify" className="host-tutorial-anchor" aria-hidden />
                 )}
               </>
-            )}
+            ) : null}
 
             {hostGlassNav === 'game' && !hostRoomHydrating ? (
               <HostQuickBar

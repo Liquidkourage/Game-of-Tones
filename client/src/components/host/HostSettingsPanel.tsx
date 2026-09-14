@@ -181,7 +181,8 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
           </h2>
         </div>
         <p className="host-game-layout-picker__lead">
-          How the live Game tab is arranged. Classic restores today’s layout.
+          Arranges the Game tab. Classic keeps today’s prep cockpit; other presets preview the
+          dashboard below it (and reshape the live round). Pick Classic anytime to revert.
         </p>
         <div className="host-game-layout-picker" role="radiogroup" aria-label="Game layout">
           {GAME_LAYOUT_OPTIONS.map((opt) => {

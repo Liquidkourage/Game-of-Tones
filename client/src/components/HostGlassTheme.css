@@ -2534,25 +2534,25 @@
 }
 
 /* Focus — live: full-width Now Playing, hide summary + actions */
-.host-view[data-game-layout='focus'][data-game-live='true'] .host-r4-grid {
+.host-view[data-game-layout='focus'] .host-r4-grid {
   grid-template-columns: 1fr;
   grid-template-rows: auto auto;
 }
 
-.host-view[data-game-layout='focus'][data-game-live='true'] .host-r4-now-playing {
+.host-view[data-game-layout='focus'] .host-r4-now-playing {
   grid-column: 1;
   grid-row: 1;
 }
 
-.host-view[data-game-layout='focus'][data-game-live='true'] .host-r4-round {
+.host-view[data-game-layout='focus'] .host-r4-round {
   display: none;
 }
 
-.host-view[data-game-layout='focus'][data-game-live='true'] .host-r4-actions {
+.host-view[data-game-layout='focus'] .host-r4-actions {
   display: none;
 }
 
-.host-view[data-game-layout='focus'][data-game-live='true'] .host-r4-track-feed {
+.host-view[data-game-layout='focus'] .host-r4-track-feed {
   grid-column: 1;
   grid-row: 2;
   position: relative;
@@ -2564,7 +2564,7 @@
   padding: 14px 16px;
 }
 
-.host-view[data-game-layout='focus'][data-game-live='true'] .host-r4-track-feed__inner {
+.host-view[data-game-layout='focus'] .host-r4-track-feed__inner {
   position: static;
   inset: auto;
   padding: 0;
@@ -2573,25 +2573,25 @@
 }
 
 /* Transport — live: Now Playing + call log 2-col; no Host actions */
-.host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-grid {
+.host-view[data-game-layout='transport'] .host-r4-grid {
   grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr);
   grid-template-rows: auto;
 }
 
-.host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-now-playing {
+.host-view[data-game-layout='transport'] .host-r4-now-playing {
   grid-column: 1;
   grid-row: 1;
 }
 
-.host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-round {
+.host-view[data-game-layout='transport'] .host-r4-round {
   display: none;
 }
 
-.host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-actions {
+.host-view[data-game-layout='transport'] .host-r4-actions {
   display: none;
 }
 
-.host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-track-feed {
+.host-view[data-game-layout='transport'] .host-r4-track-feed {
   grid-column: 2;
   grid-row: 1;
   position: relative;
@@ -2599,30 +2599,30 @@
   min-height: 280px;
 }
 
-.host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-track-feed__section--queue {
+.host-view[data-game-layout='transport'] .host-r4-track-feed__section--queue {
   display: none;
 }
 
 /* Compact — live: denser single column */
-.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-grid {
+.host-view[data-game-layout='compact'] .host-r4-grid {
   grid-template-columns: 1fr;
   grid-template-rows: auto;
   gap: 8px;
 }
 
-.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-now-playing,
-.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-round,
-.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-track-feed,
-.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-actions {
+.host-view[data-game-layout='compact'] .host-r4-now-playing,
+.host-view[data-game-layout='compact'] .host-r4-round,
+.host-view[data-game-layout='compact'] .host-r4-track-feed,
+.host-view[data-game-layout='compact'] .host-r4-actions {
   grid-column: 1;
   grid-row: auto;
 }
 
-.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-now-playing {
+.host-view[data-game-layout='compact'] .host-r4-now-playing {
   padding: 6px 10px;
 }
 
-.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-track-feed {
+.host-view[data-game-layout='compact'] .host-r4-track-feed {
   position: static;
   display: flex;
   flex-direction: column;
@@ -2631,40 +2631,40 @@
   max-height: min(520px, 50vh);
 }
 
-.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-track-feed__inner {
+.host-view[data-game-layout='compact'] .host-r4-track-feed__inner {
   position: static;
   inset: auto;
   padding: 0;
 }
 
-.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-actions {
+.host-view[data-game-layout='compact'] .host-r4-actions {
   display: none;
 }
 
-.host-view[data-game-layout='compact'][data-game-live='true'] .host-game-tonight {
+.host-view[data-game-layout='compact'] .host-game-tonight {
   margin-bottom: 6px;
 }
 
 /* Show desk — live: denser 2-col without Host actions (verify sticky above) */
-.host-view[data-game-layout='show_desk'][data-game-live='true'] .host-r4-actions {
+.host-view[data-game-layout='show_desk'] .host-r4-actions {
   display: none;
 }
 
-.host-view[data-game-layout='show_desk'][data-game-live='true'] .host-r4-round {
+.host-view[data-game-layout='show_desk'] .host-r4-round {
   display: none;
 }
 
-.host-view[data-game-layout='show_desk'][data-game-live='true'] .host-r4-grid {
+.host-view[data-game-layout='show_desk'] .host-r4-grid {
   grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr);
   grid-template-rows: auto;
 }
 
-.host-view[data-game-layout='show_desk'][data-game-live='true'] .host-r4-now-playing {
+.host-view[data-game-layout='show_desk'] .host-r4-now-playing {
   grid-column: 1;
   grid-row: 1;
 }
 
-.host-view[data-game-layout='show_desk'][data-game-live='true'] .host-r4-track-feed {
+.host-view[data-game-layout='show_desk'] .host-r4-track-feed {
   grid-column: 2;
   grid-row: 1;
   position: relative;
@@ -2673,14 +2673,14 @@
 }
 
 @media (max-width: 1100px) {
-  .host-view[data-game-layout='focus'][data-game-live='true'] .host-r4-grid,
-  .host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-grid,
-  .host-view[data-game-layout='show_desk'][data-game-live='true'] .host-r4-grid {
+  .host-view[data-game-layout='focus'] .host-r4-grid,
+  .host-view[data-game-layout='transport'] .host-r4-grid,
+  .host-view[data-game-layout='show_desk'] .host-r4-grid {
     grid-template-columns: 1fr;
   }
 
-  .host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-track-feed,
-  .host-view[data-game-layout='show_desk'][data-game-live='true'] .host-r4-track-feed {
+  .host-view[data-game-layout='transport'] .host-r4-track-feed,
+  .host-view[data-game-layout='show_desk'] .host-r4-track-feed {
     grid-column: 1;
     grid-row: auto;
   }
