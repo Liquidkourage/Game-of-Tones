@@ -5,6 +5,17 @@ import {
 
 export type BingoWinPolicy = 'any_round' | 'one_win';
 
+/** Game-tab layout presets (not color themes). Classic = today's default. */
+export type GameLayout = 'classic' | 'focus' | 'transport' | 'compact' | 'show_desk';
+
+export const GAME_LAYOUT_IDS: readonly GameLayout[] = [
+  'classic',
+  'focus',
+  'transport',
+  'compact',
+  'show_desk',
+] as const;
+
 export type HostPreferencesV1 = {
   v: 1;
   snippetLength: number;
@@ -27,7 +38,15 @@ export type HostPreferencesV1 = {
    * get acknowledgment without pausing the round (same shape as hybrid online bingo).
    */
   bingoWinPolicy: BingoWinPolicy;
+  /** Game-tab live layout preset. Default classic = current 4-card grid. */
+  gameLayout: GameLayout;
 };
+
+export function normalizeGameLayout(raw: unknown, fallback: GameLayout = 'classic'): GameLayout {
+  return typeof raw === 'string' && (GAME_LAYOUT_IDS as readonly string[]).includes(raw)
+    ? (raw as GameLayout)
+    : fallback;
+}
 
 /** Clamp host cards-per-player to 1–3. */
 export function normalizeMaxPlayerBingoCards(raw: unknown, fallback = 1): number {
@@ -71,6 +90,7 @@ export function defaultHostPreferences(): HostPreferencesV1 {
     bingoColumnLetters: DEFAULT_BINGO_COLUMN_LETTERS,
     maxPlayerBingoCards: 1,
     bingoWinPolicy: 'any_round',
+    gameLayout: 'classic',
   };
 }
 
@@ -121,6 +141,8 @@ export function sanitizeHostPreferences(raw: unknown): Partial<HostPreferencesV1
         parsed.bingoWinPolicy === 'one_win' || parsed.bingoWinPolicy === 'any_round'
           ? parsed.bingoWinPolicy
           : undefined,
+      gameLayout:
+        parsed.gameLayout != null ? normalizeGameLayout(parsed.gameLayout, 'classic') : undefined,
     };
 }
 

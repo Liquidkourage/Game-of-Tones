@@ -2442,3 +2442,246 @@
 .host-glass-theme .host-event-activation__spin {
   animation: host-org-billing-spin 0.9s linear infinite;
 }
+
+/* --- Game-tab layout presets (Settings ? Game layout) --- */
+
+.host-glass-theme .host-game-layout-picker__lead {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+.host-glass-theme .host-game-layout-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.host-glass-theme .host-game-layout-picker__card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.22);
+  color: rgba(255, 255, 255, 0.88);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.host-glass-theme .host-game-layout-picker__card:hover {
+  border-color: rgba(167, 139, 250, 0.45);
+  background: rgba(72, 52, 120, 0.28);
+}
+
+.host-glass-theme .host-game-layout-picker__card.is-selected {
+  border-color: rgba(94, 234, 212, 0.55);
+  box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.25);
+  background: rgba(16, 60, 52, 0.35);
+}
+
+.host-glass-theme .host-game-layout-preview {
+  color: rgba(255, 255, 255, 0.75);
+  display: block;
+}
+
+.host-glass-theme .host-game-layout-picker__name {
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.host-glass-theme .host-game-layout-picker__blurb {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 500;
+}
+
+.host-glass-theme .host-r4-round--chip {
+  padding: 8px 12px;
+}
+
+.host-glass-theme .host-r4-round__chip {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.host-glass-theme .host-r4-round__chip strong {
+  color: #fff;
+  font-weight: 800;
+}
+
+.host-glass-theme .host-r4-round__chip-name {
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 500;
+}
+
+.host-glass-theme .host-game-verify-slot--desk {
+  position: sticky;
+  top: 0.35rem;
+  z-index: 30;
+  margin-bottom: 10px;
+}
+
+/* Focus — live: full-width Now Playing, hide summary + actions */
+.host-view[data-game-layout='focus'][data-game-live='true'] .host-r4-grid {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto;
+}
+
+.host-view[data-game-layout='focus'][data-game-live='true'] .host-r4-now-playing {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.host-view[data-game-layout='focus'][data-game-live='true'] .host-r4-round {
+  display: none;
+}
+
+.host-view[data-game-layout='focus'][data-game-live='true'] .host-r4-actions {
+  display: none;
+}
+
+.host-view[data-game-layout='focus'][data-game-live='true'] .host-r4-track-feed {
+  grid-column: 1;
+  grid-row: 2;
+  position: relative;
+  align-self: start;
+  min-height: 220px;
+  max-height: min(420px, 45vh);
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+}
+
+.host-view[data-game-layout='focus'][data-game-live='true'] .host-r4-track-feed__inner {
+  position: static;
+  inset: auto;
+  padding: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Transport — live: Now Playing + call log 2-col; no Host actions */
+.host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr);
+  grid-template-rows: auto;
+}
+
+.host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-now-playing {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-round {
+  display: none;
+}
+
+.host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-actions {
+  display: none;
+}
+
+.host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-track-feed {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  align-self: stretch;
+  min-height: 280px;
+}
+
+.host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-track-feed__section--queue {
+  display: none;
+}
+
+/* Compact — live: denser single column */
+.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-grid {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto;
+  gap: 8px;
+}
+
+.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-now-playing,
+.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-round,
+.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-track-feed,
+.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-actions {
+  grid-column: 1;
+  grid-row: auto;
+}
+
+.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-now-playing {
+  padding: 6px 10px;
+}
+
+.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-track-feed {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  min-height: 0;
+  max-height: min(520px, 50vh);
+}
+
+.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-track-feed__inner {
+  position: static;
+  inset: auto;
+  padding: 0;
+}
+
+.host-view[data-game-layout='compact'][data-game-live='true'] .host-r4-actions {
+  display: none;
+}
+
+.host-view[data-game-layout='compact'][data-game-live='true'] .host-game-tonight {
+  margin-bottom: 6px;
+}
+
+/* Show desk — live: denser 2-col without Host actions (verify sticky above) */
+.host-view[data-game-layout='show_desk'][data-game-live='true'] .host-r4-actions {
+  display: none;
+}
+
+.host-view[data-game-layout='show_desk'][data-game-live='true'] .host-r4-round {
+  display: none;
+}
+
+.host-view[data-game-layout='show_desk'][data-game-live='true'] .host-r4-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr);
+  grid-template-rows: auto;
+}
+
+.host-view[data-game-layout='show_desk'][data-game-live='true'] .host-r4-now-playing {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.host-view[data-game-layout='show_desk'][data-game-live='true'] .host-r4-track-feed {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  align-self: stretch;
+  min-height: 280px;
+}
+
+@media (max-width: 1100px) {
+  .host-view[data-game-layout='focus'][data-game-live='true'] .host-r4-grid,
+  .host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-grid,
+  .host-view[data-game-layout='show_desk'][data-game-live='true'] .host-r4-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .host-view[data-game-layout='transport'][data-game-live='true'] .host-r4-track-feed,
+  .host-view[data-game-layout='show_desk'][data-game-live='true'] .host-r4-track-feed {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}

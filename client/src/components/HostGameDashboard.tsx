@@ -21,9 +21,12 @@ import type { BingoPoolSong } from './BingoPoolList';
 import type { CallLogRow } from './host/HostGameLivePanel';
 import type { PlaylistAvailabilityIssue } from './HostPlaylistAvailabilityWarnings';
 import HostPlaylistAvailabilityWarnings from './HostPlaylistAvailabilityWarnings';
+import type { GameLayout } from '../utils/hostPreferences';
 
 export type HostGameDashboardProps = {
   gameState: 'waiting' | 'playing' | 'ended';
+  /** Game-tab layout preset from host preferences. */
+  gameLayout?: GameLayout;
   currentSong: {
     id: string;
     name?: string;
@@ -169,6 +172,7 @@ function TrackFeedRow({
 const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
   const {
     gameState,
+    gameLayout = 'classic',
     currentSong,
     gamePaused,
     pendingVerification,
@@ -246,6 +250,12 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
       callNumber: start + i + 1,
     }));
   }, [poolSongs, currentSong]);
+
+  const upNextShown =
+    gameLayout === 'focus' && gameState === 'playing' ? upNext.slice(0, 6) : upNext;
+
+  const compactSummaryLive = gameLayout === 'compact' && gameState === 'playing';
+  const hideBumpMarkOnTransport = gameLayout === 'transport' && gameState === 'playing';
 
   const progressPct =
     snippetLength > 0 && playbackState.currentTime != null
@@ -369,26 +379,30 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                     <SkipForward className="w-4 h-4" aria-hidden />
                     Skip
                   </button>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={onReplayClip}
-                    disabled={!currentSong}
-                    title="Same song, new start position (does not skip / advance the pool)"
-                  >
-                    <RotateCw className="w-4 h-4" aria-hidden />
-                    Bump
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={onMarkPlayed}
-                    disabled={!currentSong || markPlayedBusy}
-                    title="Mark this track as called on the projector and player cards without skipping"
-                  >
-                    <Check className="w-4 h-4" aria-hidden />
-                    Mark played
-                  </button>
+                  {!hideBumpMarkOnTransport ? (
+                    <>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={onReplayClip}
+                        disabled={!currentSong}
+                        title="Same song, new start position (does not skip / advance the pool)"
+                      >
+                        <RotateCw className="w-4 h-4" aria-hidden />
+                        Bump
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={onMarkPlayed}
+                        disabled={!currentSong || markPlayedBusy}
+                        title="Mark this track as called on the projector and player cards without skipping"
+                      >
+                        <Check className="w-4 h-4" aria-hidden />
+                        Mark played
+                      </button>
+                    </>
+                  ) : null}
                 </div>
                 <div className="host-r4-volume host-r4-volume--full">
                   <button type="button" className="btn-secondary btn-host-icon" onClick={onMuteToggle}>
@@ -482,93 +496,105 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
       </section>
 
       {/* Round summary */}
-      <section className="host-r4-card host-glass-panel host-r4-round" aria-label="Round summary">
-        <div className="host-r4-round__head">
-          <div>
-            <h2 className="host-r4-round__name">{roundName ?? '—'}</h2>
-          </div>
-          <span
-            className={`host-r4-round__status${
-              roundStatus ? ` host-r4-round__status--${roundStatus}` : ''
-            }`}
-          >
-            {roundStatusLabel}
-          </span>
-        </div>
-
-        <div className="host-r4-round__progress-bar" aria-hidden>
-          <div className="host-r4-round__progress-fill" style={{ width: `${percentComplete}%` }} />
-        </div>
-        <p className="host-r4-round__progress-caption">
-          {gameState === 'playing' || gameState === 'ended' ? (
-            <>
-              <strong>{ringPlayed}</strong> played · <strong>{remainingCount}</strong> left
-            </>
-          ) : (
-            <>{patternLabel}</>
-          )}
-        </p>
-
-        <div className="host-r4-round__body">
-          <ProgressRing played={ringPlayed} total={totalTracks} size="sm" />
-          <dl className="host-r4-stats host-r4-stats--round">
-            <div>
-              <dt>Pattern</dt>
-              <dd>{patternLabel}</dd>
-            </div>
-            <div>
-              <dt>Clip</dt>
-              <dd>
-                {snippetLength}s · {randomStartsLabel}
-              </dd>
-            </div>
-            <div>
-              <dt>Projector</dt>
-              <dd>{titleRevealLabel}</dd>
-            </div>
-            <div>
-              <dt>Players</dt>
-              <dd>
-                {playerCardsCount > 0 ? (
-                  <>
-                    {playerCardsCount} card{playerCardsCount !== 1 ? 's' : ''}
-                    {playersOnlineCount > 0 ? ` · ${playersOnlineCount} online` : ''}
-                  </>
-                ) : (
-                  '—'
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>Mix</dt>
-              <dd>
-                {mixFinalized ? 'Finalized' : poolCount > 0 ? 'Pool ready' : 'Not built'}
-                {savedRound ? ' · saved round' : ''}
-              </dd>
-            </div>
-            {winnersCount > 0 ? (
+      <section
+        className={`host-r4-card host-glass-panel host-r4-round${
+          compactSummaryLive ? ' host-r4-round--chip' : ''
+        }`}
+        aria-label="Round summary"
+      >
+        {compactSummaryLive ? (
+          <p className="host-r4-round__chip">
+            <strong>{ringPlayed}</strong> played · <strong>{remainingCount}</strong> left
+            {roundName ? <span className="host-r4-round__chip-name"> · {roundName}</span> : null}
+          </p>
+        ) : (
+          <>
+            <div className="host-r4-round__head">
               <div>
-                <dt>Winners</dt>
-                <dd>
-                  {winnersCount} this event
-                </dd>
+                <h2 className="host-r4-round__name">{roundName ?? '—'}</h2>
+              </div>
+              <span
+                className={`host-r4-round__status${
+                  roundStatus ? ` host-r4-round__status--${roundStatus}` : ''
+                }`}
+              >
+                {roundStatusLabel}
+              </span>
+            </div>
+
+            <div className="host-r4-round__progress-bar" aria-hidden>
+              <div className="host-r4-round__progress-fill" style={{ width: `${percentComplete}%` }} />
+            </div>
+            <p className="host-r4-round__progress-caption">
+              {gameState === 'playing' || gameState === 'ended' ? (
+                <>
+                  <strong>{ringPlayed}</strong> played · <strong>{remainingCount}</strong> left
+                </>
+              ) : (
+                <>{patternLabel}</>
+              )}
+            </p>
+
+            <div className="host-r4-round__body">
+              <ProgressRing played={ringPlayed} total={totalTracks} size="sm" />
+              <dl className="host-r4-stats host-r4-stats--round">
+                <div>
+                  <dt>Pattern</dt>
+                  <dd>{patternLabel}</dd>
+                </div>
+                <div>
+                  <dt>Clip</dt>
+                  <dd>
+                    {snippetLength}s · {randomStartsLabel}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Projector</dt>
+                  <dd>{titleRevealLabel}</dd>
+                </div>
+                <div>
+                  <dt>Players</dt>
+                  <dd>
+                    {playerCardsCount > 0 ? (
+                      <>
+                        {playerCardsCount} card{playerCardsCount !== 1 ? 's' : ''}
+                        {playersOnlineCount > 0 ? ` · ${playersOnlineCount} online` : ''}
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Mix</dt>
+                  <dd>
+                    {mixFinalized ? 'Finalized' : poolCount > 0 ? 'Pool ready' : 'Not built'}
+                    {savedRound ? ' · saved round' : ''}
+                  </dd>
+                </div>
+                {winnersCount > 0 ? (
+                  <div>
+                    <dt>Winners</dt>
+                    <dd>{winnersCount} this event</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </div>
+
+            {playlistNames.length > 0 ? (
+              <div className="host-r4-pills">
+                {playlistNames.slice(0, 5).map((name, i) => (
+                  <span key={`${name}-${i}`} className="host-r4-pill" title={name}>
+                    {name}
+                  </span>
+                ))}
+                {playlistNames.length > 5 ? (
+                  <span className="host-r4-pill host-r4-pill--more">+{playlistNames.length - 5}</span>
+                ) : null}
               </div>
             ) : null}
-          </dl>
-        </div>
-
-        {playlistNames.length > 0 ? (
-          <div className="host-r4-pills">
-            {playlistNames.slice(0, 5).map((name, i) => (
-              <span key={`${name}-${i}`} className="host-r4-pill" title={name}>
-                {name}
-              </span>
-            ))}
-            {playlistNames.length > 5 ? (
-              <span className="host-r4-pill host-r4-pill--more">+{playlistNames.length - 5}</span>
-            ) : null}
-          </div>
-        ) : null}
+          </>
+        )}
       </section>
 
       {/* Call log + up next */}
@@ -611,9 +637,9 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
               </button>
             ) : null}
           </div>
-          {upNext.length > 0 ? (
+          {upNextShown.length > 0 ? (
             <ul className="host-r4-track-feed__list">
-              {upNext.map(({ song, callNumber }) => (
+              {upNextShown.map(({ song, callNumber }) => (
                 <TrackFeedRow
                   key={song.id}
                   callNumber={callNumber}

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Check,
   CheckCircle2,
   ChevronUp,
   Eraser,
@@ -9,15 +10,18 @@ import {
   MessageSquareText,
   Play,
   RotateCcw,
+  RotateCw,
   SkipForward,
   Trash2,
   Undo2,
   XCircle,
 } from 'lucide-react';
+import type { GameLayout } from '../../utils/hostPreferences';
 import './HostQuickBar.css';
 
 export type HostQuickBarProps = {
   gameState: string;
+  gameLayout?: GameLayout;
   canRejectBingo: boolean;
   canResume: boolean;
   transportLocked?: boolean;
@@ -42,15 +46,22 @@ export type HostQuickBarProps = {
   /** Open bingo pool (Alias titles/artists) — prep and live. */
   hasFinalizedSongPool?: boolean;
   onOpenPool?: () => void;
+  /** Transport layout: Bump / Mark played live in More. */
+  onBump?: () => void;
+  onMarkPlayed?: () => void;
+  markPlayedBusy?: boolean;
+  canBumpOrMark?: boolean;
 };
 
 /**
  * Sticky bottom "Quick" strip on the Game tab.
  * Prep: Set round / Splash / Start game. Live: interventions + round lifecycle.
- * Transport (Pause / Skip / Bump) stays on Now Playing only.
+ * Transport (Pause / Skip / Bump) stays on Now Playing only — except Transport layout
+ * moves Bump / Mark played into More.
  */
 const HostQuickBar: React.FC<HostQuickBarProps> = ({
   gameState,
+  gameLayout = 'classic',
   canRejectBingo,
   canResume,
   transportLocked = false,
@@ -73,9 +84,16 @@ const HostQuickBar: React.FC<HostQuickBarProps> = ({
   onClearPrepCache,
   hasFinalizedSongPool = false,
   onOpenPool,
+  onBump,
+  onMarkPlayed,
+  markPlayedBusy = false,
+  canBumpOrMark = false,
 }) => {
   const isLive = gameState === 'playing';
   const isPrep = !isLive && gameState !== 'ended';
+  const showDesk = gameLayout === 'show_desk' && isLive;
+  const transportExtras = gameLayout === 'transport' && isLive;
+  const poolFeedbackInMore = showDesk;
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
 
@@ -161,41 +179,45 @@ const HostQuickBar: React.FC<HostQuickBarProps> = ({
             <Play className="w-4 h-4" aria-hidden />
             Resume
           </button>
-          <button
-            type="button"
-            className="host-quick-bar__btn"
-            onClick={onRedoLastCall}
-            disabled={transportLocked}
-            title="Redo last call (previous song)"
-          >
-            <Undo2 className="w-4 h-4" aria-hidden />
-            Redo
-          </button>
+          {!showDesk ? (
+            <button
+              type="button"
+              className="host-quick-bar__btn"
+              onClick={onRedoLastCall}
+              disabled={transportLocked}
+              title="Redo last call (previous song)"
+            >
+              <Undo2 className="w-4 h-4" aria-hidden />
+              Redo
+            </button>
+          ) : null}
         </div>
       ) : null}
 
-      <div className="host-quick-bar__group" aria-label="Always available">
-        {hasFinalizedSongPool && onOpenPool ? (
+      {!poolFeedbackInMore ? (
+        <div className="host-quick-bar__group" aria-label="Always available">
+          {hasFinalizedSongPool && onOpenPool ? (
+            <button
+              type="button"
+              className="host-quick-bar__btn"
+              onClick={onOpenPool}
+              title="Review the bingo pool and edit display aliases"
+            >
+              <ListChecks className="w-4 h-4" aria-hidden />
+              Pool
+            </button>
+          ) : null}
           <button
             type="button"
-            className="host-quick-bar__btn"
-            onClick={onOpenPool}
-            title="Review the bingo pool and edit display aliases"
+            className="host-quick-bar__btn host-quick-bar__btn--feedback"
+            onClick={onOpenFeedback}
+            title="Read player feedback"
           >
-            <ListChecks className="w-4 h-4" aria-hidden />
-            Pool
+            <MessageSquareText className="w-4 h-4" aria-hidden />
+            Feedback{feedbackCount > 0 ? ` (${feedbackCount})` : ''}
           </button>
-        ) : null}
-        <button
-          type="button"
-          className="host-quick-bar__btn host-quick-bar__btn--feedback"
-          onClick={onOpenFeedback}
-          title="Read player feedback"
-        >
-          <MessageSquareText className="w-4 h-4" aria-hidden />
-          Feedback{feedbackCount > 0 ? ` (${feedbackCount})` : ''}
-        </button>
-      </div>
+        </div>
+      ) : null}
 
       <div className="host-quick-bar__divider" aria-hidden />
 
@@ -212,15 +234,17 @@ const HostQuickBar: React.FC<HostQuickBarProps> = ({
               <CheckCircle2 className="w-4 h-4" aria-hidden />
               End round
             </button>
-            <button
-              type="button"
-              className="host-quick-bar__btn"
-              onClick={onResetCurrentRound}
-              title="Reset this round (same playlists)"
-            >
-              <RotateCcw className="w-4 h-4" aria-hidden />
-              Reset round
-            </button>
+            {!showDesk ? (
+              <button
+                type="button"
+                className="host-quick-bar__btn"
+                onClick={onResetCurrentRound}
+                title="Reset this round (same playlists)"
+              >
+                <RotateCcw className="w-4 h-4" aria-hidden />
+                Reset round
+              </button>
+            ) : null}
           </>
         ) : null}
         {!isLive && hasNextPlanned ? (
@@ -248,6 +272,93 @@ const HostQuickBar: React.FC<HostQuickBarProps> = ({
           </button>
           {moreOpen ? (
             <div className="host-quick-bar__menu" role="menu">
+              {transportExtras && onBump ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="host-quick-bar__menu-item"
+                  disabled={!canBumpOrMark}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    onBump();
+                  }}
+                >
+                  <RotateCw className="w-4 h-4" aria-hidden />
+                  Bump
+                </button>
+              ) : null}
+              {transportExtras && onMarkPlayed ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="host-quick-bar__menu-item"
+                  disabled={!canBumpOrMark || markPlayedBusy}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    onMarkPlayed();
+                  }}
+                >
+                  <Check className="w-4 h-4" aria-hidden />
+                  Mark played
+                </button>
+              ) : null}
+              {poolFeedbackInMore && hasFinalizedSongPool && onOpenPool ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="host-quick-bar__menu-item"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    onOpenPool();
+                  }}
+                >
+                  <ListChecks className="w-4 h-4" aria-hidden />
+                  Pool
+                </button>
+              ) : null}
+              {poolFeedbackInMore ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="host-quick-bar__menu-item"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    onOpenFeedback();
+                  }}
+                >
+                  <MessageSquareText className="w-4 h-4" aria-hidden />
+                  Feedback{feedbackCount > 0 ? ` (${feedbackCount})` : ''}
+                </button>
+              ) : null}
+              {showDesk ? (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="host-quick-bar__menu-item"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onRedoLastCall();
+                    }}
+                    disabled={transportLocked}
+                  >
+                    <Undo2 className="w-4 h-4" aria-hidden />
+                    Redo
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="host-quick-bar__menu-item"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onResetCurrentRound();
+                    }}
+                  >
+                    <RotateCcw className="w-4 h-4" aria-hidden />
+                    Reset round
+                  </button>
+                </>
+              ) : null}
               <button
                 type="button"
                 role="menuitem"

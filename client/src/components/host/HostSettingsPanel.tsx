@@ -1,11 +1,105 @@
 import React from 'react';
-import { Copy, Download, Link2 } from 'lucide-react';
+import { Copy, Download, Link2, LayoutTemplate } from 'lucide-react';
 import HostActivityFeed from './HostActivityFeed';
 import HostEventActivationBar from './HostEventActivationBar';
 import HostPlayerFeedbackList, { type PlayerFeedbackEntry } from './HostPlayerFeedbackList';
 import type { HostActivityEntry } from '../../host/hostActivityLog';
-import { DEFAULT_PLAYLIST_TITLE_FLAGS, type BingoWinPolicy } from '../../utils/hostPreferences';
+import {
+  DEFAULT_PLAYLIST_TITLE_FLAGS,
+  GAME_LAYOUT_IDS,
+  type BingoWinPolicy,
+  type GameLayout,
+} from '../../utils/hostPreferences';
 import type { PublicDisplayTitleRevealMode } from '../../utils/publicDisplayTitleReveal';
+
+const GAME_LAYOUT_OPTIONS: {
+  id: GameLayout;
+  name: string;
+  blurb: string;
+}[] = [
+  {
+    id: 'classic',
+    name: 'Classic',
+    blurb: 'Four-card grid with full round summary and Up next.',
+  },
+  {
+    id: 'focus',
+    name: 'Focus',
+    blurb: 'Now Playing full-width; hide summary live; shorter Up next.',
+  },
+  {
+    id: 'transport',
+    name: 'Transport',
+    blurb: 'Now Playing + call log; Bump / Mark played in Quick → More.',
+  },
+  {
+    id: 'compact',
+    name: 'Compact',
+    blurb: 'Dense stack; Tonight closed live; summary as a status chip.',
+  },
+  {
+    id: 'show_desk',
+    name: 'Show desk',
+    blurb: 'Bingo verify sticky on top; Quick emphasizes Reject / Resume / End.',
+  },
+];
+
+/** Tiny wireframe preview — layout readable, no theme colors. */
+function GameLayoutPreview({ id }: { id: GameLayout }) {
+  const stroke = 'currentColor';
+  const fill = 'currentColor';
+  return (
+    <svg
+      className="host-game-layout-preview"
+      viewBox="0 0 72 48"
+      width={72}
+      height={48}
+      aria-hidden
+    >
+      {id === 'classic' ? (
+        <>
+          <rect x="2" y="2" width="32" height="18" rx="2" fillOpacity="0.22" stroke={stroke} strokeWidth="1.2" />
+          <rect x="38" y="2" width="32" height="44" rx="2" fillOpacity="0.12" stroke={stroke} strokeWidth="1.2" />
+          <rect x="2" y="24" width="32" height="10" rx="2" fillOpacity="0.16" stroke={stroke} strokeWidth="1.2" />
+          <rect x="2" y="36" width="32" height="10" rx="2" fillOpacity="0.1" stroke={stroke} strokeWidth="1.2" />
+        </>
+      ) : null}
+      {id === 'focus' ? (
+        <>
+          <rect x="2" y="2" width="68" height="20" rx="2" fillOpacity="0.22" stroke={stroke} strokeWidth="1.2" />
+          <rect x="2" y="26" width="68" height="20" rx="2" fillOpacity="0.12" stroke={stroke} strokeWidth="1.2" />
+          <rect x="8" y="30" width="20" height="3" rx="1" fill={fill} fillOpacity="0.35" />
+          <rect x="8" y="36" width="28" height="3" rx="1" fill={fill} fillOpacity="0.25" />
+          <rect x="8" y="42" width="16" height="3" rx="1" fill={fill} fillOpacity="0.2" />
+        </>
+      ) : null}
+      {id === 'transport' ? (
+        <>
+          <rect x="2" y="2" width="34" height="44" rx="2" fillOpacity="0.22" stroke={stroke} strokeWidth="1.2" />
+          <rect x="40" y="2" width="30" height="44" rx="2" fillOpacity="0.12" stroke={stroke} strokeWidth="1.2" />
+          <rect x="46" y="8" width="18" height="3" rx="1" fill={fill} fillOpacity="0.3" />
+          <rect x="46" y="14" width="18" height="3" rx="1" fill={fill} fillOpacity="0.22" />
+          <rect x="46" y="20" width="14" height="3" rx="1" fill={fill} fillOpacity="0.18" />
+        </>
+      ) : null}
+      {id === 'compact' ? (
+        <>
+          <rect x="6" y="3" width="60" height="8" rx="2" fillOpacity="0.14" stroke={stroke} strokeWidth="1.2" />
+          <rect x="6" y="14" width="60" height="14" rx="2" fillOpacity="0.22" stroke={stroke} strokeWidth="1.2" />
+          <rect x="6" y="31" width="60" height="6" rx="2" fillOpacity="0.16" stroke={stroke} strokeWidth="1.2" />
+          <rect x="6" y="40" width="60" height="5" rx="2" fillOpacity="0.1" stroke={stroke} strokeWidth="1.2" />
+        </>
+      ) : null}
+      {id === 'show_desk' ? (
+        <>
+          <rect x="2" y="2" width="68" height="10" rx="2" fillOpacity="0.28" stroke={stroke} strokeWidth="1.2" />
+          <rect x="2" y="16" width="34" height="30" rx="2" fillOpacity="0.2" stroke={stroke} strokeWidth="1.2" />
+          <rect x="40" y="16" width="30" height="30" rx="2" fillOpacity="0.12" stroke={stroke} strokeWidth="1.2" />
+        </>
+      ) : null}
+    </svg>
+  );
+}
 
 type HostSettingsPanelProps = {
   roomId: string | null;
@@ -37,6 +131,8 @@ type HostSettingsPanelProps = {
   onMaxPlayerBingoCardsChange: (n: number) => void;
   /** True while a round is live — cards-per-player cannot change. */
   maxPlayerBingoCardsLocked?: boolean;
+  gameLayout: GameLayout;
+  onGameLayoutChange: (v: GameLayout) => void;
 };
 
 const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
@@ -68,12 +164,50 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
   maxPlayerBingoCards,
   onMaxPlayerBingoCardsChange,
   maxPlayerBingoCardsLocked = false,
+  gameLayout,
+  onGameLayoutChange,
 }) => {
   const lettersIncomplete = bingoColumnLetters.length > 0 && bingoColumnLetters.length < 5;
   const letterRevealEnabled = publicDisplayTitleRevealMode === 'letter';
+  const selectedLayout = GAME_LAYOUT_IDS.includes(gameLayout) ? gameLayout : 'classic';
 
   return (
     <div className="host-settings-workspace">
+      <section className="host-glass-panel host-settings-cockpit" aria-label="Game layout">
+        <div className="host-settings-cockpit__header host-settings-cockpit__header--stack">
+          <h2 className="host-settings-cockpit__title">
+            <LayoutTemplate className="host-settings-workspace__title-icon" aria-hidden />
+            Game layout
+          </h2>
+        </div>
+        <p className="host-game-layout-picker__lead">
+          How the live Game tab is arranged. Classic restores today’s layout.
+        </p>
+        <div className="host-game-layout-picker" role="radiogroup" aria-label="Game layout">
+          {GAME_LAYOUT_OPTIONS.map((opt) => {
+            const selected = selectedLayout === opt.id;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                className={
+                  selected
+                    ? 'host-game-layout-picker__card is-selected'
+                    : 'host-game-layout-picker__card'
+                }
+                onClick={() => onGameLayoutChange(opt.id)}
+              >
+                <GameLayoutPreview id={opt.id} />
+                <span className="host-game-layout-picker__name">{opt.name}</span>
+                <span className="host-game-layout-picker__blurb">{opt.blurb}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
       <section className="host-glass-panel host-settings-workspace__connection">
         <div className="host-settings-workspace__head">
           <h2 className="host-settings-workspace__title">

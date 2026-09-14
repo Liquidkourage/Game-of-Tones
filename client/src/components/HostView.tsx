@@ -88,11 +88,13 @@ import {
   DEFAULT_BINGO_COLUMN_LETTERS,
   normalizeBingoColumnLetters,
   normalizeBingoWinPolicy,
+  normalizeGameLayout,
   normalizeMaxPlayerBingoCards,
   loadHostPreferences,
   saveHostPreferences,
   sanitizeHostPreferences,
   type BingoWinPolicy,
+  type GameLayout,
   type HostPreferencesV1,
 } from '../utils/hostPreferences';
 import { isSpotifyJamDevice, pickPreferredPlaybackDevice } from '../utils/spotifyDevices';
@@ -1660,6 +1662,7 @@ const HostView: React.FC = () => {
   /** Cards dealt per player at round start (1–3); locked while live. */
   const [maxPlayerBingoCards, setMaxPlayerBingoCards] = useState(1);
   const [bingoWinPolicy, setBingoWinPolicy] = useState<BingoWinPolicy>('any_round');
+  const [gameLayout, setGameLayout] = useState<GameLayout>('classic');
 
   // Handler to update public display font size
   const updatePublicDisplayFontSize = (newSize: number) => {
@@ -3282,17 +3285,22 @@ const HostView: React.FC = () => {
     };
   }, [showConnectionModal]);
 
-  /** Collapse Tonight once when playback starts; leave it alone if the host re-opens it. */
+  /** Collapse Tonight once when playback starts; leave it alone if the host re-opens it.
+   *  Compact / Show desk keep Tonight forced closed while live. */
   useEffect(() => {
     const playing = gameState === 'playing';
-    if (playing && !tonightWasPlayingRef.current) {
+    const forceCollapsed =
+      playing && (gameLayout === 'compact' || gameLayout === 'show_desk');
+    if (forceCollapsed) {
+      setTonightOpen(false);
+    } else if (playing && !tonightWasPlayingRef.current) {
       setTonightOpen(false);
     }
     if (!playing) {
       setTonightOpen(true);
     }
     tonightWasPlayingRef.current = playing;
-  }, [gameState]);
+  }, [gameState, gameLayout]);
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -10644,6 +10652,7 @@ const HostView: React.FC = () => {
       if (p.bingoColumnLetters != null) setBingoColumnLetters(p.bingoColumnLetters);
       if (p.maxPlayerBingoCards != null) setMaxPlayerBingoCards(p.maxPlayerBingoCards);
       if (p.bingoWinPolicy != null) setBingoWinPolicy(p.bingoWinPolicy);
+      if (p.gameLayout != null) setGameLayout(p.gameLayout);
     };
     apply(loadHostPreferences(hostId));
     hostPrefsHydratedRef.current = true;
@@ -10687,6 +10696,7 @@ const HostView: React.FC = () => {
       bingoColumnLetters: normalizeBingoColumnLetters(bingoColumnLetters) ?? DEFAULT_BINGO_COLUMN_LETTERS,
       maxPlayerBingoCards,
       bingoWinPolicy,
+      gameLayout,
     };
     saveHostPreferences(hostAccount.id, prefs);
     try {
@@ -10733,6 +10743,7 @@ const HostView: React.FC = () => {
     bingoColumnLetters,
     maxPlayerBingoCards,
     bingoWinPolicy,
+    gameLayout,
   ]);
 
   /** Sync venue Jam mode to server when pref or socket changes. */
@@ -13178,7 +13189,11 @@ const HostView: React.FC = () => {
   }, [publicDisplayUrl]);
 
   return (
-    <div className="host-view host-glass-theme">
+    <div
+      className="host-view host-glass-theme"
+      data-game-layout={gameLayout}
+      data-game-live={gameState === 'playing' ? 'true' : 'false'}
+    >
       <div className="host-view__bg" aria-hidden />
       {!hideYoutubeCornerPlayer ? (
         <HostYoutubeIframePlayer
@@ -13433,8 +13448,23 @@ const HostView: React.FC = () => {
               <>
                 <details
                   className="host-game-tonight host-glass-panel"
-                  open={tonightOpen}
-                  onToggle={(e) => setTonightOpen(e.currentTarget.open)}
+                  open={
+                    (gameLayout === 'compact' || gameLayout === 'show_desk') &&
+                    gameState === 'playing'
+                      ? false
+                      : tonightOpen
+                  }
+                  onToggle={(e) => {
+                    if (
+                      (gameLayout === 'compact' || gameLayout === 'show_desk') &&
+                      gameState === 'playing'
+                    ) {
+                      e.preventDefault();
+                      setTonightOpen(false);
+                      return;
+                    }
+                    setTonightOpen(e.currentTarget.open);
+                  }}
                   data-host-tutorial="next-round"
                 >
                   <summary className="host-game-tonight__summary">
@@ -13475,8 +13505,23 @@ const HostView: React.FC = () => {
                     )}
                   </div>
                 </details>
+                {gameLayout === 'show_desk' &&
+                gameState === 'playing' &&
+                bingoVerificationCount > 0 ? (
+                  <div
+                    className="host-game-verify-slot host-game-verify-slot--desk"
+                    data-host-tutorial="bingo-verify"
+                  >
+                    <HostGameLivePanel
+                      bingoVerificationCount={bingoVerificationCount}
+                      pendingPlayerName={pendingVerification?.playerName ?? null}
+                      onOpenBingoVerification={openBingoVerification}
+                    />
+                  </div>
+                ) : null}
                   <HostGameDashboard
                     gameState={gameState}
+                    gameLayout={gameLayout}
                     currentSong={currentSong}
                     gamePaused={gamePaused}
                     pendingVerification={pendingVerification}
@@ -13566,7 +13611,9 @@ const HostView: React.FC = () => {
                   </div>
                 ) : null}
 
-                {gameState === 'playing' && bingoVerificationCount > 0 ? (
+                {gameLayout !== 'show_desk' &&
+                gameState === 'playing' &&
+                bingoVerificationCount > 0 ? (
                   <div data-host-tutorial="bingo-verify">
                   <HostGameLivePanel
                     bingoVerificationCount={bingoVerificationCount}
@@ -13574,7 +13621,9 @@ const HostView: React.FC = () => {
                     onOpenBingoVerification={openBingoVerification}
                   />
                   </div>
-                ) : (
+                ) : gameLayout === 'show_desk' &&
+                  gameState === 'playing' &&
+                  bingoVerificationCount > 0 ? null : (
                   <div data-host-tutorial="bingo-verify" className="host-tutorial-anchor" aria-hidden />
                 )}
               </>
@@ -13583,6 +13632,7 @@ const HostView: React.FC = () => {
             {hostGlassNav === 'game' && !hostRoomHydrating ? (
               <HostQuickBar
                 gameState={gameState}
+                gameLayout={gameLayout}
                 canRejectBingo={!!pendingVerification && !isProcessingVerification}
                 canResume={gamePaused || !!pendingVerification}
                 transportLocked={!!pendingVerification || isProcessingVerification}
@@ -13614,6 +13664,10 @@ const HostView: React.FC = () => {
                 onClearPrepCache={clearRoomRoundPrepStorage}
                 hasFinalizedSongPool={hasFinalizedSongPool}
                 onOpenPool={() => setShowBingoPoolModal(true)}
+                onBump={replayCurrentClip}
+                onMarkPlayed={markCurrentSongPlayed}
+                markPlayedBusy={markPlayedBusy}
+                canBumpOrMark={!!currentSong && gameState === 'playing'}
               />
             ) : null}
 
@@ -13669,6 +13723,8 @@ const HostView: React.FC = () => {
                 maxPlayerBingoCards={maxPlayerBingoCards}
                 onMaxPlayerBingoCardsChange={updateMaxPlayerBingoCards}
                 maxPlayerBingoCardsLocked={gameState === 'playing' || gamePaused}
+                gameLayout={gameLayout}
+                onGameLayoutChange={(v) => setGameLayout(normalizeGameLayout(v))}
               />
               </div>
             ) : null}

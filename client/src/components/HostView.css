@@ -4340,6 +4340,13 @@
   font-size: 1.05rem;
   font-weight: 800;
   color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.host-settings-cockpit__header--stack {
+  justify-content: flex-start;
 }
 
 .host-settings-cockpit__row {
