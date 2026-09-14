@@ -2702,7 +2702,7 @@ const HostView: React.FC = () => {
       }
       const response = await hostFetch(`${API_BASE || ''}/api/spotify/playlists?${qs.toString()}`);
       if (response.status === 401) {
-        setSpotifyError('Spotify is not connected. Open Connection in the header to connect.');
+        setSpotifyError('Spotify is not connected. Open Settings → Playback & connections to connect Spotify.');
         setSpotifyListCacheInfo(null);
         setPlaylists([]);
         setSpotifyMyPlaylistsTotal(null);
@@ -3350,7 +3350,7 @@ const HostView: React.FC = () => {
         console.warn('Spotify not connected (401) while loading devices');
         setIsSpotifyConnected(false);
         setIsSpotifyConnecting(false);
-        setSpotifyError('Spotify is not connected. Open Connection in the header to connect.');
+        setSpotifyError('Spotify is not connected. Open Settings → Playback & connections to connect Spotify.');
         setDevices([]);
         return;
       }
@@ -6184,7 +6184,7 @@ const HostView: React.FC = () => {
     );
 
     if (needsHostSpotifyForStart && !isSpotifyConnected) {
-      alert('Spotify is not connected. Open Connection in the header and connect Spotify first.');
+      alert('Spotify is not connected. Open Settings → Playback & connections and connect Spotify first.');
       return false;
     }
 
@@ -6198,7 +6198,7 @@ const HostView: React.FC = () => {
       return false;
     }
     if (appleOnlyStart && !appleMusicConnected) {
-      alert('Apple Music is not connected. Open Connection and connect Apple Music first.');
+      alert('Apple Music is not connected. Open Settings → Playback & connections and connect Apple Music first.');
       return false;
     }
 
@@ -6263,7 +6263,7 @@ const HostView: React.FC = () => {
       alert(
         needsHostSpotifyForStart
           ? 'No songs loaded from playlists. Ensure Spotify is connected and playlists have tracks, then try again.'
-          : 'No songs loaded. Open Connection and connect YouTube or Apple Music if needed, load playlists, then try Show Playlists or Start Game again.'
+          : 'No songs loaded. Connect YouTube or Apple Music under Settings if needed, load playlists, then try Show Playlists or Start Game again.'
       );
       return false;
     }
@@ -10367,11 +10367,11 @@ const HostView: React.FC = () => {
       return;
     }
     if (appleOnlyRound && !appleMusicConnected) {
-      window.alert('Apple Music is not connected. Open Connection and connect Apple Music first.');
+      window.alert('Apple Music is not connected. Open Settings → Playback & connections and connect Apple Music first.');
       return;
     }
     if (needsHostSpotifyForRound && !isSpotifyConnected) {
-      window.alert('Spotify is not connected. Open Connection in the header and connect Spotify first.');
+      window.alert('Spotify is not connected. Open Settings → Playback & connections and connect Spotify first.');
       return;
     }
     if (needsHostSpotifyForRound && !selectedDevice) {
@@ -11085,20 +11085,15 @@ const HostView: React.FC = () => {
     gameState === 'playing' ? 'live' : gameState === 'ended' ? 'ended' : 'prep';
   const gameModeBannerHint = (() => {
     if (gameState === 'playing') {
-      if (bingoVerificationCount > 0) return 'Bingo call waiting — verify it below.';
-      return gamePaused
-        ? 'Paused — playback and the displays hold until you resume.'
-        : '';
+      if (bingoVerificationCount > 0) return 'Bingo waiting — verify below.';
+      return '';
     }
     if (gameState === 'ended') {
-      return getNextPlannedRound() >= 0
-        ? 'Round complete. Start the next planned round from Quick below.'
-        : 'Round complete. Build another round on the Rounds tab, or wrap up from Quick.';
+      return getNextPlannedRound() >= 0 ? 'Start the next round when ready.' : 'Build another round, or wrap up.';
     }
-    if (!anyRoundHasPlaylists) return 'Build tonight’s rounds on the Rounds tab to get started.';
-    if (!prepRoundReadyForGoLive)
-      return 'Set patterns and playback on the Setup tab, then finalize on Game.';
-    return 'Ready — use Quick below to Set round, then Start game.';
+    if (!anyRoundHasPlaylists) return 'Add music on Rounds to get started.';
+    if (!prepRoundReadyForGoLive) return 'Finish Setup, then start from the bar below.';
+    return '';
   })();
 
   const getBingoPoolTrackCountForRound = useCallback(
@@ -12891,7 +12886,7 @@ const HostView: React.FC = () => {
         label: 'Playback connected (Spotify and/or YouTube)',
         ok: hostPlaybackSystemsReady,
         warn: !hostPlaybackSystemsReady,
-        detail: hostPlaybackSystemsReady ? undefined : 'Open Connection in the header',
+        detail: hostPlaybackSystemsReady ? undefined : 'Open Settings → Playback & connections',
       },
       ...(mixNeedsHostSpotify && isSpotifyConnected
         ? [
@@ -13392,10 +13387,6 @@ const HostView: React.FC = () => {
                   />
                 </div>
                 <div className="host-setup-flow__panel host-glass-panel" data-host-tutorial="play">
-                  <header className="host-setup-step__header">
-                    <p className="host-setup-step__eyebrow">Go live</p>
-                    <h2 className="host-setup-step__title">Finalize and start</h2>
-                  </header>
                   <HostSetupPlayStep
                     roomId={roomId ?? null}
                     roundName={hostActiveRoundSummary.roundName}
@@ -13559,8 +13550,8 @@ const HostView: React.FC = () => {
                     <p className="host-r4-alert__title">No song mix yet</p>
                     <p className="host-r4-alert__body">
                       {mixPlaylistSelection.length === 0
-                        ? 'Use Playlist setup to add playlists and assign them to a round. Connect Spotify / YouTube via Connection in the header.'
-                        : 'Use Build song pool or Start game on the Play step to build the bingo pool.'}
+                        ? 'Add playlists on Rounds, then connect playback under Settings if needed.'
+                        : 'Build the song pool, then start from the bar below.'}
                     </p>
                   </div>
                 ) : null}

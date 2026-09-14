@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, ListChecks, Loader2 } from 'lucide-react';
+import { ListChecks, Loader2 } from 'lucide-react';
 import HostPlaylistAvailabilityWarnings from '../HostPlaylistAvailabilityWarnings';
 import type { PlaylistAvailabilityIssue } from '../HostPlaylistAvailabilityWarnings';
 import { playlistDisplayParts } from '../../utils/roundPrintLabels';
@@ -57,8 +57,7 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
   return (
     <div className="host-setup-play">
       <header className="host-setup-play__header">
-        <p className="host-setup-play__eyebrow">Step 3 · Play game</p>
-        <h2 className="host-setup-play__title">Readiness and start</h2>
+        <h2 className="host-setup-play__title">Start</h2>
       </header>
 
       <div className="host-setup-play__checklist" data-host-tutorial="play">
@@ -129,24 +128,9 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
             title="Review the bingo pool and edit display aliases before starting"
           >
             <ListChecks className="w-4 h-4" aria-hidden />
-            View bingo pool
+            View pool
           </button>
         </div>
-      ) : null}
-
-      {prepRoundReadyForGoLive ? (
-        <p className="host-setup-play__ready">
-          <CheckCircle2 className="w-4 h-4" aria-hidden />
-          Cards and playback are set for this round
-        </p>
-      ) : null}
-
-      {prepRoundReadyForGoLive ? (
-        <p className="host-setup-play__preview-copy">
-          Use the <strong>Quick</strong> bar below: <strong>Set round</strong> deals cards and puts
-          the call list on the projector; <strong>Start game</strong> begins playback when you&apos;re
-          ready.
-        </p>
       ) : null}
 
       {showPrimaryFinalizeMixButton ? (
@@ -186,7 +170,7 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
 
       {!prepRoundReadyForGoLive && !showPrimaryFinalizeMixButton && poolCount === 0 ? (
         <p className="host-setup-play__hint" role="status">
-          Build the song pool before starting, or save the round from Criteria if you use saved rounds.
+          Build the song pool before starting.
         </p>
       ) : null}
 

@@ -97,7 +97,6 @@ const HostQuickBar: React.FC<HostQuickBarProps> = ({
 
   return (
     <div className="host-quick-bar host-glass-panel" role="toolbar" aria-label="Quick controls">
-      <div className="host-quick-bar__label">Quick</div>
 
       {isPrep ? (
         <div className="host-quick-bar__group host-quick-bar__group--prep" aria-label="Go live">
