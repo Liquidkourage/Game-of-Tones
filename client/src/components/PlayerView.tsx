@@ -208,9 +208,6 @@ const PlayerView: React.FC = () => {
   const [hasValidBingo, setHasValidBingo] = useState<boolean>(false);
   const [connectionToast, setConnectionToast] = useState<string>('');
   const [optionsOpen, setOptionsOpen] = useState(false);
-  /** When reopening the account gate from More → Sign in, force login tab. */
-  const [accountGateMode, setAccountGateMode] = useState<'login' | 'signup' | 'guest'>('guest');
-  const [accountGateEpoch, setAccountGateEpoch] = useState(0);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackStatus, setFeedbackStatus] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle');
@@ -1373,37 +1370,6 @@ const PlayerView: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [optionsOpen]);
 
-  /**
-   * Phone Back while More is open should close the sheet, not leave /player.
-   * Push a synthetic history entry on open; consume it on Done/backdrop, or on popstate.
-   */
-  const moreSheetHistoryPushedRef = useRef(false);
-  useEffect(() => {
-    if (!optionsOpen) return undefined;
-    try {
-      window.history.pushState({ tempoPlayerMore: true }, '');
-      moreSheetHistoryPushedRef.current = true;
-    } catch {
-      moreSheetHistoryPushedRef.current = false;
-    }
-    const onPopState = () => {
-      moreSheetHistoryPushedRef.current = false;
-      setOptionsOpen(false);
-    };
-    window.addEventListener('popstate', onPopState);
-    return () => {
-      window.removeEventListener('popstate', onPopState);
-      if (moreSheetHistoryPushedRef.current) {
-        moreSheetHistoryPushedRef.current = false;
-        try {
-          window.history.back();
-        } catch {
-          /* ignore */
-        }
-      }
-    };
-  }, [optionsOpen]);
-
   const cardTextFitSignature = useMemo(() => {
     if (!bingoCard) return '';
     const eventTitle = venueBranding?.eventTitle?.trim() || 'Free space';
@@ -2336,10 +2302,8 @@ const PlayerView: React.FC = () => {
       {/* Name prompt overlay if no name provided */}
       {!joinReady ? (
         <PlayerAccountGate
-          key={`player-account-gate-${accountGateEpoch}`}
           theme={cardTheme}
           onThemeChange={chooseCardTheme}
-          initialMode={accountGateMode}
           initialGuestName={urlNamePrefill || playerName}
           initialError={joinGateError}
           onGuestContinue={(name) => {
@@ -3001,16 +2965,7 @@ const PlayerView: React.FC = () => {
                     <div className="player-v2-sheet-copy">
                       <div className="player-v2-sheet-label">Player account</div>
                     </div>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => {
-                        setOptionsOpen(false);
-                        setAccountGateMode('login');
-                        setAccountGateEpoch((n) => n + 1);
-                        setJoinReady(false);
-                      }}
-                    >
+                    <button type="button" className="btn-secondary" onClick={() => setJoinReady(false)}>
                       Sign in
                     </button>
                   </div>

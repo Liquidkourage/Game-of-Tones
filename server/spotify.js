@@ -91,7 +91,6 @@ const SPOTIFY_SOURCE_ROUTE_HINT = {
   setShuffleState: 'PUT /v1/me/player/shuffle',
   setRepeatState: 'PUT /v1/me/player/repeat',
   createTemporaryPlaylist: 'POST /v1/me/playlists + …/items',
-  createWakePlaylist: 'POST /v1/me/playlists + …/items (wake)',
   createOutputPlaylist: 'POST /v1/me/playlists + …/items',
   getGameOfTonesPlaylists: 'GET /v1/me/playlists',
   startPlaybackFromPlaylist: 'PUT /v1/me/player/play (context_uri)',
@@ -101,8 +100,6 @@ const SPOTIFY_SOURCE_ROUTE_HINT = {
   removeTracksFromPlaylist: 'DELETE /v1/playlists/{playlist_id}/items',
   replaceTrackInPlaylist: 'DELETE+POST /v1/playlists/{playlist_id}/items',
   _transferPlaybackDirect: 'PUT /v1/me/player',
-  _startPlaybackDirect: 'PUT /v1/me/player/play',
-  startConnectTrack: 'PUT /v1/me/player/play (play@0 then seek)',
 };
 
 /** @param {Record<string, string>} h */
@@ -288,7 +285,7 @@ const NON_ESSENTIAL_WEB_API_CALLERS = new Set([
   'getGameOfTonesPlaylists',
   'deleteMultiplePlaylists',
   'getCurrentUserProfileBrief',
-  // getCurrentUserProfile is essential for Start Game diagnostics (product / account mismatch).
+  'getCurrentUserProfile',
   'getCurrentTrack',
   'unfollowPlaylist',
   'deletePlaylist',
@@ -362,17 +359,6 @@ class SpotifyService {
     this._nonEssentialBlockedChecker = null;
     /** Optional () => void — fires after applyRateLimitQuarantine so rooms can halt advance storms. */
     this._onQuarantineApplied = null;
-    /** Reused Connect wake playlist id (uris→empty desktop fallback). */
-    this._connectWakePlaylistId = null;
-    this._connectWakeLastUris = null;
-    /**
-     * Desktop Connect often accepts uris play with 204 + empty Now Playing; context_uri binds.
-     * Once true (default after silence crisis), skip the doomed uris attempt on Start Game.
-     */
-    this._preferContextConnectPlay = true;
-    /** Cached GET /v1/me for Start Game free-check (avoid an extra paced call). */
-    this._cachedUserProfile = null;
-    this._cachedUserProfileAt = 0;
     /** Coalesce parallel ensureValidToken → refreshAccessToken. */
     this._refreshInflight = null;
   }
@@ -1491,396 +1477,16 @@ class SpotifyService {
     await this._ensureCanCallWebApi('startPlayback');
     
     try {
-      const positionMs = Math.max(0, Math.floor(Number(position) || 0));
       await this.spotifyApi.play({
         device_id: deviceId,
         uris: uris,
-        position_ms: positionMs,
+        position_ms: position
       });
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlayback');
       showLog.logSpotifyApiError('startPlayback', error);
       throw error;
     }
-  }
-
-  /**
-   * Direct PUT /v1/me/player/play — logs HTTP status. Omit device_id to target the
-   * already-active Connect device (desktop often needs this after empty Now Playing).
-   * Supports uris OR context_uri (+ optional offset). Always play@0 in the body.
-   */
-  async _startPlaybackDirect(
-    deviceId,
-    uris,
-    positionMs = 0,
-    { omitDeviceId = false, contextUri = null, offset = null } = {},
-  ) {
-    if (this.isQuarantined()) throw this._makeQuarantineError('startPlaybackDirect');
-    await this.ensureValidToken();
-    await this._paceBeforeWebApiRequest();
-    const pos = Math.max(0, Math.floor(Number(positionMs) || 0));
-    /** @type {Record<string, unknown>} */
-    const bodyObj = { position_ms: pos };
-    if (contextUri) {
-      bodyObj.context_uri = String(contextUri);
-      if (offset != null && typeof offset === 'object') bodyObj.offset = offset;
-    } else {
-      bodyObj.uris = Array.isArray(uris) ? uris : [uris];
-    }
-    const body = JSON.stringify(bodyObj);
-    const q =
-      !omitDeviceId && deviceId
-        ? `?device_id=${encodeURIComponent(String(deviceId))}`
-        : '';
-    return new Promise((resolve, reject) => {
-      webApi.record(1);
-      const req = https.request(
-        {
-          hostname: 'api.spotify.com',
-          path: `/v1/me/player/play${q}`,
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${this.accessToken}`,
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(body),
-          },
-        },
-        (res) => {
-          let data = '';
-          res.on('data', (chunk) => (data += chunk));
-          res.on('end', () => {
-            const statusCode = res.statusCode || 0;
-            const uri0 = bodyObj.uris?.[0] || bodyObj.context_uri || 'none';
-            routineSpotifyLog(
-              `▶️ direct play status=${statusCode} omitDevice=${!!omitDeviceId}` +
-                ` device=${omitDeviceId ? 'active' : deviceId || 'none'} uri=${uri0} pos=${pos}` +
-                ` body=${data ? data.slice(0, 180) : '(empty)'}`,
-            );
-            if (statusCode >= 200 && statusCode < 300) {
-              resolve({ statusCode, ok: true });
-              return;
-            }
-            if (statusCode === 429) {
-              const syn = new Error('Direct play rate limited');
-              syn.statusCode = 429;
-              syn.headers = res.headers || {};
-              syn.body = {};
-              try {
-                syn.body = data ? JSON.parse(data) : {};
-              } catch {
-                syn.body = {};
-              }
-              this.applyRateLimitQuarantine(syn, '_startPlaybackDirect', {
-                httpMethod: 'PUT',
-                httpPath: '/v1/me/player/play',
-              });
-              reject(syn);
-              return;
-            }
-            let parsed = {};
-            try {
-              parsed = data ? JSON.parse(data) : {};
-            } catch {
-              parsed = {};
-            }
-            const err = new Error(
-              parsed?.error?.message || `Direct play failed: ${statusCode} ${data}`,
-            );
-            err.statusCode = statusCode;
-            err.body = parsed;
-            reject(err);
-          });
-        },
-      );
-      req.on('error', reject);
-      req.write(body);
-      req.end();
-    });
-  }
-
-  /**
-   * Temporarily tighten Web API pacing for the few Start Game play/confirm calls.
-   * Restores the normal interval afterward so library traffic stays 429-safe.
-   */
-  async _withConnectBurstPacing(fn) {
-    const prev = this._pacingMinIntervalMs;
-    const burst = 100;
-    if (prev && prev > burst) {
-      this._pacingMinIntervalMs = burst;
-    }
-    try {
-      return await fn();
-    } finally {
-      this._pacingMinIntervalMs = prev;
-    }
-  }
-
-  /**
-   * Tiny playlist used only when uris leave Connect empty (desktop). Essential — not blocked
-   * by live-show lock (createTemporaryPlaylist is). Reuses one playlist per token to avoid
-   * create+items latency (~2 paced API calls) on every Start Game.
-   */
-  async createWakePlaylist(name, trackUris) {
-    await this._ensureCanCallWebApi('createWakePlaylist');
-    const uris = this._asSpotifyTrackUris(trackUris).slice(0, 5);
-    if (!uris.length) throw new Error('createWakePlaylist: no track uris');
-
-    if (this._connectWakePlaylistId) {
-      const sameTracks =
-        Array.isArray(this._connectWakeLastUris) &&
-        this._connectWakeLastUris.length === uris.length &&
-        this._connectWakeLastUris.every((u, i) => u === uris[i]);
-      if (sameTracks) {
-        routineSpotifyLog(`⏩ Wake playlist already loaded ${this._connectWakePlaylistId}`);
-        return this._connectWakePlaylistId;
-      }
-      try {
-        await this._webApiRequest(
-          'PUT',
-          `/v1/playlists/${encodeURIComponent(this._connectWakePlaylistId)}/items`,
-          { uris },
-          'createWakePlaylist',
-        );
-        this._connectWakeLastUris = uris;
-        routineSpotifyLog(
-          `✅ Wake playlist reused ${this._connectWakePlaylistId} (${uris.length} track(s))`,
-        );
-        return this._connectWakePlaylistId;
-      } catch (reuseErr) {
-        routineSpotifyLog(
-          `⚠️ Wake playlist reuse failed — creating new: ${reuseErr?.body?.error?.message || reuseErr?.message || reuseErr}`,
-        );
-        this._connectWakePlaylistId = null;
-        this._connectWakeLastUris = null;
-      }
-    }
-
-    const organizedName = `${GOT_OUTPUT_PLAYLIST_NAME_PREFIX}${String(name || 'Wake').slice(0, 80)}`;
-    const { body: createBody } = await this._webApiRequest(
-      'POST',
-      '/v1/me/playlists',
-      {
-        name: organizedName,
-        description: 'TEMPO Connect wake playlist (auto)',
-        public: false,
-      },
-      'createWakePlaylist',
-    );
-    const playlistId = createBody && createBody.id;
-    if (!playlistId) throw new Error('createWakePlaylist: missing id');
-    await this._webApiRequest(
-      'POST',
-      `/v1/playlists/${encodeURIComponent(playlistId)}/items`,
-      { uris },
-      'createWakePlaylist',
-    );
-    this._connectWakePlaylistId = playlistId;
-    this._connectWakeLastUris = uris;
-    routineSpotifyLog(`✅ Wake playlist ${playlistId} with ${uris.length} track(s)`);
-    return playlistId;
-  }
-
-  /**
-   * Connect-safe start: never put Early/Random offset in the play body.
-   * Prefer context_uri wake playlist first (desktop binds this; uris often 204+empty).
-   * Uses burst pacing so Start Game is ~1–3s instead of stacked 700ms gaps.
-   */
-  async startConnectTrack(deviceId, uris, seekMs = 0, expectedTrackId = null) {
-    return this._withConnectBurstPacing(async () => {
-    await this._ensureCanCallWebApi('startPlayback');
-    const trackUris = Array.isArray(uris) ? uris : [uris];
-    const trackId =
-      expectedTrackId ||
-      (typeof trackUris?.[0] === 'string' ? String(trackUris[0]).replace(/^spotify:track:/i, '') : '');
-    const targetSeek = Math.max(0, Math.floor(Number(seekMs) || 0));
-    let activeDeviceId = deviceId ? String(deviceId) : null;
-    let lastPlayStatus = null;
-    let lastDeviceName = 'n/a';
-    let wakePlaylistId = null;
-    const settle = (ms) => new Promise((r) => setTimeout(r, ms));
-
-    const readPlayer = async (label) => {
-      let state = null;
-      try {
-        state = await this.getCurrentPlaybackState();
-      } catch (_) {
-        state = null;
-      }
-      const id = state?.item?.id || null;
-      const playing = !!state?.is_playing;
-      const correct = !!trackId && id === trackId;
-      if (state?.device?.id) activeDeviceId = state.device.id;
-      if (state?.device?.name) lastDeviceName = state.device.name;
-      routineSpotifyLog(
-        `🔎 connect ${label}: is_playing=${playing} correct=${correct}` +
-          ` item=${id || 'none'} device=${state?.device?.id || 'none'}/${state?.device?.name || 'n/a'}`,
-      );
-      return { state, playing, correct, hasItem: !!id, ok: playing && correct };
-    };
-
-    const playUrisAtZero = async (omitDeviceId) => {
-      try {
-        const res = await this._startPlaybackDirect(activeDeviceId, trackUris, 0, {
-          omitDeviceId: !!omitDeviceId,
-        });
-        lastPlayStatus = res?.statusCode ?? 204;
-        return true;
-      } catch (directErr) {
-        lastPlayStatus = directErr?.statusCode ?? null;
-        routineSpotifyLog(
-          `⚠️ direct play@0 failed (${omitDeviceId ? 'no device_id' : 'with device_id'}): ${
-            directErr?.body?.error?.message || directErr?.message || directErr
-          }`,
-        );
-        if (!omitDeviceId && activeDeviceId) {
-          try {
-            await this.startPlayback(activeDeviceId, trackUris, 0);
-            lastPlayStatus = 204;
-            return true;
-          } catch (sdkErr) {
-            lastPlayStatus = sdkErr?.statusCode ?? lastPlayStatus;
-            routineSpotifyLog(`⚠️ SDK play@0 failed: ${sdkErr?.body?.error?.message || sdkErr?.message || sdkErr}`);
-            throw sdkErr;
-          }
-        }
-        throw directErr;
-      }
-    };
-
-    const playContextAtZero = async (playlistId, omitDeviceId) => {
-      const contextUri = `spotify:playlist:${playlistId}`;
-      const offset = trackId ? { uri: `spotify:track:${trackId}` } : { position: 0 };
-      try {
-        const res = await this._startPlaybackDirect(activeDeviceId, null, 0, {
-          omitDeviceId: !!omitDeviceId,
-          contextUri,
-          offset,
-        });
-        lastPlayStatus = res?.statusCode ?? 204;
-        return true;
-      } catch (ctxErr) {
-        lastPlayStatus = ctxErr?.statusCode ?? null;
-        routineSpotifyLog(
-          `⚠️ context_uri play@0 failed: ${ctxErr?.body?.error?.message || ctxErr?.message || ctxErr}`,
-        );
-        throw ctxErr;
-      }
-    };
-
-    const tryContextWake = async () => {
-      routineSpotifyLog('🔧 connect: context_uri wake playlist');
-      wakePlaylistId = await this.createWakePlaylist(
-        `Wake ${new Date().toISOString().slice(0, 16)}`,
-        trackUris,
-      );
-      await playContextAtZero(wakePlaylistId, false);
-      let check = await readPlayer('after-context');
-      if (!check.ok && check.hasItem) {
-        await settle(200);
-        check = await readPlayer('after-context-settle');
-      }
-      if (!check.hasItem) {
-        await playContextAtZero(wakePlaylistId, true);
-        check = await readPlayer('after-context-active');
-      }
-      if (check.ok) this._preferContextConnectPlay = true;
-      return check;
-    };
-
-    let check = { ok: false, hasItem: false, playing: false, correct: false, state: null };
-
-    // 1) Prefer context first — uris often return 204 with empty Now Playing on desktop Connect.
-    if (this._preferContextConnectPlay) {
-      try {
-        check = await tryContextWake();
-      } catch (wakePlErr) {
-        routineSpotifyLog(
-          `⚠️ context wake failed, falling back to uris: ${wakePlErr?.body?.error?.message || wakePlErr?.message || wakePlErr}`,
-        );
-      }
-    }
-
-    // 2) Uris path (fallback, or when preferContext is off)
-    if (!check.ok) {
-      await playUrisAtZero(false);
-      check = await readPlayer('after-play0');
-      if (!check.hasItem) {
-        // Don't burn a second poll — go context immediately if we haven't yet.
-        if (!wakePlaylistId) {
-          try {
-            check = await tryContextWake();
-          } catch (wakePlErr) {
-            routineSpotifyLog(
-              `⚠️ context wake after uris failed: ${wakePlErr?.body?.error?.message || wakePlErr?.message || wakePlErr}`,
-            );
-          }
-        }
-      } else if (!check.ok) {
-        await settle(200);
-        check = await readPlayer('after-play0-settle');
-      }
-    }
-
-    // 3) Last resort — omit-device + transfer wake
-    if (!check.hasItem && activeDeviceId) {
-      routineSpotifyLog('🔧 connect: still empty — last-resort omit-device + transfer wake');
-      try {
-        await playUrisAtZero(true);
-        check = await readPlayer('after-omit');
-      } catch (_) {}
-      if (!check.hasItem) {
-        try {
-          await this.transferPlayback(activeDeviceId, true);
-        } catch (wakeErr) {
-          routineSpotifyLog(`⚠️ wake transfer failed: ${wakeErr?.body?.error?.message || wakeErr?.message || wakeErr}`);
-        }
-        await settle(300);
-        await playUrisAtZero(false);
-        check = await readPlayer('after-wake');
-      }
-    }
-
-    if (!check.ok) {
-      const statusPart =
-        lastPlayStatus != null ? `play HTTP ${lastPlayStatus}` : 'play status unknown';
-      const err = new Error(
-        `Spotify Connect ${statusPart} but Now Playing stayed empty on ${lastDeviceName}` +
-          ` (item=none, is_playing=false). Desktop often needs Spotify open and recently playing —` +
-          ` play any song once in the Spotify app on that device, then Start Game again.`,
-      );
-      err.code = 'connect_empty_now_playing';
-      err.lastPlayStatus = lastPlayStatus;
-      err.deviceName = lastDeviceName;
-      err.deviceId = activeDeviceId;
-      err.wakePlaylistId = wakePlaylistId;
-      err.body = {
-        error: {
-          message: err.message,
-          status: lastPlayStatus || 502,
-          device: lastDeviceName,
-          device_id: activeDeviceId,
-        },
-      };
-      throw err;
-    }
-
-    if (targetSeek > 0) {
-      try {
-        await this.seekToPosition(targetSeek, activeDeviceId);
-        routineSpotifyLog(`✅ connect seek to Early offset ${targetSeek}ms after audio confirm`);
-      } catch (seekErr) {
-        routineSpotifyLog(`⚠️ connect seek failed (audio still playing at 0): ${seekErr?.message || seekErr}`);
-      }
-    }
-
-    return {
-      ok: true,
-      _resolvedDeviceId: activeDeviceId,
-      is_playing: true,
-      itemId: trackId,
-      wakePlaylistId,
-    };
-    });
   }
 
   // Pause playback
@@ -1891,14 +1497,6 @@ class SpotifyService {
       await this.spotifyApi.pause({ device_id: deviceId });
     } catch (error) {
       this._rethrowIfRateLimited(error, 'pausePlayback');
-      // Common when Connect has no active session (GET /me/player → 204) — not actionable.
-      if (this.isRestrictionError(error)) {
-        console.warn(
-          '⚠️ pausePlayback restriction (often no active Connect session):',
-          error?.body?.error?.message || error?.message || 'Restriction violated',
-        );
-        return;
-      }
       console.error('Error pausing playback:', error);
       throw error;
     }
@@ -1908,10 +1506,8 @@ class SpotifyService {
   async transferPlayback(deviceId, play = true) {
     await this._ensureCanCallWebApi('transferPlayback');
     try {
-      // spotify-web-api-node signature is (deviceIds: string[], options?: { play?: boolean }).
-      // Passing a single object made device_ids an object → Spotify "Malformed json".
-      await this.spotifyApi.transferMyPlayback([String(deviceId)], { play: !!play });
-      routineSpotifyLog(`🔀 Transferred playback to device ${deviceId} (play=${!!play})`);
+      await this.spotifyApi.transferMyPlayback({ deviceIds: [deviceId], play });
+      routineSpotifyLog(`🔀 Transferred playback to device ${deviceId} (play=${play})`);
     } catch (error) {
       this._rethrowIfRateLimited(error, 'transferPlayback');
       const msg = error?.body?.error?.message || error?.message || '';
@@ -1924,48 +1520,6 @@ class SpotifyService {
       }
       throw error;
     }
-  }
-
-  _normalizeDeviceName(name) {
-    return String(name || '')
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, ' ');
-  }
-
-  /**
-   * Prefer an is_active device when it matches the locked name, or when the locked id is gone.
-   * Falls back to a Computer with a similar name.
-   */
-  _pickConnectDeviceId(devices, preferredId, lockedNameHint) {
-    const list = Array.isArray(devices) ? devices : [];
-    if (list.length === 0) return preferredId || null;
-    const preferred = preferredId ? String(preferredId) : null;
-    const byId = preferred ? list.find((d) => d && d.id === preferred) : null;
-    const nameHint = this._normalizeDeviceName(
-      lockedNameHint || byId?.name || '',
-    );
-    const active = list.find((d) => d && d.is_active);
-    const namesMatch = (a, b) => {
-      const na = this._normalizeDeviceName(a);
-      const nb = this._normalizeDeviceName(b);
-      if (!na || !nb) return false;
-      return na === nb || na.includes(nb) || nb.includes(na);
-    };
-
-    if (active?.id) {
-      if (nameHint && namesMatch(active.name, nameHint)) return active.id;
-      if (!byId) return active.id;
-    }
-    if (byId?.id) return byId.id;
-    if (nameHint) {
-      const computers = list.filter((d) => d && /computer/i.test(String(d.type || '')));
-      const named =
-        computers.find((d) => namesMatch(d.name, nameHint)) ||
-        list.find((d) => namesMatch(d.name, nameHint));
-      if (named?.id) return named.id;
-    }
-    return preferred || active?.id || list[0]?.id || null;
   }
 
   async _transferPlaybackDirect(deviceId, play) {
@@ -2106,8 +1660,9 @@ class SpotifyService {
       const deviceId = devices[0].id;
       const deviceName = devices[0].name;
       try {
-        // Transfer only — do not setShuffle/setRepeat on an empty player (wedges desktop Connect).
         await this.transferPlayback(deviceId, false);
+        try { await this.setShuffleState(false, deviceId); } catch (_) {}
+        try { await this.setRepeatState('off', deviceId); } catch (_) {}
         routineSpotifyLog(`Successfully asserted control on device without playback: ${deviceName}`);
       } catch (_) {
         routineSpotifyLog(`Could not assert control on ${deviceName}, but device is available`);
@@ -2123,8 +1678,9 @@ class SpotifyService {
   async activateDevice(deviceId, pauseAfterMs = 0) {
     await this._ensureCanCallWebApi('activateDevice');
     try {
-      // Transfer only — shuffle/repeat after audio binds in startConnectTrack callers.
       await this.transferPlayback(deviceId, false);
+      try { await this.setShuffleState(false, deviceId); } catch (_) {}
+      try { await this.setRepeatState('off', deviceId); } catch (_) {}
       // pauseAfterMs retained for signature compatibility, but no autoplay occurs
       return true;
     } catch (error) {
@@ -2409,10 +1965,7 @@ class SpotifyService {
       await this.addTracksToPlaylist(playlistId, trackUris);
       
       routineSpotifyLog(`✅ Created permanent output playlist: ${organizedName} with ${trackUris.length} tracks`);
-      const externalUrl =
-        (createBody && createBody.external_urls && createBody.external_urls.spotify) ||
-        `https://open.spotify.com/playlist/${playlistId}`;
-      return { playlistId, name: organizedName, externalUrl };
+      return { playlistId, name: organizedName };
     } catch (error) {
       this._rethrowIfRateLimited(error, 'createOutputPlaylist');
       console.error('Error creating output playlist:', error);
@@ -2617,23 +2170,15 @@ class SpotifyService {
   async startPlaybackFromPlaylist(deviceId, playlistId, trackIndex = 0, positionMs = 0) {
     await this._ensureCanCallWebApi('startPlaybackFromPlaylist');
     try {
-      // Always start at 0 — large position_ms in play body empties Connect Now Playing.
-      const seekMs = Math.max(0, Math.floor(Number(positionMs) || 0));
+      // Simple playlist playback - no complex verification or repeat manipulation
       await this.spotifyApi.play({
         device_id: deviceId,
         context_uri: `spotify:playlist:${playlistId}`,
         offset: { position: trackIndex },
-        position_ms: 0,
+        position_ms: positionMs
       });
-      routineSpotifyLog(`✅ Started playlist playback: track ${trackIndex} at 0ms (seek→${seekMs}ms)`);
-      if (seekMs > 0) {
-        await new Promise((r) => setTimeout(r, 450));
-        try {
-          await this.seekToPosition(seekMs, deviceId);
-        } catch (seekErr) {
-          routineSpotifyLog(`⚠️ playlist seek failed: ${seekErr?.message || seekErr}`);
-        }
-      }
+      
+      routineSpotifyLog(`✅ Started playlist playback: track ${trackIndex} at ${positionMs}ms`);
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlaybackFromPlaylist');
       showLog.logSpotifyApiError('startPlaybackFromPlaylist', error);
@@ -2655,30 +2200,18 @@ class SpotifyService {
   }
 
   // Get current user profile (to verify correct Spotify account). Email omitted from scopes — field may be null.
-  async getCurrentUserProfile(options = {}) {
-    const maxAgeMs = Number(options.maxAgeMs);
-    const allowCache = options.allowCache !== false;
-    if (
-      allowCache &&
-      this._cachedUserProfile &&
-      Date.now() - (this._cachedUserProfileAt || 0) < (Number.isFinite(maxAgeMs) ? maxAgeMs : 10 * 60 * 1000)
-    ) {
-      return this._cachedUserProfile;
-    }
+  async getCurrentUserProfile() {
     await this._ensureCanCallWebApi('getCurrentUserProfile');
     try {
       const response = await this.spotifyApi.getMe();
       const b = response.body || {};
-      const profile = {
+      return {
         id: b.id,
         display_name: b.display_name,
         email: b.email != null ? b.email : null,
         product: b.product,
         country: b.country
       };
-      this._cachedUserProfile = profile;
-      this._cachedUserProfileAt = Date.now();
-      return profile;
     } catch (error) {
       this._rethrowIfRateLimited(error, 'getCurrentUserProfile');
       console.error('Error getting current user profile:', error);
