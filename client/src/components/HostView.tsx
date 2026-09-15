@@ -7719,17 +7719,50 @@ const HostView: React.FC = () => {
 
   const handleEndGameSession = () => {
     if (!socket) return;
-    
+
     const confirmed = window.confirm(
-      'Are you sure you want to end the entire game session?\n\n' +
-      'This will permanently end the game for all players.'
+      'End ALL of your active host rooms on this server?\n\n' +
+        'This clears orphaned live/paused sessions that can lock Spotify Connect, ' +
+        'and permanently ends the game for players in those rooms.',
     );
-    
-    if (confirmed) {
-      console.log('Ending game session...');
-      socket.emit('end-game-session', { roomId });
-      addLog('Ending game session', 'info');
-    }
+
+    if (!confirmed) return;
+
+    console.log('Ending all host sessions...');
+    const onResult = (data: {
+      ok?: boolean;
+      endedRoomIds?: string[];
+      error?: string;
+      message?: string;
+    }) => {
+      socket.off('end-all-host-sessions-result', onResult);
+      if (data?.ok) {
+        const n = Array.isArray(data.endedRoomIds) ? data.endedRoomIds.length : 0;
+        addLog(
+          n > 0
+            ? `Ended ${n} active host room${n === 1 ? '' : 's'}: ${(data.endedRoomIds || []).join(', ')}`
+            : 'No active host rooms to end',
+          'info',
+        );
+        showToast(
+          n > 0 ? `Ended ${n} active room${n === 1 ? '' : 's'}` : 'No active rooms found',
+          'info',
+        );
+        setRoundComplete(null);
+        setGameState('ended');
+        setIsPlaying(false);
+        setGamePaused(false);
+      } else {
+        addLog(`End all rooms failed: ${data?.message || data?.error || 'unknown'}`, 'error');
+        showToast(data?.message || 'Could not end all rooms', 'error');
+      }
+    };
+    socket.on('end-all-host-sessions-result', onResult);
+    socket.emit('end-all-host-sessions', { roomId });
+    window.setTimeout(() => {
+      socket.off('end-all-host-sessions-result', onResult);
+    }, 15000);
+    addLog('Ending all active host sessions…', 'info');
   };
 
   /** Close round-complete celebration and reveal Tonight's winners on the projector. */
@@ -15355,7 +15388,7 @@ const HostView: React.FC = () => {
                   textUnderlineOffset: 3,
                 }}
               >
-                End entire event
+                End all active rooms
               </button>
             </div>
 
