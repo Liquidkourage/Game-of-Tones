@@ -12130,71 +12130,46 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
 
     let startMs = 0;
     try {
-      // Prefer transfer first (saves one paced GET /me/player/devices when the device is already valid).
-      let transferred = false;
-      try {
-        await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
-        transferred = true;
-      } catch (e) {
-        routineServerLog('⚠️ transfer-first failed; resolving device list…', e?.body?.error?.message || e?.message || e);
-      }
-      if (!transferred) {
-        const spPlay = spotifyFor(roomId);
-        let devices = await spPlay.getUserDevices();
-        let deviceInList = devices.find((d) => d.id === targetDeviceId);
-        if (!deviceInList) {
-          routineServerLog('⚠️ Locked device not in list; attempting activation...');
-          try {
-            await spPlay.activateDevice(targetDeviceId);
-          } catch (activateErr) {
-            routineServerLog(
-              '⚠️ activateDevice failed:',
-              activateErr?.body?.error?.message || activateErr?.message || activateErr,
-            );
-          }
-          spPlay.invalidateUserDevicesCache();
-          devices = await spPlay.getUserDevices({ forceRefresh: true });
-          deviceInList = devices.find((d) => d.id === targetDeviceId);
-          if (!deviceInList) {
-            io.to(roomId).emit('playback-error', {
-              message:
-                'Spotify playback device is offline or missing. Open Spotify on that device (or pick another device in Connection → Refresh devices), then Start Game again.',
-              type: 'device_offline',
-            });
-            return;
-          }
-        }
-        await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
-      }
-      // Skip-based queue clearing removed to avoid context hijacks
-      // Enforce deterministic playback mode to avoid context/radio fallbacks with delays
-      try { await spotifyFor(roomId).withRetries('setShuffle(false)', () => spotifyFor(roomId).setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
-      await new Promise(resolve => setTimeout(resolve, 100));
-      // First track always starts via URIs (temp playlist, if any, is still building asynchronously)
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Skip transfer(play=false) before first play — it primes Connect paused/empty.
       startMs = computeSpotifySnippetRandomStartMs(room, firstSong, 'auto first');
-      routineServerLog(`🎯 Starting first song with randomized offset: ${startMs}ms (${Math.floor(startMs / 1000)}s) mode=${room.randomStarts}`);
-      
-      await spotifyFor(roomId).withRetries('startPlayback(initial)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+      routineServerLog(
+        `🎯 Starting first song play@0 then seek→${startMs}ms (${Math.floor(startMs / 1000)}s) mode=${room.randomStarts}`,
+      );
+
+      await spotifyFor(roomId).startPlayback(
+        targetDeviceId,
+        [`spotify:track:${firstSong.id}`],
+        startMs,
+      );
       try {
-        await spotifyFor(roomId).withRetries('setRepeat(track,initial)', () => spotifyFor(roomId).setRepeatState('track', targetDeviceId), { attempts: 2, backoffMs: 200 });
+        await spotifyFor(roomId).setShuffleState(false, targetDeviceId);
       } catch (_) {}
+      try {
+        await spotifyFor(roomId).setRepeatState('track', targetDeviceId);
+      } catch (_) {}
+
+      await new Promise((r) => setTimeout(r, 300));
+      const confirm = await spotifyFor(roomId).getCurrentPlaybackState();
+      if (!confirm?.is_playing || confirm?.item?.id !== firstSong.id) {
+        const err = new Error(
+          `Spotify did not confirm playing audio (is_playing=${!!confirm?.is_playing}, item=${confirm?.item?.id || 'none'}).`,
+        );
+        err.code = 'spotify_not_playing';
+        throw err;
+      }
+
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId}`);
-      try { 
-        const r = rooms.get(roomId); 
+      try {
+        const r = rooms.get(roomId);
         if (r) {
           r.songStartAtMs = Date.now();
-          r.currentSongStartMs = startMs; // Store for restart correction
+          r.currentSongStartMs = startMs;
         }
       } catch {}
-      
-      // Brief settle before volume API (shorter than historical 800ms — audio already started)
-      await new Promise(resolve => setTimeout(resolve, 400));
-      
-      // Set initial volume to 100% (or room's saved volume)
+
       try {
         const initialVolume = room.volume || 100;
-        await spotifyFor(roomId).withRetries('setVolume(initial)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
+        await spotifyFor(roomId).setVolume(initialVolume, targetDeviceId);
         routineServerLog(`🔊 Set initial volume to ${initialVolume}%`);
       } catch (volumeError) {
         console.error('❌ Error setting initial volume:', volumeError);
@@ -12202,51 +12177,13 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     } catch (playbackError) {
       console.error('❌ Error starting playback in strict mode:', playbackError);
       const message = playbackError?.body?.error?.message || playbackError?.message || '';
-      if (/token expired/i.test(message)) {
-        routineServerLog('🔄 Token expired, refreshing and retrying...');
-        try {
-          const spRefresh = spotifyFor(roomId);
-          await spRefresh.refreshAccessToken();
-          spRefresh.invalidateUserDevicesCache();
-          const devicesAfter = await spRefresh.getUserDevices({ forceRefresh: true });
-          const stillMissing = !devicesAfter.find((d) => d.id === targetDeviceId);
-          if (stillMissing) {
-            routineServerLog('⚠️ Locked device still missing after refresh; attempting activation...');
-            await spRefresh.activateDevice(targetDeviceId);
-          }
-          await spotifyFor(roomId).withRetries('transferPlayback(after-refresh)', () => spotifyFor(roomId).transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
-          // Skip-based queue clearing removed to avoid context hijacks
-          await spotifyFor(roomId).withRetries('startPlayback(after-refresh)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
-          try {
-            await spotifyFor(roomId).withRetries('setRepeat(track,after-refresh)', () => spotifyFor(roomId).setRepeatState('track', targetDeviceId), { attempts: 2, backoffMs: 200 });
-          } catch (_) {}
-          routineServerLog(`✅ Successfully started playback after token refresh`);
-          try {
-            const r = rooms.get(roomId);
-            if (r) {
-              r.songStartAtMs = Date.now();
-              r.currentSongStartMs = startMs;
-            }
-          } catch {}
-          
-          await new Promise(resolve => setTimeout(resolve, 400));
-          
-          // Set initial volume to 100% (or room's saved volume)
-          try {
-            const initialVolume = room.volume || 100;
-            await spotifyFor(roomId).withRetries('setVolume(after-refresh)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
-            routineServerLog(`🔊 Set initial volume to ${initialVolume}% after token refresh`);
-          } catch (volumeError) {
-            console.error('❌ Error setting initial volume after token refresh:', volumeError);
-          }
-        } catch (refreshError) {
-          console.error('❌ Error after token refresh:', refreshError);
-          return;
-        }
-      } else {
-        io.to(roomId).emit('playback-error', { message: 'Unable to start on locked device. Ensure it is online and try again.' });
-        return;
-      }
+      io.to(roomId).emit('playback-error', {
+        message:
+          message ||
+          'Spotify did not start audio on the locked device. Open Spotify, press play once, then Start Game.',
+        type: playbackError?.code || 'playback_start_failed',
+      });
+      return;
     }
 
     // Track called song
