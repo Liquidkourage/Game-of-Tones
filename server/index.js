@@ -12468,16 +12468,13 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           ` uri=spotify:track:${firstSong.id}`,
       );
 
-      const startState = await spotifyFor(roomId).withRetries(
-        'startConnectTrack(initial)',
-        () =>
-          spotifyFor(roomId).startConnectTrack(
-            targetDeviceId,
-            [`spotify:track:${firstSong.id}`],
-            startMs,
-            firstSong.id,
-          ),
-        { attempts: 2, backoffMs: 500 },
+      // One attempt — startConnectTrack already has its own recovery. Retrying the whole
+      // ladder (with 700ms API pacing) was stacking ~30s before audio.
+      const startState = await spotifyFor(roomId).startConnectTrack(
+        targetDeviceId,
+        [`spotify:track:${firstSong.id}`],
+        startMs,
+        firstSong.id,
       );
       if (startState?._resolvedDeviceId && startState._resolvedDeviceId !== targetDeviceId) {
         targetDeviceId = startState._resolvedDeviceId;
@@ -12487,59 +12484,20 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         room.temporaryPlaylistId = startState.wakePlaylistId;
       }
 
-      // Shuffle/repeat AFTER audio binds — calling them on an empty Connect session can wedge desktop.
-      try {
-        await spotifyFor(roomId).withRetries(
-          'setShuffle(false,after-play)',
-          () => spotifyFor(roomId).setShuffleState(false, targetDeviceId),
-          { attempts: 2, backoffMs: 200 },
-        );
-      } catch (_) {}
-      try {
-        await spotifyFor(roomId).withRetries(
-          'setRepeat(track,initial)',
-          () => spotifyFor(roomId).setRepeatState('track', targetDeviceId),
-          { attempts: 2, backoffMs: 200 },
-        );
-      } catch (_) {}
-
-      // Confirm audio before marking the call / starting progression.
-      for (let i = 0; i < 4; i++) {
-        await new Promise((r) => setTimeout(r, 400));
-        const state = await spotifyFor(roomId).getCurrentPlaybackState();
-        const playing = !!state?.is_playing;
-        const currentId = state?.item?.id;
-        const correctTrack = currentId === firstSong.id;
-        if (state?.device?.name) playDiag.deviceName = state.device.name;
-        routineServerLog(
-          `🔎 First-song verify ${i + 1}/4: is_playing=${playing} correct_track=${correctTrack} item=${currentId || 'none'}`,
-        );
-        if (playing && correctTrack) {
-          audioConfirmed = true;
-          break;
-        }
-        if (i < 3) {
-          try {
-            await spotifyFor(roomId).startConnectTrack(
-              targetDeviceId,
-              [`spotify:track:${firstSong.id}`],
-              0,
-              firstSong.id,
-            );
-          } catch (retryErr) {
-            playDiag.playStatus = retryErr?.lastPlayStatus ?? retryErr?.body?.error?.status ?? playDiag.playStatus;
-            if (retryErr?.deviceName) playDiag.deviceName = retryErr.deviceName;
-            routineServerLog(
-              `⚠️ First-song re-start failed: ${retryErr?.body?.error?.message || retryErr?.message || retryErr}`,
-            );
-          }
-        }
-      }
-
+      // startConnectTrack only returns after Now Playing confirms — trust it.
+      audioConfirmed = !!startState?.ok;
       if (!audioConfirmed) {
         haltRoomOnSilentSpotifyPlayback(roomId, room, undefined, playDiag);
         return;
       }
+
+      // Shuffle/repeat AFTER audio binds — do not re-run startConnectTrack here.
+      try {
+        await spotifyFor(roomId).setShuffleState(false, targetDeviceId);
+      } catch (_) {}
+      try {
+        await spotifyFor(roomId).setRepeatState('track', targetDeviceId);
+      } catch (_) {}
 
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId}`);
       try {
