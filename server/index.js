@@ -10514,6 +10514,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null, options =
               explicit: s.explicit === true,
               youtubeMusic: s.youtubeMusic === true,
             appleMusic: s.appleMusic === true,
+              ...durationFieldsFromSong(s),
               sourcePlaylistId:
                 s.sourcePlaylistId != null && String(s.sourcePlaylistId).trim() !== ''
                   ? String(s.sourcePlaylistId)
@@ -10543,6 +10544,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null, options =
             explicit: s.explicit === true,
             youtubeMusic: s.youtubeMusic === true,
             appleMusic: s.appleMusic === true,
+            ...durationFieldsFromSong(s),
             sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
             sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
           }));
@@ -17537,6 +17539,7 @@ app.post('/api/spotify/create-output-playlist', async (req, res) => {
       success: true,
       playlistId: result.playlistId,
       playlistName: result.name,
+      playlistUrl: result.externalUrl || `https://open.spotify.com/playlist/${result.playlistId}`,
       trackCount: trackIds.length
     });
   } catch (error) {

@@ -31,7 +31,11 @@ const PlayerAccountGate: React.FC<Props> = ({
   initialGuestName = '',
   initialError = null,
 }) => {
-  const [mode, setMode] = useState<Mode>(() => (initialGuestName.trim() ? 'guest' : initialMode));
+  const [mode, setMode] = useState<Mode>(() => {
+    // Explicit Sign in / Sign up from More must win over guest-name prefill.
+    if (initialMode === 'login' || initialMode === 'signup') return initialMode;
+    return initialGuestName.trim() ? 'guest' : initialMode;
+  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');

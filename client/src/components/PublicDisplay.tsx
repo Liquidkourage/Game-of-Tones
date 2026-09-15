@@ -3841,8 +3841,8 @@ const PublicDisplay: React.FC = () => {
       textOverflow: 'clip',
       marginTop: kind === 'artist' ? (fullCard ? Math.max(6, artistGapPx * 0.5) : artistGapPx) : 0,
       paddingBottom: 0,
-      // Artist must remain visible — never shrink it away when the stack is tight.
-      flexShrink: kind === 'artist' ? 0 : 1,
+      // Never shrink title under its measured line stack — that mid-glyph guillotines wrap line 2.
+      flexShrink: 0,
       minHeight: 0,
     };
     return common;

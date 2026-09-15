@@ -632,8 +632,35 @@ interface EventRound {
 
 interface RoundPlayRecap {
   playedSongIds: string[];
+  /** Full call order with titles (for lists + Spotify playlist at round end). */
+  playedSongs?: Array<{ id: string; name: string; artist: string }>;
   /** Finalized-pool tracks that were never called in this round. */
   leftoverSongs: Song[];
+  /** Auto-created Spotify playlist of this round's played tracks (if connected). */
+  spotifyPlayedPlaylistId?: string;
+  spotifyPlayedPlaylistName?: string;
+  spotifyPlayedPlaylistUrl?: string;
+}
+
+/** Spotify Web API track ids are 22 alphanumeric chars (not YouTube/Apple ids). */
+function isLikelySpotifyTrackId(id: string): boolean {
+  return /^[A-Za-z0-9]{22}$/.test(String(id || '').trim());
+}
+
+function normalizePlayedSongEntry(
+  raw: { id?: string; name?: string; artist?: string } | string,
+): { id: string; name: string; artist: string } | null {
+  if (typeof raw === 'string') {
+    const id = raw.trim();
+    return id ? { id, name: '', artist: '' } : null;
+  }
+  const id = String(raw?.id || '').trim();
+  if (!id) return null;
+  return {
+    id,
+    name: typeof raw.name === 'string' ? raw.name : '',
+    artist: typeof raw.artist === 'string' ? raw.artist : '',
+  };
 }
 
 /** Virtual library row built from completed rounds' unplayed tracks. Server-side `isInternalPlaylistId`
@@ -892,9 +919,13 @@ function isTrackPlayedAnywhere(
  *  virtual playlist. Pool = first candidate containing the first played id (sanity), else first non-empty. */
 function stampRoundPlayRecap(
   round: EventRound,
-  playedIds: string[],
+  playedRaw: Array<{ id: string; name?: string; artist?: string } | string>,
   poolCandidates: Array<Song[] | null | undefined>,
 ): EventRound {
+  const parsed = playedRaw
+    .map(normalizePlayedSongEntry)
+    .filter((s): s is { id: string; name: string; artist: string } => s != null);
+  const playedIds = parsed.map((s) => s.id);
   const pools = poolCandidates
     .map((p) => (Array.isArray(p) ? p : []))
     .filter((p) => p.length > 0);
@@ -906,15 +937,22 @@ function stampRoundPlayRecap(
   }
   const played = new Set(playedIds);
   const playedLabels = new Set<string>();
-  for (const id of playedIds) {
-    const match = pool.find((s) => s?.id === id);
-    const label = trackTitleArtistDedupKey(match ?? { id });
+  const playedSongs = parsed.map((entry) => {
+    const match = pool.find((s) => s?.id === entry.id);
+    const row = {
+      id: entry.id,
+      name: entry.name || match?.name || '',
+      artist: entry.artist || match?.artist || '',
+    };
+    const label = trackTitleArtistDedupKey(match ?? row);
     if (label) playedLabels.add(label);
-  }
+    return row;
+  });
   return {
     ...round,
     playRecap: {
       playedSongIds: [...playedIds],
+      playedSongs,
       leftoverSongs: pool
         .filter((s) => {
           if (!s?.id || played.has(s.id)) return false;
@@ -1800,6 +1838,19 @@ const HostView: React.FC = () => {
   /** Latest played list for round-completion recaps (completion sites run inside setState callbacks). */
   const playedInOrderRef = useRef(playedInOrder);
   playedInOrderRef.current = playedInOrder;
+  /** Round-end playlist create status (round-complete modal + Settings). */
+  const [roundPlayedPlaylistUi, setRoundPlayedPlaylistUi] = useState<{
+    creating: boolean;
+    count: number;
+    playlistUrl?: string;
+    playlistName?: string;
+    error?: string;
+    skippedReason?: string;
+  } | null>(null);
+  const playedPlaylistInFlightRef = useRef<Set<number>>(new Set());
+  const ensurePlayedPlaylistForRoundRef = useRef<(roundIndex: number) => Promise<void>>(
+    async () => undefined,
+  );
   const [showRooms, setShowRooms] = useState<boolean>(false);
   const [rooms, setRooms] = useState<Array<any>>([]);
   const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
@@ -3975,6 +4026,10 @@ const HostView: React.FC = () => {
       if (data.approved) {
         if (data.roundComplete) {
           setRoundComplete(data);
+          setRoundPlayedPlaylistUi({
+            creating: false,
+            count: playedInOrderRef.current.length,
+          });
           setGamePaused(true);
           setIsPlaying(false);
           setCurrentSong(null);
@@ -3983,13 +4038,14 @@ const HostView: React.FC = () => {
           if (roomId) {
             writeActiveHostRoom({ roomId, gameState: 'waiting', updatedAt: Date.now() });
           }
+          const completedRoundIndex = currentRoundIndexRef.current;
           setEventRounds((prev) => {
-            const cur = currentRoundIndexRef.current;
+            const cur = completedRoundIndex;
             if (cur < 0 || cur >= prev.length || prev[cur].status === 'completed') return prev;
             const next = [...prev];
             next[cur] = stampRoundPlayRecap(
               { ...next[cur], status: 'completed', completedAt: Date.now() },
-              playedInOrderRef.current.map((p) => p.id),
+              playedInOrderRef.current,
               [finalizedOrderRef.current, next[cur].savedMixSnapshot?.songs],
             );
             try {
@@ -3999,6 +4055,7 @@ const HostView: React.FC = () => {
             }
             return next;
           });
+          void ensurePlayedPlaylistForRoundRef.current(completedRoundIndex);
           addLog(`Round ${data.roundNumber} complete - ${data.playerName} wins!`, 'info');
           console.log('Round complete, showing options to host');
         } else if (data.gameEnded) {
@@ -7682,6 +7739,242 @@ const HostView: React.FC = () => {
     socket.emit('reveal-winners-board', { roomId });
   }, [socket, roomId]);
 
+  /**
+   * After a round is stamped with playRecap: show the played list and, when Spotify is
+   * connected, auto-create a permanent "GOT — Played …" playlist in call order.
+   */
+  const ensurePlayedPlaylistForRound = useCallback(
+    async (roundIndex: number) => {
+      if (roundIndex < 0) return;
+      // Let setEventRounds commit so eventRoundsRef has the stamped playRecap.
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 0);
+      });
+
+      const round = eventRoundsRef.current[roundIndex];
+      if (!round) return;
+
+      const songs =
+        round.playRecap?.playedSongs && round.playRecap.playedSongs.length > 0
+          ? round.playRecap.playedSongs
+          : playedInOrderRef.current.map((s) => ({
+              id: s.id,
+              name: s.name,
+              artist: s.artist,
+            }));
+
+      if (round.playRecap?.spotifyPlayedPlaylistUrl || round.playRecap?.spotifyPlayedPlaylistId) {
+        const url =
+          round.playRecap.spotifyPlayedPlaylistUrl ||
+          `https://open.spotify.com/playlist/${round.playRecap.spotifyPlayedPlaylistId}`;
+        setRoundPlayedPlaylistUi({
+          creating: false,
+          count: songs.length,
+          playlistUrl: url,
+          playlistName: round.playRecap.spotifyPlayedPlaylistName,
+        });
+        return;
+      }
+
+      if (songs.length === 0) {
+        setRoundPlayedPlaylistUi({
+          creating: false,
+          count: 0,
+          skippedReason: 'No songs were recorded as played this round.',
+        });
+        return;
+      }
+
+      const spotifyIds = Array.from(
+        new Set(songs.map((s) => s.id).filter((id) => isLikelySpotifyTrackId(id))),
+      );
+
+      setRoundPlayedPlaylistUi({
+        creating: false,
+        count: songs.length,
+        skippedReason:
+          spotifyIds.length === 0
+            ? 'Played list saved. Spotify playlist skipped (no Spotify track ids — e.g. YouTube/Apple night).'
+            : !readHostSpotifyWebEnabled() || !isSpotifyConnectedRef.current
+              ? 'Played list saved. Connect Spotify to auto-create a playlist.'
+              : undefined,
+      });
+
+      if (spotifyIds.length === 0) return;
+      if (!readHostSpotifyWebEnabled() || !isSpotifyConnectedRef.current) return;
+      if (playedPlaylistInFlightRef.current.has(roundIndex)) return;
+      playedPlaylistInFlightRef.current.add(roundIndex);
+
+      setRoundPlayedPlaylistUi({
+        creating: true,
+        count: songs.length,
+      });
+
+      const playlistName = `Played — ${round.name || `Round ${roundIndex + 1}`} — ${roomId || 'room'}`;
+      try {
+        const response = await hostFetch(`${API_BASE || ''}/api/spotify/create-output-playlist`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: playlistName,
+            trackIds: spotifyIds,
+            description: `Songs played in call order — ${round.name || `Round ${roundIndex + 1}`} — Room ${roomId}`,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || data?.message || 'Failed to create played playlist');
+        }
+        const playlistUrl =
+          typeof data.playlistUrl === 'string' && data.playlistUrl
+            ? data.playlistUrl
+            : `https://open.spotify.com/playlist/${data.playlistId}`;
+        setEventRounds((prev) => {
+          if (roundIndex < 0 || roundIndex >= prev.length) return prev;
+          const next = [...prev];
+          const r = next[roundIndex];
+          const baseRecap = r.playRecap ?? {
+            playedSongIds: songs.map((s) => s.id),
+            playedSongs: songs,
+            leftoverSongs: [],
+          };
+          next[roundIndex] = {
+            ...r,
+            playRecap: {
+              ...baseRecap,
+              spotifyPlayedPlaylistId: data.playlistId,
+              spotifyPlayedPlaylistName: data.playlistName || playlistName,
+              spotifyPlayedPlaylistUrl: playlistUrl,
+            },
+          };
+          try {
+            if (roomId) localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
+          } catch {
+            /* ignore */
+          }
+          return next;
+        });
+        setRoundPlayedPlaylistUi({
+          creating: false,
+          count: songs.length,
+          playlistUrl,
+          playlistName: data.playlistName || playlistName,
+        });
+        addLog(
+          `Created Spotify playlist of ${spotifyIds.length} played song${spotifyIds.length === 1 ? '' : 's'}: ${data.playlistName || playlistName}`,
+          'info',
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        setRoundPlayedPlaylistUi({
+          creating: false,
+          count: songs.length,
+          error: message,
+        });
+        addLog(`Could not create played playlist: ${message}`, 'warn');
+      } finally {
+        playedPlaylistInFlightRef.current.delete(roundIndex);
+      }
+    },
+    [roomId, addLog],
+  );
+  ensurePlayedPlaylistForRoundRef.current = ensurePlayedPlaylistForRound;
+
+  /** Aggregate tonight's played tracks (completed rounds + current call log) into one Spotify playlist. */
+  const createTonightPlayedPlaylist = useCallback(async () => {
+    const seen = new Set<string>();
+    const songs: Array<{ id: string; name: string; artist: string }> = [];
+    for (const round of eventRoundsRef.current) {
+      const rows =
+        round.playRecap?.playedSongs && round.playRecap.playedSongs.length > 0
+          ? round.playRecap.playedSongs
+          : (round.playRecap?.playedSongIds || []).map((id) => ({ id, name: '', artist: '' }));
+      for (const row of rows) {
+        if (!row?.id || seen.has(row.id)) continue;
+        seen.add(row.id);
+        songs.push({
+          id: row.id,
+          name: row.name || '',
+          artist: row.artist || '',
+        });
+      }
+    }
+    for (const row of playedInOrderRef.current) {
+      if (!row?.id || seen.has(row.id)) continue;
+      seen.add(row.id);
+      songs.push(row);
+    }
+
+    if (songs.length === 0) {
+      alert('No played songs recorded yet tonight.');
+      return;
+    }
+
+    const spotifyIds = Array.from(
+      new Set(songs.map((s) => s.id).filter((id) => isLikelySpotifyTrackId(id))),
+    );
+    if (spotifyIds.length === 0) {
+      const lines = songs
+        .map((s, i) => `${i + 1}. ${s.name || s.id}${s.artist ? ` — ${s.artist}` : ''}`)
+        .join('\n');
+      try {
+        await navigator.clipboard.writeText(lines);
+        alert(
+          `Saved ${songs.length} played song(s) to the clipboard (no Spotify track ids to playlist).`,
+        );
+      } catch {
+        alert(`Played tonight (${songs.length}):\n\n${lines}`);
+      }
+      return;
+    }
+
+    if (!readHostSpotifyWebEnabled() || !isSpotifyConnectedRef.current) {
+      alert('Connect Spotify from Connection first.');
+      return;
+    }
+
+    const playlistName =
+      prompt(
+        'Name for tonight’s played playlist:',
+        `Played tonight — ${roomId || 'room'} — ${new Date().toLocaleDateString()}`,
+      ) || '';
+    if (!playlistName.trim()) return;
+
+    try {
+      const response = await hostFetch(`${API_BASE || ''}/api/spotify/create-output-playlist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: playlistName.trim(),
+          trackIds: spotifyIds,
+          description: `All songs played tonight — Room ${roomId} — ${songs.length} unique calls`,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || data?.message || 'Failed to create playlist');
+      }
+      const playlistUrl =
+        typeof data.playlistUrl === 'string' && data.playlistUrl
+          ? data.playlistUrl
+          : `https://open.spotify.com/playlist/${data.playlistId}`;
+      addLog(
+        `Created tonight’s played playlist: ${data.playlistName} (${spotifyIds.length} songs)`,
+        'info',
+      );
+      alert(
+        `Created playlist: ${data.playlistName}\n${spotifyIds.length} Spotify tracks\n\n${playlistUrl}`,
+      );
+      if (playlistUrl) {
+        window.open(playlistUrl, '_blank', 'noopener,noreferrer');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      addLog(`Failed to create tonight’s played playlist: ${message}`, 'error');
+      alert(`Failed to create playlist: ${message}`);
+    }
+  }, [roomId, addLog]);
+
   /** Close round-complete celebration without starting the next round or ending the session. */
   const dismissRoundCompleteModal = useCallback(() => {
     revealWinnersBoardAfterRound();
@@ -7691,7 +7984,7 @@ const HostView: React.FC = () => {
       const next = [...prev];
       next[cur] = stampRoundPlayRecap(
         { ...next[cur], status: 'completed', completedAt: Date.now() },
-        playedInOrderRef.current.map((p) => p.id),
+        playedInOrderRef.current,
         [finalizedOrderRef.current, next[cur].savedMixSnapshot?.songs],
       );
       try {
@@ -7701,13 +7994,14 @@ const HostView: React.FC = () => {
       }
       return next;
     });
+    void ensurePlayedPlaylistForRound(currentRoundIndexRef.current);
     setRoundComplete(null);
     setGamePaused(true);
     gameStateRef.current = 'waiting';
     setGameState('waiting');
     showToast('Round marked complete — winners list is on the projector until you set the next round.', 'info');
     addLog('Round complete modal dismissed — winners board revealed', 'info');
-  }, [revealWinnersBoardAfterRound, showToast, addLog, roomId]);
+  }, [revealWinnersBoardAfterRound, showToast, addLog, roomId, ensurePlayedPlaylistForRound]);
 
 
 
@@ -10045,6 +10339,12 @@ const HostView: React.FC = () => {
     // Mark current round as completed if it exists (recap only on the transition — an
     // already-completed round keeps the played/leftover recap stamped when it finished).
     const updatedRounds = [...eventRounds];
+    const prevRoundIndexForPlaylist =
+      currentRoundIndex >= 0 &&
+      currentRoundIndex < updatedRounds.length &&
+      updatedRounds[currentRoundIndex].status !== 'completed'
+        ? currentRoundIndex
+        : -1;
     if (currentRoundIndex >= 0 && currentRoundIndex < updatedRounds.length) {
       const prevRound = updatedRounds[currentRoundIndex];
       updatedRounds[currentRoundIndex] =
@@ -10052,7 +10352,7 @@ const HostView: React.FC = () => {
           ? prevRound
           : stampRoundPlayRecap(
               { ...prevRound, status: 'completed', completedAt: Date.now() },
-              playedInOrderRef.current.map((p) => p.id),
+              playedInOrderRef.current,
               [finalizedOrderRef.current, prevRound.savedMixSnapshot?.songs],
             );
     }
@@ -10063,6 +10363,9 @@ const HostView: React.FC = () => {
       startedAt: Date.now(),
     };
     setEventRounds(updatedRounds);
+    if (prevRoundIndexForPlaylist >= 0) {
+      void ensurePlayedPlaylistForRound(prevRoundIndexForPlaylist);
+    }
     setCurrentRoundIndex(roundIndex);
 
     clearPrepRoundCallLogUi();
@@ -10146,6 +10449,7 @@ const HostView: React.FC = () => {
     showToast,
     showHostAckNotification,
     resolveMixPlaylistRowsForRound,
+    ensurePlayedPlaylistForRound,
   ]);
 
   // Advanced round management functions
@@ -10167,7 +10471,7 @@ const HostView: React.FC = () => {
       const next = [...prev];
       next[cur] = stampRoundPlayRecap(
         { ...next[cur], status: 'completed', completedAt: Date.now() },
-        playedInOrderRef.current.map((p) => p.id),
+        playedInOrderRef.current,
         [finalizedOrderRef.current, next[cur].savedMixSnapshot?.songs],
       );
       try {
@@ -10178,7 +10482,8 @@ const HostView: React.FC = () => {
       addLog(`Completed ${next[cur].name}`, 'info');
       return next;
     });
-  }, [roomId, addLog]);
+    void ensurePlayedPlaylistForRound(currentRoundIndexRef.current);
+  }, [roomId, addLog, ensurePlayedPlaylistForRound]);
 
   const emitRoundPlaybackReset = useCallback(() => {
     if (!socket || !roomId) return false;
@@ -10413,17 +10718,18 @@ const HostView: React.FC = () => {
     applyRoundBingoToHost(round, { restorePlaybackFromSnapshot: true });
     setRoundBuilderFocusIndex(nextIndex);
     setCurrentRoundIndex(nextIndex);
+    const prevIndexForPlaylist = currentRoundIndexRef.current;
     setEventRounds((prev) => {
       const now = Date.now();
       const next = [...prev];
-      const prevIndex = currentRoundIndexRef.current;
+      const prevIndex = prevIndexForPlaylist;
       if (prevIndex >= 0 && prevIndex < next.length && prevIndex !== nextIndex) {
         next[prevIndex] =
           next[prevIndex].status === 'completed'
             ? next[prevIndex]
             : stampRoundPlayRecap(
                 { ...next[prevIndex], status: 'completed', completedAt: now },
-                playedInOrderRef.current.map((p) => p.id),
+                playedInOrderRef.current,
                 [finalizedOrderRef.current, next[prevIndex].savedMixSnapshot?.songs],
               );
       }
@@ -10442,6 +10748,12 @@ const HostView: React.FC = () => {
       }
       return next;
     });
+    if (
+      prevIndexForPlaylist >= 0 &&
+      prevIndexForPlaylist !== nextIndex
+    ) {
+      void ensurePlayedPlaylistForRound(prevIndexForPlaylist);
+    }
 
     addLog(`Advancing to ${round.name}...`, 'info');
     const resetOk = await requestGameResetAck();
@@ -10468,6 +10780,8 @@ const HostView: React.FC = () => {
     addLog,
     applyRoundBingoToHost,
     applyRoundPlaylistsToMixSelection,
+    appleMusicConnected,
+    ensurePlayedPlaylistForRound,
     freeSpaceEnabled,
     getNextPlannedRound,
     handleStartNextRound,
@@ -12845,7 +13159,7 @@ const HostView: React.FC = () => {
                     {playlistByLinkError ? (
                       <p style={{ fontSize: '0.82rem', color: '#ff9e6e', margin: '0 0 10px' }}>{playlistByLinkError}</p>
                     ) : null}
-                    <div className="host-manager-playlist-export">
+                    <div className="host-manager-playlist-export" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                       <button
                         type="button"
                         onClick={createOutputPlaylist}
@@ -12864,6 +13178,26 @@ const HostView: React.FC = () => {
                       >
                         <ListPlus className="w-4 h-4" aria-hidden />
                         Create output playlist
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void createTonightPlayedPlaylist()}
+                        disabled={isSpotifyConnecting}
+                        className="btn-secondary"
+                        style={{
+                          backgroundColor: '#0f766e',
+                          borderColor: '#14b8a6',
+                          color: 'white',
+                          fontSize: '0.85rem',
+                          padding: '8px 14px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}
+                        title="Songs called tonight, in order — creates a Spotify playlist when connected"
+                      >
+                        <ListPlus className="w-4 h-4" aria-hidden />
+                        Tonight’s played → Spotify
                       </button>
                     </div>
                       </div>
@@ -14820,6 +15154,102 @@ const HostView: React.FC = () => {
                       {winner.prize ? ` — ${winner.prize}` : ''}
                     </div>
                   ))}
+                </div>
+              )}
+              {(playedInOrder.length > 0 || roundPlayedPlaylistUi) && (
+                <div
+                  style={{
+                    marginTop: 16,
+                    textAlign: 'left',
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: 10,
+                    padding: '12px 14px',
+                  }}
+                >
+                  <p style={{ color: '#00ff88', fontSize: '0.9rem', margin: '0 0 8px', fontWeight: 700 }}>
+                    Songs played this round
+                    {playedInOrder.length > 0 ? ` (${playedInOrder.length})` : ''}
+                  </p>
+                  {playedInOrder.length > 0 ? (
+                    <div
+                      style={{
+                        maxHeight: 160,
+                        overflowY: 'auto',
+                        marginBottom: 10,
+                        fontSize: '0.82rem',
+                        color: '#e8e8e8',
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      {playedInOrder.map((song, idx) => (
+                        <div key={`${song.id}-${idx}`} style={{ marginBottom: 4 }}>
+                          <span style={{ color: '#88a899', marginRight: 6 }}>{idx + 1}.</span>
+                          {song.name || song.id}
+                          {song.artist ? (
+                            <span style={{ color: '#9aa8a0' }}>{` — ${song.artist}`}</span>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {roundPlayedPlaylistUi?.creating ? (
+                    <p style={{ color: '#c8d8d0', fontSize: '0.82rem', margin: 0 }}>
+                      Creating Spotify playlist of played songs…
+                    </p>
+                  ) : null}
+                  {roundPlayedPlaylistUi?.playlistUrl ? (
+                    <a
+                      href={roundPlayedPlaylistUi.playlistUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: '#7dd3c0', fontSize: '0.88rem', fontWeight: 600 }}
+                    >
+                      Open Spotify playlist
+                      {roundPlayedPlaylistUi.playlistName
+                        ? `: ${roundPlayedPlaylistUi.playlistName}`
+                        : ''}
+                    </a>
+                  ) : null}
+                  {roundPlayedPlaylistUi?.skippedReason ? (
+                    <p style={{ color: '#c8d8d0', fontSize: '0.82rem', margin: 0 }}>
+                      {roundPlayedPlaylistUi.skippedReason}
+                    </p>
+                  ) : null}
+                  {roundPlayedPlaylistUi?.error ? (
+                    <p style={{ color: '#ff9e6e', fontSize: '0.82rem', margin: 0 }}>
+                      Playlist create failed: {roundPlayedPlaylistUi.error}. The played list is still saved.
+                    </p>
+                  ) : null}
+                  {playedInOrder.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const lines = playedInOrder
+                          .map(
+                            (s, i) =>
+                              `${i + 1}. ${s.name || s.id}${s.artist ? ` — ${s.artist}` : ''}`,
+                          )
+                          .join('\n');
+                        void navigator.clipboard.writeText(lines).then(
+                          () => showToast('Played list copied', 'info'),
+                          () => showToast('Could not copy played list', 'warn'),
+                        );
+                      }}
+                      style={{
+                        marginTop: 10,
+                        background: 'transparent',
+                        border: '1px solid rgba(255,255,255,0.22)',
+                        borderRadius: 8,
+                        padding: '6px 10px',
+                        color: '#d0d8d4',
+                        fontSize: '0.78rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Copy played list
+                    </button>
+                  ) : null}
                 </div>
               )}
             </div>

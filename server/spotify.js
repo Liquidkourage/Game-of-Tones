@@ -1965,7 +1965,10 @@ class SpotifyService {
       await this.addTracksToPlaylist(playlistId, trackUris);
       
       routineSpotifyLog(`✅ Created permanent output playlist: ${organizedName} with ${trackUris.length} tracks`);
-      return { playlistId, name: organizedName };
+      const externalUrl =
+        (createBody && createBody.external_urls && createBody.external_urls.spotify) ||
+        `https://open.spotify.com/playlist/${playlistId}`;
+      return { playlistId, name: organizedName, externalUrl };
     } catch (error) {
       this._rethrowIfRateLimited(error, 'createOutputPlaylist');
       console.error('Error creating output playlist:', error);
