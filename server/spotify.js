@@ -1499,6 +1499,14 @@ class SpotifyService {
       await this.spotifyApi.pause({ device_id: deviceId });
     } catch (error) {
       this._rethrowIfRateLimited(error, 'pausePlayback');
+      // Common when Connect has no active session (GET /me/player → 204) — not actionable.
+      if (this.isRestrictionError(error)) {
+        console.warn(
+          '⚠️ pausePlayback restriction (often no active Connect session):',
+          error?.body?.error?.message || error?.message || 'Restriction violated',
+        );
+        return;
+      }
       console.error('Error pausing playback:', error);
       throw error;
     }

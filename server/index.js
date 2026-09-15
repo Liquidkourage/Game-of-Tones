@@ -4022,6 +4022,24 @@ async function pauseSpotifyForRoom(roomId, room) {
       routineServerLog(`⏸️ Skipping Spotify pause — device ${deviceId} not in device list`);
       return;
     }
+    // If Connect has no active player (204), pause will Restriction-violate — skip quietly.
+    try {
+      if (typeof sp.probePlayerState === 'function') {
+        const probe = await sp.probePlayerState('pause-precheck');
+        if (probe && (probe.statusCode === 204 || !probe.hasItem)) {
+          routineServerLog('⏸️ Skipping Spotify pause — no active Connect session (player 204/empty)');
+          return;
+        }
+      } else {
+        const state = await sp.getCurrentPlaybackState();
+        if (!state?.device && !state?.item) {
+          routineServerLog('⏸️ Skipping Spotify pause — no active Connect session');
+          return;
+        }
+      }
+    } catch {
+      /* still try pause below */
+    }
     try {
       await sp.transferPlayback(deviceId, false);
     } catch {
@@ -4029,7 +4047,12 @@ async function pauseSpotifyForRoom(roomId, room) {
     }
     await sp.pausePlayback(deviceId);
   } catch (e) {
-    console.warn('⚠️ pauseSpotifyForRoom failed:', e?.message || e);
+    const msg = e?.body?.error?.message || e?.message || String(e);
+    if (/restriction/i.test(msg)) {
+      routineServerLog(`⏸️ pauseSpotifyForRoom: restriction (ignored) — ${msg}`);
+      return;
+    }
+    console.warn('⚠️ pauseSpotifyForRoom failed:', msg);
   }
 }
 
