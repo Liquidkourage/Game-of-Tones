@@ -4626,7 +4626,7 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
 
   room.currentSongStartMs = computeSpotifySnippetRandomStartMs(room, nextSong, 'playNextSongSimple');
 
-  const resolvedDeviceId = await resolveRoomSpotifyPlaybackDeviceId(roomId, room, deviceId, null);
+  let resolvedDeviceId = await resolveRoomSpotifyPlaybackDeviceId(roomId, room, deviceId, null);
   if (!roomStillPlaying(roomId)) return;
   if (spotifyDevices.isVenueSpotifyJamMode(room)) {
     room.selectedDeviceId = resolvedDeviceId;
@@ -4758,10 +4758,12 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
         if (!spErr.isQuarantined()) {
           routineServerLog('🔄 Attempting hard re-start after song advance failure...');
           try {
-            await spErr.startPlayback(
+            // Use ensuring path (play@0 then seek) — never raw play with large position_ms.
+            await spErr.startPlaybackEnsuringActive(
               resolvedDeviceId,
               [`spotify:track:${nextSong.id}`],
               room.currentSongStartMs || 0,
+              nextSong.id,
             );
           } catch {
             await spErr.resumePlayback(resolvedDeviceId);
@@ -12342,15 +12344,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     let startMs = 0;
     let audioConfirmed = false;
     try {
-      // Prefer transfer first (saves one paced GET /me/player/devices when the device is already valid).
-      let transferred = false;
-      try {
-        await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
-        transferred = true;
-      } catch (e) {
-        routineServerLog('⚠️ transfer-first failed; resolving device list…', e?.body?.error?.message || e?.message || e);
-      }
-      if (!transferred) {
+      // Resolve device if locked id is gone — do NOT transfer(play=false) before first play.
+      // That clears Now Playing and pairs badly with Connect recovery; ensuring loads play@0.
+      {
         const spPlay = spotifyFor(roomId);
         let devices = await spPlay.getUserDevices();
         let deviceInList = devices.find((d) => d.id === targetDeviceId);
@@ -12395,10 +12391,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             return;
           }
         }
-        await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
       }
-      // Longer settle after transfer — shuffle/repeat/volume wait until audio is confirmed.
-      await new Promise((resolve) => setTimeout(resolve, 900));
+
       startMs = computeSpotifySnippetRandomStartMs(room, firstSong, 'auto first');
       routineServerLog(`🎯 Starting first song with randomized offset: ${startMs}ms (${Math.floor(startMs / 1000)}s) mode=${room.randomStarts}`);
 
@@ -12509,12 +12503,6 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
               await spRefresh.activateDevice(targetDeviceId);
             }
           }
-          await spotifyFor(roomId).withRetries(
-            'transferPlayback(after-refresh)',
-            () => spotifyFor(roomId).transferPlayback(targetDeviceId, false),
-            { attempts: 3, backoffMs: 300 },
-          );
-          await new Promise((resolve) => setTimeout(resolve, 900));
           await spotifyFor(roomId).withRetries(
             'startPlayback(after-refresh)',
             () =>
