@@ -1526,10 +1526,117 @@ class SpotifyService {
     }
   }
 
+  _normalizeDeviceName(name) {
+    return String(name || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+  }
+
+  /**
+   * Prefer an is_active device when it matches the locked name, or when the locked id is gone.
+   * Falls back to a Computer with a similar name.
+   */
+  _pickConnectDeviceId(devices, preferredId, lockedNameHint) {
+    const list = Array.isArray(devices) ? devices : [];
+    if (list.length === 0) return preferredId || null;
+    const preferred = preferredId ? String(preferredId) : null;
+    const byId = preferred ? list.find((d) => d && d.id === preferred) : null;
+    const nameHint = this._normalizeDeviceName(
+      lockedNameHint || byId?.name || '',
+    );
+    const active = list.find((d) => d && d.is_active);
+    const namesMatch = (a, b) => {
+      const na = this._normalizeDeviceName(a);
+      const nb = this._normalizeDeviceName(b);
+      if (!na || !nb) return false;
+      return na === nb || na.includes(nb) || nb.includes(na);
+    };
+
+    if (active?.id) {
+      if (nameHint && namesMatch(active.name, nameHint)) return active.id;
+      if (!byId) return active.id;
+    }
+    if (byId?.id) return byId.id;
+    if (nameHint) {
+      const computers = list.filter((d) => d && /computer/i.test(String(d.type || '')));
+      const named =
+        computers.find((d) => namesMatch(d.name, nameHint)) ||
+        list.find((d) => namesMatch(d.name, nameHint));
+      if (named?.id) return named.id;
+    }
+    return preferred || active?.id || list[0]?.id || null;
+  }
+
+  /** Compact GET /v1/me/player probe — one log line, no song dumps. */
+  async _probePlayerDirect(label = 'probe') {
+    if (this.isQuarantined()) throw this._makeQuarantineError('probePlayerDirect');
+    await this.ensureValidToken();
+    await this._paceBeforeWebApiRequest();
+    return new Promise((resolve) => {
+      webApi.record(1);
+      const req = https.request(
+        {
+          hostname: 'api.spotify.com',
+          path: '/v1/me/player',
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+          },
+        },
+        (res) => {
+          let data = '';
+          res.on('data', (chunk) => (data += chunk));
+          res.on('end', () => {
+            let body = null;
+            try {
+              body = data ? JSON.parse(data) : null;
+            } catch {
+              body = null;
+            }
+            const statusCode = res.statusCode || 0;
+            const hasItem = !!(body && body.item && body.item.id);
+            const playing = !!(body && body.is_playing);
+            const deviceId = body?.device?.id || null;
+            const deviceName = body?.device?.name || null;
+            const itemId = body?.item?.id || null;
+            routineSpotifyLog(
+              `🔎 player ${label}: status=${statusCode} hasItem=${hasItem} is_playing=${playing}` +
+                ` item=${itemId || 'none'} device=${deviceId || 'none'}/${deviceName || 'n/a'}`,
+            );
+            resolve({
+              statusCode,
+              hasItem,
+              is_playing: playing,
+              deviceId,
+              deviceName,
+              itemId,
+              body,
+            });
+          });
+        },
+      );
+      req.on('error', (err) => {
+        routineSpotifyLog(`🔎 player ${label}: request_error=${err?.message || err}`);
+        resolve({
+          statusCode: 0,
+          hasItem: false,
+          is_playing: false,
+          deviceId: null,
+          deviceName: null,
+          itemId: null,
+          body: null,
+        });
+      });
+      req.end();
+    });
+  }
+
   /**
    * Hard start when Connect returns 2xx but leaves desktop with empty Now Playing.
    * Strategy: load track at 0ms (most reliable), confirm item, then seek to offset.
    * Avoid transfer(play=false) on retry — that clears Now Playing and worsens silence.
+   * Tries direct PUT /play with device_id, then without (active device after transfer).
    */
   async startPlaybackEnsuringActive(deviceId, uris, position = 0, expectedTrackId = null) {
     await this._ensureCanCallWebApi('startPlayback');
@@ -1537,9 +1644,13 @@ class SpotifyService {
       expectedTrackId ||
       (typeof uris?.[0] === 'string' ? String(uris[0]).replace(/^spotify:track:/i, '') : '');
     const targetPos = Math.max(0, Math.floor(Number(position) || 0));
+    let activeDeviceId = deviceId ? String(deviceId) : null;
+    let lockedNameHint = null;
+
+    const settleMs = (ms) => new Promise((r) => setTimeout(r, ms));
 
     const confirm = async (waitMs = 550) => {
-      await new Promise((r) => setTimeout(r, waitMs));
+      await settleMs(waitMs);
       const state = await this.getCurrentPlaybackState();
       const id = state?.item?.id || null;
       const playing = !!state?.is_playing;
@@ -1547,50 +1658,116 @@ class SpotifyService {
       return { state, playing, correct, ok: playing && correct, id };
     };
 
-    const playAtZero = async (viaDirect) => {
-      if (viaDirect) {
-        await this._startPlaybackDirect(deviceId, uris, 0);
-      } else {
-        await this.startPlayback(deviceId, uris, 0);
+    const refreshTargetDevice = async () => {
+      try {
+        this.invalidateUserDevicesCache();
+        const devices = await this.getUserDevices({ forceRefresh: true });
+        const next = this._pickConnectDeviceId(devices, activeDeviceId, lockedNameHint);
+        const match = (devices || []).find((d) => d && d.id === next);
+        if (match?.name) lockedNameHint = match.name;
+        if (next && next !== activeDeviceId) {
+          routineSpotifyLog(
+            `🔧 retarget device ${activeDeviceId || 'none'} → ${next}` +
+              ` (${match?.name || 'unknown'}${match?.is_active ? ', active' : ''})`,
+          );
+          activeDeviceId = next;
+        } else if (!lockedNameHint && match?.name) {
+          lockedNameHint = match.name;
+        }
+        return activeDeviceId;
+      } catch (e) {
+        routineSpotifyLog(`⚠️ device refresh failed: ${e?.message || e}`);
+        return activeDeviceId;
       }
     };
 
-    try {
-      // 1) Load at 0 — play+large position_ms often returns 204 with item=none on desktop Connect.
-      await playAtZero(false);
-      let check = await confirm(600);
-      if (!check.id) {
+    const playAtZero = async (mode) => {
+      // mode: 'sdk' | 'direct' | 'direct-active'
+      if (mode === 'direct') {
+        await this._startPlaybackDirect(activeDeviceId, uris, 0, { omitDeviceId: false });
+      } else if (mode === 'direct-active') {
+        await this._startPlaybackDirect(activeDeviceId, uris, 0, { omitDeviceId: true });
+      } else {
+        await this.startPlayback(activeDeviceId, uris, 0);
+      }
+    };
+
+    const wakeAndDirectPlay = async () => {
+      routineSpotifyLog(
+        '🔧 startPlaybackEnsuringActive: no item after play@0 — wake (transfer play=true) + direct play',
+      );
+      try {
+        await this.transferPlayback(activeDeviceId, true);
+      } catch (_) {
+        /* ignore */
+      }
+      await settleMs(900);
+      try {
+        await playAtZero('direct');
+      } catch (directErr) {
         routineSpotifyLog(
-          '🔧 startPlaybackEnsuringActive: no item after play@0 — wake device (transfer play=true) + direct play',
+          `⚠️ Direct play(with device_id) failed: ${directErr?.message || directErr} — try active device`,
         );
         try {
-          await this.transferPlayback(deviceId, true);
-        } catch (_) {
-          /* ignore */
-        }
-        await new Promise((r) => setTimeout(r, 450));
-        try {
-          await playAtZero(true);
-        } catch (directErr) {
+          await playAtZero('direct-active');
+        } catch (activeErr) {
           routineSpotifyLog(
-            `⚠️ Direct play failed: ${directErr?.message || directErr} — retrying SDK play@0`,
+            `⚠️ Direct play(no device_id) failed: ${activeErr?.message || activeErr} — SDK play@0`,
           );
-          await playAtZero(false);
+          await playAtZero('sdk');
         }
-        check = await confirm(700);
+      }
+      await this._probePlayerDirect('after-direct');
+    };
+
+    try {
+      await refreshTargetDevice();
+
+      // 1) Load at 0 — play+large position_ms often returns 204 with item=none on desktop Connect.
+      await playAtZero('sdk');
+      let check = await confirm(650);
+      if (!check.id) {
+        await this._probePlayerDirect('no-item');
+        await wakeAndDirectPlay();
+        check = await confirm(800);
+      }
+
+      // 2) Retarget once if still empty and locked id is stale / another Computer matches.
+      if (!check.id) {
+        const before = activeDeviceId;
+        await refreshTargetDevice();
+        if (activeDeviceId && activeDeviceId !== before) {
+          try {
+            await this.transferPlayback(activeDeviceId, true);
+          } catch (_) {
+            /* ignore */
+          }
+          await settleMs(900);
+          try {
+            await playAtZero('direct');
+          } catch (_) {
+            try {
+              await playAtZero('direct-active');
+            } catch (__) {
+              await playAtZero('sdk');
+            }
+          }
+          await this._probePlayerDirect('after-retarget');
+          check = await confirm(800);
+        }
       }
 
       if (check.correct || (check.id && !trackId)) {
         if (targetPos > 0) {
           try {
-            await this.seekToPosition(targetPos, deviceId);
+            await this.seekToPosition(targetPos, activeDeviceId);
           } catch (seekErr) {
             routineSpotifyLog(`⚠️ seek after play@0 failed: ${seekErr?.message || seekErr}`);
           }
         }
         if (!check.playing) {
           try {
-            await this.resumePlayback(deviceId);
+            await this.resumePlayback(activeDeviceId);
           } catch (_) {
             /* ignore */
           }
@@ -1602,6 +1779,13 @@ class SpotifyService {
         routineSpotifyLog(
           `🔧 startPlaybackEnsuringActive: still no track (item=${check.id || 'none'}) after recovery`,
         );
+        await this._probePlayerDirect('still-empty');
+      }
+      // Attach resolved device so callers can update room.selectedDeviceId.
+      if (check.state && typeof check.state === 'object') {
+        check.state._resolvedDeviceId = activeDeviceId;
+      } else if (!check.state) {
+        check.state = { _resolvedDeviceId: activeDeviceId, item: null, is_playing: false };
       }
       return check.state;
     } catch (error) {
@@ -1610,15 +1794,18 @@ class SpotifyService {
     }
   }
 
-  async _startPlaybackDirect(deviceId, uris, positionMs = 0) {
+  async _startPlaybackDirect(deviceId, uris, positionMs = 0, options = {}) {
     if (this.isQuarantined()) throw this._makeQuarantineError('startPlaybackDirect');
     await this.ensureValidToken();
     await this._paceBeforeWebApiRequest();
+    const omitDeviceId = options?.omitDeviceId === true || !deviceId;
     const pos = Math.max(0, Math.floor(Number(positionMs) || 0));
     const bodyObj = { uris: Array.isArray(uris) ? uris : [uris] };
     if (pos > 0) bodyObj.position_ms = pos;
     const body = JSON.stringify(bodyObj);
-    const path = `/v1/me/player/play?device_id=${encodeURIComponent(String(deviceId))}`;
+    const path = omitDeviceId
+      ? '/v1/me/player/play'
+      : `/v1/me/player/play?device_id=${encodeURIComponent(String(deviceId))}`;
     return new Promise((resolve, reject) => {
       webApi.record(1);
       const req = https.request(
@@ -1637,7 +1824,9 @@ class SpotifyService {
           res.on('data', (chunk) => (data += chunk));
           res.on('end', () => {
             if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-              routineSpotifyLog('✅ Direct startPlayback success');
+              routineSpotifyLog(
+                `✅ Direct startPlayback success (${omitDeviceId ? 'no device_id' : 'with device_id'})`,
+              );
               resolve(true);
               return;
             }
