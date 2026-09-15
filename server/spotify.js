@@ -913,10 +913,18 @@ class SpotifyService {
           try { await this.refreshAccessToken(); } catch (_) {}
           continue;
         }
-        // If 403 restriction on resume-type operations, treat as non-fatal for subsequent logic
-        if (this.isRestrictionError(err) && /resume|playback|seek|transfer|start/i.test(String(label))) {
+        // Soft-ignore Restriction only for noisy mid-poll resume/seek/transfer.
+        // NEVER ignore on startPlayback — that was logging "Successfully started" while audio was silent.
+        if (
+          this.isRestrictionError(err) &&
+          /resume|seek|transfer/i.test(String(label)) &&
+          !/startPlayback|startConnect|startConnectTrack/i.test(String(label))
+        ) {
           console.warn(`⚠️ ${label} got restriction (ignored):`, err?.body?.error?.message || err?.message || err);
           return null;
+        }
+        if (err?.code === 'spotify_not_playing') {
+          throw err;
         }
         if (attempt === attempts) break;
       }
@@ -1531,7 +1539,7 @@ class SpotifyService {
         );
         err.code = 'spotify_not_playing';
         err.product = product;
-        err.body = { error: { message: err.message, status: 403, reason: 'not_playing_after_play' } };
+        err.body = { error: { message: err.message, status: 409, reason: 'not_playing_after_play' } };
         throw err;
       }
 

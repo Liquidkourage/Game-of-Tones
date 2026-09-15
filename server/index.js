@@ -12266,10 +12266,23 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       startMs = computeSpotifySnippetRandomStartMs(room, firstSong, 'auto first');
       routineServerLog(`🎯 Starting first song with randomized offset: ${startMs}ms (${Math.floor(startMs / 1000)}s) mode=${room.randomStarts}`);
       
-      await spotifyFor(roomId).withRetries('startPlayback(initial)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+      await spotifyFor(roomId).withRetries('startPlayback(initial)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 2, backoffMs: 400 });
       try {
         await spotifyFor(roomId).withRetries('setRepeat(track,initial)', () => spotifyFor(roomId).setRepeatState('track', targetDeviceId), { attempts: 2, backoffMs: 200 });
       } catch (_) {}
+      // Confirm audio before claiming success (withRetries used to swallow Restriction and return null).
+      {
+        await new Promise((r) => setTimeout(r, 300));
+        const confirm = await spotifyFor(roomId).getCurrentPlaybackState();
+        if (!confirm?.is_playing || confirm?.item?.id !== firstSong.id) {
+          const err = new Error(
+            `Spotify did not confirm audio on MINIBEAST/locked device after play (is_playing=${!!confirm?.is_playing}, item=${confirm?.item?.id || 'none'}). ` +
+              `Same Premium account in the Spotify desktop app as Tempo Connection; play any song once on that PC, then Start Game.`,
+          );
+          err.code = 'spotify_not_playing';
+          throw err;
+        }
+      }
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId}`);
       try { 
         const r = rooms.get(roomId); 
