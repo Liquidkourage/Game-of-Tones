@@ -1472,16 +1472,29 @@ class SpotifyService {
     return this.getPlaylistTracks(playlistId, { name: 'Playlist' });
   }
 
-  // Start playback on user's device
+  // Start playback on user's device.
+  // Always load at position 0, then seek — large position_ms in the play body often
+  // returns 204 with empty Now Playing on desktop Connect (Early/Random offsets).
   async startPlayback(deviceId, uris, position = 0) {
     await this._ensureCanCallWebApi('startPlayback');
-    
+    const seekMs = Math.max(0, Math.floor(Number(position) || 0));
     try {
       await this.spotifyApi.play({
         device_id: deviceId,
         uris: uris,
-        position_ms: position
+        position_ms: 0,
       });
+      if (seekMs > 0) {
+        await new Promise((r) => setTimeout(r, 350));
+        try {
+          await this.seekToPosition(seekMs, deviceId);
+          routineSpotifyLog(`✅ startPlayback seek→${seekMs}ms after play@0`);
+        } catch (seekErr) {
+          routineSpotifyLog(
+            `⚠️ startPlayback seek failed (track may still be at 0): ${seekErr?.body?.error?.message || seekErr?.message || seekErr}`,
+          );
+        }
+      }
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlayback');
       showLog.logSpotifyApiError('startPlayback', error);
@@ -1506,8 +1519,10 @@ class SpotifyService {
   async transferPlayback(deviceId, play = true) {
     await this._ensureCanCallWebApi('transferPlayback');
     try {
-      await this.spotifyApi.transferMyPlayback({ deviceIds: [deviceId], play });
-      routineSpotifyLog(`🔀 Transferred playback to device ${deviceId} (play=${play})`);
+      // spotify-web-api-node signature is (deviceIds: string[], options?: { play?: boolean }).
+      // Passing a single object made device_ids an object → Spotify "Malformed json".
+      await this.spotifyApi.transferMyPlayback([String(deviceId)], { play: !!play });
+      routineSpotifyLog(`🔀 Transferred playback to device ${deviceId} (play=${!!play})`);
     } catch (error) {
       this._rethrowIfRateLimited(error, 'transferPlayback');
       const msg = error?.body?.error?.message || error?.message || '';
@@ -2169,16 +2184,24 @@ class SpotifyService {
   // Simplified playlist playback - let timer handle timing, not Spotify
   async startPlaybackFromPlaylist(deviceId, playlistId, trackIndex = 0, positionMs = 0) {
     await this._ensureCanCallWebApi('startPlaybackFromPlaylist');
+    const seekMs = Math.max(0, Math.floor(Number(positionMs) || 0));
     try {
-      // Simple playlist playback - no complex verification or repeat manipulation
+      // Always play@0 then seek — large position_ms empties desktop Connect Now Playing.
       await this.spotifyApi.play({
         device_id: deviceId,
         context_uri: `spotify:playlist:${playlistId}`,
         offset: { position: trackIndex },
-        position_ms: positionMs
+        position_ms: 0,
       });
-      
-      routineSpotifyLog(`✅ Started playlist playback: track ${trackIndex} at ${positionMs}ms`);
+      routineSpotifyLog(`✅ Started playlist playback: track ${trackIndex} at 0ms (seek→${seekMs}ms)`);
+      if (seekMs > 0) {
+        await new Promise((r) => setTimeout(r, 350));
+        try {
+          await this.seekToPosition(seekMs, deviceId);
+        } catch (seekErr) {
+          routineSpotifyLog(`⚠️ playlist seek failed: ${seekErr?.body?.error?.message || seekErr?.message || seekErr}`);
+        }
+      }
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlaybackFromPlaylist');
       showLog.logSpotifyApiError('startPlaybackFromPlaylist', error);
