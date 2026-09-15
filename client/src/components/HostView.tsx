@@ -4994,9 +4994,9 @@ const HostView: React.FC = () => {
       
       if (type === 'restriction' && suggestions.length > 0) {
         const suggestionText = suggestions.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n');
-        alert(`${msg}\n\nPossible solutions:\n${suggestionText}\n\nTip: Ensure Spotify is open and active on your chosen device, then use Transfer Playback in the Spotify app.`);
+        alert(`${msg}\n\nPossible solutions:\n${suggestionText}\n\nTip: Open Spotify on the locked computer, press play on any song so you hear sound, leave Spotify open, then Start Game again.`);
       } else {
-        alert(msg + '\n\nTip: Ensure Spotify is open and active on your chosen device, then use Transfer Playback in the Spotify app.');
+        alert(msg + '\n\nTip: Open Spotify on the locked computer, press play on any song so you hear sound, leave Spotify open, then Start Game again.');
       }
       
       addLog(`Playback error: ${msg}`, 'error');
