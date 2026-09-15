@@ -3981,6 +3981,74 @@ async function pauseSpotifyForRoom(roomId, room) {
   }
 }
 
+/**
+ * End one in-memory room session (timers, Spotify pause attempt, billing close, client notify).
+ * Used by end-game-session and end-all-host-sessions.
+ */
+function endRoomSessionInternal(roomId, room, { reason = 'host_ended' } = {}) {
+  if (!room) return false;
+  void finalizeOrgEventForRoom(room);
+  stopLiveRoundTimers(roomId, room);
+  clearPlayerCardUpdateTimer(roomId);
+  clearSpotifyCallRetryTimer(room);
+  clearPlaybackWatcher(roomId);
+  room.simpleProgressionActive = false;
+  room.gameState = 'ended';
+  room.archived = true;
+  room.archivedAt = Date.now();
+  pauseSpotifyForRoom(roomId, room).catch(() => {});
+  if (room.temporaryPlaylistId) {
+    const plId = room.temporaryPlaylistId;
+    room.temporaryPlaylistId = null;
+    try {
+      spotifyFor(roomId)
+        .deleteTemporaryPlaylist(plId)
+        .catch((err) => console.warn('⚠️ Failed to delete temporary playlist:', err));
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  clearPublicDisplaySessionState(room);
+  clearPlayerBingoCallState(room);
+  clearPlayerSessionBingoWins(room);
+  const rounds = room.roundWinners?.length || 0;
+  io.to(roomId).emit('game-session-ended', {
+    roomId,
+    reason,
+    totalRounds: rounds,
+    roundWinners: room.roundWinners || [],
+    finalMessage:
+      reason === 'end_all_host_sessions'
+        ? 'All of your active host sessions were ended.'
+        : `Game session complete! ${rounds} rounds played.`,
+  });
+  io.to(roomId).emit('game-ended', { roomId, reason });
+  routineServerLog(`✅ Ended room session ${roomId} (reason=${reason}, rounds=${rounds})`);
+  return true;
+}
+
+/** End every non-ended room owned by this host user (clears orphan live/paused Connect locks). */
+function endAllActiveRoomsForOwner(ownerUserId, reason = 'end_all_host_sessions') {
+  if (ownerUserId == null || !Number.isFinite(Number(ownerUserId))) return [];
+  const uid = Number(ownerUserId);
+  const ended = [];
+  for (const [rid, r] of [...rooms.entries()]) {
+    if (r?.ownerUserId == null || Number(r.ownerUserId) !== uid) continue;
+    if (r.gameState === 'ended') {
+      r.archived = true;
+      r.archivedAt = r.archivedAt || Date.now();
+      continue;
+    }
+    if (endRoomSessionInternal(rid, r, { reason })) ended.push(rid);
+  }
+  routineServerLog(
+    `🏁 endAllActiveRoomsForOwner user_${uid}: ended ${ended.length} room(s)${
+      ended.length ? ` [${ended.join(', ')}]` : ''
+    }`,
+  );
+  return ended;
+}
+
 async function transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, currentDeviceId, state, sp) {
   if (!spotifyDevices.shouldEnforceDeviceLock(room)) {
     if (currentDeviceId) spotifyDevices.cacheJamDeviceId(room, currentDeviceId);
@@ -7893,41 +7961,51 @@ io.on('connection', (socket) => {
     const { roomId } = data || {};
     const room = rooms.get(roomId);
     if (!room) return;
-    
-    // Verify this is the host
+
     const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
     if (!isHost) return;
-    
+
     routineServerLog(`🏁 Host ending game session for room ${roomId}`);
-    
-    void finalizeOrgEventForRoom(room);
-    
-    stopLiveRoundTimers(roomId, room);
-    clearPlayerCardUpdateTimer(roomId); // Clear debounce timer
-    room.gameState = 'ended';
-    pauseSpotifyForRoom(roomId, room).catch(() => {});
-    
-    // Clean up temporary playlist
-    if (room.temporaryPlaylistId) {
-      spotifyFor(roomId).deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
-        console.warn('⚠️ Failed to delete temporary playlist:', err)
-      );
-      room.temporaryPlaylistId = null;
+    endRoomSessionInternal(roomId, room, { reason: 'host_ended' });
+  });
+
+  /** End every in-memory room owned by this signed-in host (orphan live/paused cleanup). */
+  socket.on('end-all-host-sessions', (data = {}) => {
+    try {
+      const uid = socket.hostUserId;
+      if (uid == null) {
+        socket.emit('end-all-host-sessions-result', {
+          ok: false,
+          error: 'not_signed_in',
+          message: 'Sign in as host first.',
+        });
+        return;
+      }
+      const roomId = typeof data.roomId === 'string' ? data.roomId : '';
+      if (roomId) {
+        const room = rooms.get(roomId);
+        const isHost =
+          !!room &&
+          (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
+        if (room && !isHost) {
+          socket.emit('end-all-host-sessions-result', {
+            ok: false,
+            error: 'forbidden',
+            message: 'Only the host can end all sessions.',
+          });
+          return;
+        }
+      }
+      const endedRoomIds = endAllActiveRoomsForOwner(uid, 'end_all_host_sessions');
+      socket.emit('end-all-host-sessions-result', { ok: true, endedRoomIds });
+    } catch (e) {
+      console.warn('end-all-host-sessions:', e?.message || e);
+      socket.emit('end-all-host-sessions-result', {
+        ok: false,
+        error: 'server_error',
+        message: e?.message || 'Failed to end sessions',
+      });
     }
-    
-    clearPublicDisplaySessionState(room);
-    clearPlayerBingoCallState(room);
-    clearPlayerSessionBingoWins(room);
-    
-    // Notify all clients that the entire game session has ended
-    io.to(roomId).emit('game-session-ended', { 
-      roomId,
-      totalRounds: room.roundWinners?.length || 0,
-      roundWinners: room.roundWinners || [],
-      finalMessage: `Game session complete! ${room.roundWinners?.length || 0} rounds played.`
-    });
-    
-    routineServerLog(`✅ Game session ended for room ${roomId} after ${room.roundWinners?.length || 0} rounds`);
   });
 
   // Client requests a state sync (useful if they joined before start or missed events)
@@ -15050,6 +15128,53 @@ function allocateHostOwnedRoom(uid, options = {}) {
   }
   return null;
 }
+
+app.post('/api/host/rooms/end-all', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    const endedRoomIds = endAllActiveRoomsForOwner(uid, 'end_all_host_sessions');
+    return res.json({ ok: true, endedRoomIds, endedCount: endedRoomIds.length });
+  } catch (e) {
+    console.error('POST /api/host/rooms/end-all:', e?.message || e);
+    return res.status(500).json({ error: 'failed', message: e?.message || 'Failed to end rooms' });
+  }
+});
+
+/** Close an Active billing event for a room (does not require joining that room). */
+app.post('/api/org/events/:roomId/close', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization) {
+      return res.status(404).json({ error: 'no_org', message: 'No organization found.' });
+    }
+    if (ctx.role !== 'owner' && ctx.role !== 'host') {
+      return res.status(403).json({ error: 'forbidden', message: 'Hosts/owners only.' });
+    }
+    const roomId = String(req.params.roomId || '').trim();
+    if (!roomId) return res.status(400).json({ error: 'room_required' });
+
+    // Also end any in-memory live session for this room if this host owns it.
+    const live = rooms.get(roomId);
+    if (live && live.ownerUserId != null && Number(live.ownerUserId) === Number(uid) && live.gameState !== 'ended') {
+      endRoomSessionInternal(roomId, live, { reason: 'org_event_closed' });
+    }
+
+    const result = await billingStore.eventCredits.closeActiveOrgEvent(db, ctx.organization.id, roomId);
+    return res.json({
+      ok: true,
+      closed: !!result.closed,
+      refunded: !!result.refunded,
+      roomId,
+    });
+  } catch (e) {
+    console.error('POST /api/org/events/:roomId/close:', e?.message || e);
+    return res.status(500).json({ error: 'failed', message: e?.message || 'Failed to close event' });
+  }
+});
 
 /** Create a new room owned by the logged-in host (default code = MDY + user id). */
 app.post('/api/host/rooms', async (req, res) => {
