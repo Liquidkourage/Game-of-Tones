@@ -100,6 +100,8 @@ const SPOTIFY_SOURCE_ROUTE_HINT = {
   removeTracksFromPlaylist: 'DELETE /v1/playlists/{playlist_id}/items',
   replaceTrackInPlaylist: 'DELETE+POST /v1/playlists/{playlist_id}/items',
   _transferPlaybackDirect: 'PUT /v1/me/player',
+  _startPlaybackDirect: 'PUT /v1/me/player/play',
+  startConnectTrack: 'PUT /v1/me/player/play (play@0 then seek)',
 };
 
 /** @param {Record<string, string>} h */
@@ -1490,6 +1492,210 @@ class SpotifyService {
     }
   }
 
+  /**
+   * Direct PUT /v1/me/player/play — logs HTTP status. Omit device_id to target the
+   * already-active Connect device (desktop often needs this after empty Now Playing).
+   */
+  async _startPlaybackDirect(deviceId, uris, positionMs = 0, { omitDeviceId = false } = {}) {
+    if (this.isQuarantined()) throw this._makeQuarantineError('startPlaybackDirect');
+    await this.ensureValidToken();
+    await this._paceBeforeWebApiRequest();
+    const pos = Math.max(0, Math.floor(Number(positionMs) || 0));
+    const bodyObj = { uris: Array.isArray(uris) ? uris : [uris], position_ms: pos };
+    const body = JSON.stringify(bodyObj);
+    const q =
+      !omitDeviceId && deviceId
+        ? `?device_id=${encodeURIComponent(String(deviceId))}`
+        : '';
+    return new Promise((resolve, reject) => {
+      webApi.record(1);
+      const req = https.request(
+        {
+          hostname: 'api.spotify.com',
+          path: `/v1/me/player/play${q}`,
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+          },
+        },
+        (res) => {
+          let data = '';
+          res.on('data', (chunk) => (data += chunk));
+          res.on('end', () => {
+            const statusCode = res.statusCode || 0;
+            const uri0 = bodyObj.uris?.[0] || 'none';
+            routineSpotifyLog(
+              `▶️ direct play status=${statusCode} omitDevice=${!!omitDeviceId}` +
+                ` device=${omitDeviceId ? 'active' : deviceId || 'none'} uri=${uri0} pos=${pos}` +
+                ` body=${data ? data.slice(0, 180) : '(empty)'}`,
+            );
+            if (statusCode >= 200 && statusCode < 300) {
+              resolve({ statusCode, ok: true });
+              return;
+            }
+            if (statusCode === 429) {
+              const syn = new Error('Direct play rate limited');
+              syn.statusCode = 429;
+              syn.headers = res.headers || {};
+              syn.body = {};
+              try {
+                syn.body = data ? JSON.parse(data) : {};
+              } catch {
+                syn.body = {};
+              }
+              this.applyRateLimitQuarantine(syn, '_startPlaybackDirect', {
+                httpMethod: 'PUT',
+                httpPath: '/v1/me/player/play',
+              });
+              reject(syn);
+              return;
+            }
+            let parsed = {};
+            try {
+              parsed = data ? JSON.parse(data) : {};
+            } catch {
+              parsed = {};
+            }
+            const err = new Error(
+              parsed?.error?.message || `Direct play failed: ${statusCode} ${data}`,
+            );
+            err.statusCode = statusCode;
+            err.body = parsed;
+            reject(err);
+          });
+        },
+      );
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+  }
+
+  /**
+   * Connect-safe start: never put Early/Random offset in the play body (large position_ms
+   * often returns 2xx with item=none on desktop). Play@0 → confirm → seek.
+   * Fallback: play without device_id; one transfer(play=true) wake if still empty.
+   */
+  async startConnectTrack(deviceId, uris, seekMs = 0, expectedTrackId = null) {
+    await this._ensureCanCallWebApi('startPlayback');
+    const trackId =
+      expectedTrackId ||
+      (typeof uris?.[0] === 'string' ? String(uris[0]).replace(/^spotify:track:/i, '') : '');
+    const targetSeek = Math.max(0, Math.floor(Number(seekMs) || 0));
+    let activeDeviceId = deviceId ? String(deviceId) : null;
+    const settle = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    const readPlayer = async (label) => {
+      let state = null;
+      try {
+        state = await this.getCurrentPlaybackState();
+      } catch (_) {
+        state = null;
+      }
+      const id = state?.item?.id || null;
+      const playing = !!state?.is_playing;
+      const correct = !!trackId && id === trackId;
+      if (state?.device?.id) activeDeviceId = state.device.id;
+      routineSpotifyLog(
+        `🔎 connect ${label}: is_playing=${playing} correct=${correct}` +
+          ` item=${id || 'none'} device=${state?.device?.id || 'none'}/${state?.device?.name || 'n/a'}` +
+          ` product_hint=${this._pipelineCredentialMode}`,
+      );
+      return { state, playing, correct, hasItem: !!id, ok: playing && correct };
+    };
+
+    const playAtZero = async (omitDeviceId) => {
+      try {
+        await this._startPlaybackDirect(activeDeviceId, uris, 0, { omitDeviceId: !!omitDeviceId });
+        return true;
+      } catch (directErr) {
+        routineSpotifyLog(
+          `⚠️ direct play@0 failed (${omitDeviceId ? 'no device_id' : 'with device_id'}): ${
+            directErr?.body?.error?.message || directErr?.message || directErr
+          }`,
+        );
+        if (!omitDeviceId && activeDeviceId) {
+          try {
+            await this.startPlayback(activeDeviceId, uris, 0);
+            return true;
+          } catch (sdkErr) {
+            routineSpotifyLog(`⚠️ SDK play@0 failed: ${sdkErr?.body?.error?.message || sdkErr?.message || sdkErr}`);
+            throw sdkErr;
+          }
+        }
+        throw directErr;
+      }
+    };
+
+    // 1) Play@0 on locked device
+    await playAtZero(false);
+    let check = await readPlayer('after-play0');
+    await settle(check.hasItem ? 200 : 500);
+    if (!check.ok) check = await readPlayer('after-play0-settle');
+
+    // 2) Empty Now Playing → retry on active device (no device_id)
+    if (!check.hasItem) {
+      routineSpotifyLog('🔧 connect: empty item after play@0 — retry without device_id');
+      await playAtZero(true);
+      await settle(700);
+      check = await readPlayer('after-play0-active');
+    }
+
+    // 3) Still empty → wake transfer(play=true) once, then play@0 again
+    if (!check.hasItem && activeDeviceId) {
+      routineSpotifyLog('🔧 connect: still empty — wake transfer(play=true) then play@0');
+      try {
+        await this.transferPlayback(activeDeviceId, true);
+      } catch (wakeErr) {
+        routineSpotifyLog(`⚠️ wake transfer failed: ${wakeErr?.body?.error?.message || wakeErr?.message || wakeErr}`);
+      }
+      await settle(700);
+      await playAtZero(false);
+      await settle(700);
+      check = await readPlayer('after-wake');
+      if (!check.hasItem) {
+        await playAtZero(true);
+        await settle(700);
+        check = await readPlayer('after-wake-active');
+      }
+    }
+
+    // 4) Playing wrong/paused → one more play@0
+    if (!check.ok) {
+      await playAtZero(!check.hasItem);
+      await settle(600);
+      check = await readPlayer('after-retry');
+    }
+
+    if (!check.ok) {
+      const err = new Error(
+        'Spotify Connect play returned success but Now Playing stayed empty (no is_playing + track)',
+      );
+      err.code = 'connect_empty_now_playing';
+      err.body = { error: { message: err.message, status: 502 } };
+      throw err;
+    }
+
+    if (targetSeek > 0) {
+      await settle(450);
+      try {
+        await this.seekToPosition(targetSeek, activeDeviceId);
+        routineSpotifyLog(`✅ connect seek to Early offset ${targetSeek}ms after audio confirm`);
+      } catch (seekErr) {
+        routineSpotifyLog(`⚠️ connect seek failed (audio still playing at 0): ${seekErr?.message || seekErr}`);
+      }
+    }
+
+    return {
+      ok: true,
+      _resolvedDeviceId: activeDeviceId,
+      is_playing: true,
+      itemId: trackId,
+    };
+  }
+
   // Pause playback
   async pausePlayback(deviceId) {
     await this._ensureCanCallWebApi('pausePlayback');
@@ -2226,13 +2432,23 @@ class SpotifyService {
   async startPlaybackFromPlaylist(deviceId, playlistId, trackIndex = 0, positionMs = 0) {
     await this._ensureCanCallWebApi('startPlaybackFromPlaylist');
     try {
+      // Always start at 0 — large position_ms in play body empties Connect Now Playing.
+      const seekMs = Math.max(0, Math.floor(Number(positionMs) || 0));
       await this.spotifyApi.play({
         device_id: deviceId,
         context_uri: `spotify:playlist:${playlistId}`,
         offset: { position: trackIndex },
-        position_ms: Math.max(0, Math.floor(Number(positionMs) || 0)),
+        position_ms: 0,
       });
-      routineSpotifyLog(`✅ Started playlist playback: track ${trackIndex} at ${positionMs}ms`);
+      routineSpotifyLog(`✅ Started playlist playback: track ${trackIndex} at 0ms (seek→${seekMs}ms)`);
+      if (seekMs > 0) {
+        await new Promise((r) => setTimeout(r, 450));
+        try {
+          await this.seekToPosition(seekMs, deviceId);
+        } catch (seekErr) {
+          routineSpotifyLog(`⚠️ playlist seek failed: ${seekErr?.message || seekErr}`);
+        }
+      }
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlaybackFromPlaylist');
       showLog.logSpotifyApiError('startPlaybackFromPlaylist', error);

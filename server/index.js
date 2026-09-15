@@ -1632,7 +1632,17 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
       // Enforce deterministic playback mode for direct index plays
       try { await spotifyFor(roomId).setShuffleState(false, targetDeviceId); } catch (_) {}
       try { await spotifyFor(roomId).setRepeatState('off', targetDeviceId); } catch (_) {}
-      await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs);
+      // play@0 then seek — never put Early/Random offset in the play body (empties Connect).
+      const startState = await spotifyFor(roomId).startConnectTrack(
+        targetDeviceId,
+        [`spotify:track:${song.id}`],
+        startMs,
+        song.id,
+      );
+      if (startState?._resolvedDeviceId && startState._resolvedDeviceId !== targetDeviceId) {
+        targetDeviceId = startState._resolvedDeviceId;
+        room.selectedDeviceId = targetDeviceId;
+      }
       const endTime = Date.now();
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId} (took ${endTime - startTime}ms)`);
 
@@ -4651,7 +4661,12 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
       await spPlay.startPlaybackFromPlaylist(resolvedDeviceId, room.temporaryPlaylistId, room.currentSongIndex, room.currentSongStartMs);
     } else {
       routineServerLog(`🎵 Using individual track: ${nextSong.id}`);
-      await spPlay.startPlayback(resolvedDeviceId, [`spotify:track:${nextSong.id}`], room.currentSongStartMs);
+      await spPlay.startConnectTrack(
+        resolvedDeviceId,
+        [`spotify:track:${nextSong.id}`],
+        room.currentSongStartMs || 0,
+        nextSong.id,
+      );
     }
 
     routineServerLog(`✅ Playback started successfully for: ${nextSong.name}`);
@@ -4698,10 +4713,11 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
               room.currentSongStartMs || 0,
             );
           } else {
-            await spPlay.startPlayback(
+            await spPlay.startConnectTrack(
               resolvedDeviceId,
               [`spotify:track:${nextSong.id}`],
-              room.currentSongStartMs || 0,
+              0,
+              nextSong.id,
             );
           }
         } catch (verifyStartErr) {
@@ -4745,10 +4761,11 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
         if (!spErr.isQuarantined()) {
           routineServerLog('🔄 Attempting hard re-start after song advance failure...');
           try {
-            await spErr.startPlayback(
+            await spErr.startConnectTrack(
               resolvedDeviceId,
               [`spotify:track:${nextSong.id}`],
               room.currentSongStartMs || 0,
+              nextSong.id,
             );
           } catch {
             await spErr.resumePlayback(resolvedDeviceId);
@@ -12327,21 +12344,42 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       return;
     }
 
-    routineServerLog(`🎵 Starting playback on device: ${targetDeviceId}`);
+    const orgKey = spotifyOrgForRoom(room);
+    routineServerLog(
+      `🎵 Starting playback on device: ${targetDeviceId}` +
+        ` org=${orgKey} ownerUserId=${room.ownerUserId ?? 'n/a'}`,
+    );
 
     let startMs = 0;
     let audioConfirmed = false;
     try {
-      // Prefer transfer first (known-good pre-crisis sequence).
-      let transferred = false;
+      const spPlay = spotifyFor(roomId);
       try {
-        await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
+        const profile = await spPlay.getCurrentUserProfile();
+        routineServerLog(
+          `🔑 Spotify account for play: id=${profile?.id || 'n/a'} name=${profile?.display_name || 'n/a'} product=${profile?.product || 'n/a'}`,
+        );
+      } catch (profErr) {
+        routineServerLog(`⚠️ Could not read Spotify profile before play: ${profErr?.message || profErr}`);
+      }
+
+      // Prefer transfer first; if player empty/204, wake with play=true (desktop Connect).
+      let transferred = false;
+      let preEmpty = false;
+      try {
+        const pre = await spPlay.getCurrentPlaybackState();
+        preEmpty = !pre || !pre.item || !pre.device;
+        if (preEmpty) {
+          routineServerLog('🔀 First-song wake transfer(play=true) — player empty or 204');
+          await spPlay.transferPlayback(targetDeviceId, true);
+        } else {
+          await spPlay.transferPlayback(targetDeviceId, false);
+        }
         transferred = true;
       } catch (e) {
         routineServerLog('⚠️ transfer-first failed; resolving device list…', e?.body?.error?.message || e?.message || e);
       }
       if (!transferred) {
-        const spPlay = spotifyFor(roomId);
         let devices = await spPlay.getUserDevices();
         let deviceInList = devices.find((d) => d.id === targetDeviceId);
         if (!deviceInList) {
@@ -12385,7 +12423,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             return;
           }
         }
-        await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
+        await spotifyFor(roomId).transferPlayback(targetDeviceId, preEmpty);
       }
 
       try { await spotifyFor(roomId).withRetries('setShuffle(false)', () => spotifyFor(roomId).setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
@@ -12393,13 +12431,26 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
 
       startMs = computeSpotifySnippetRandomStartMs(room, firstSong, 'auto first');
       room.currentSongStartMs = startMs;
-      routineServerLog(`🎯 Starting first song with randomized offset: ${startMs}ms (${Math.floor(startMs / 1000)}s) mode=${room.randomStarts}`);
-
-      await spotifyFor(roomId).withRetries(
-        'startPlayback(initial)',
-        () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs),
-        { attempts: 3, backoffMs: 400 },
+      routineServerLog(
+        `🎯 Starting first song play@0 then seek→${startMs}ms (${Math.floor(startMs / 1000)}s) mode=${room.randomStarts}` +
+          ` uri=spotify:track:${firstSong.id}`,
       );
+
+      const startState = await spotifyFor(roomId).withRetries(
+        'startConnectTrack(initial)',
+        () =>
+          spotifyFor(roomId).startConnectTrack(
+            targetDeviceId,
+            [`spotify:track:${firstSong.id}`],
+            startMs,
+            firstSong.id,
+          ),
+        { attempts: 2, backoffMs: 500 },
+      );
+      if (startState?._resolvedDeviceId && startState._resolvedDeviceId !== targetDeviceId) {
+        targetDeviceId = startState._resolvedDeviceId;
+        room.selectedDeviceId = targetDeviceId;
+      }
       try {
         await spotifyFor(roomId).withRetries(
           'setRepeat(track,initial)',
@@ -12424,9 +12475,16 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         }
         if (i < 3) {
           try {
-            await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs);
+            await spotifyFor(roomId).startConnectTrack(
+              targetDeviceId,
+              [`spotify:track:${firstSong.id}`],
+              0,
+              firstSong.id,
+            );
           } catch (retryErr) {
-            routineServerLog(`⚠️ First-song re-start failed: ${retryErr?.message || retryErr}`);
+            routineServerLog(
+              `⚠️ First-song re-start failed: ${retryErr?.body?.error?.message || retryErr?.message || retryErr}`,
+            );
           }
         }
       }
@@ -12480,14 +12538,15 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             }
           }
           await spotifyFor(roomId).withRetries(
-            'transferPlayback(after-refresh)',
-            () => spotifyFor(roomId).transferPlayback(targetDeviceId, false),
-            { attempts: 3, backoffMs: 300 },
-          );
-          await spotifyFor(roomId).withRetries(
-            'startPlayback(after-refresh)',
-            () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs),
-            { attempts: 3, backoffMs: 400 },
+            'startConnectTrack(after-refresh)',
+            () =>
+              spotifyFor(roomId).startConnectTrack(
+                targetDeviceId,
+                [`spotify:track:${firstSong.id}`],
+                startMs,
+                firstSong.id,
+              ),
+            { attempts: 2, backoffMs: 500 },
           );
           for (let i = 0; i < 4; i++) {
             await new Promise((r) => setTimeout(r, 400));
@@ -12524,10 +12583,11 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           }
         } catch (refreshError) {
           console.error('❌ Error after token refresh:', refreshError);
+          const refreshMsg = refreshError?.body?.error?.message || refreshError?.message || '';
           haltRoomOnSilentSpotifyPlayback(
             roomId,
             room,
-            'Unable to start on locked device after token refresh. Ensure Spotify is online and try again.',
+            `Unable to start on locked device after token refresh${refreshMsg ? `: ${refreshMsg}` : ''}. Ensure Spotify is online and try again.`,
           );
           return;
         }
@@ -12535,7 +12595,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         haltRoomOnSilentSpotifyPlayback(
           roomId,
           room,
-          'Unable to start on locked device. Ensure it is online and try again.',
+          message
+            ? `Unable to start on locked device: ${message}`
+            : 'Unable to start on locked device. Ensure it is online and try again.',
         );
         return;
       }
@@ -12704,9 +12766,15 @@ async function playNextSong(roomId, deviceId) {
         );
       } else {
         await spotifyFor(roomId).withRetries(
-          'startPlayback(next)',
-          () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs),
-          { attempts: 3, backoffMs: 400 },
+          'startConnectTrack(next)',
+          () =>
+            spotifyFor(roomId).startConnectTrack(
+              targetDeviceId,
+              [`spotify:track:${nextSong.id}`],
+              startMs,
+              nextSong.id,
+            ),
+          { attempts: 2, backoffMs: 400 },
         );
       }
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId}`);
@@ -12762,12 +12830,13 @@ async function playNextSong(roomId, deviceId) {
         if (playing && correctTrack) break;
         try {
           await spotifyFor(roomId).withRetries(
-            'startPlayback(verify-next)',
+            'startConnectTrack(verify-next)',
             () =>
-              spotifyFor(roomId).startPlayback(
+              spotifyFor(roomId).startConnectTrack(
                 targetDeviceId,
                 [`spotify:track:${nextSong.id}`],
-                startMs,
+                0,
+                nextSong.id,
               ),
             { attempts: 2, backoffMs: 200 },
           );
@@ -12776,12 +12845,13 @@ async function playNextSong(roomId, deviceId) {
       if (!playing || !correctTrack) {
         try {
           await spotifyFor(roomId).withRetries(
-            'startPlayback(correct-next)',
+            'startConnectTrack(correct-next)',
             () =>
-              spotifyFor(roomId).startPlayback(
+              spotifyFor(roomId).startConnectTrack(
                 targetDeviceId,
                 [`spotify:track:${nextSong.id}`],
                 startMs,
+                nextSong.id,
               ),
             { attempts: 2, backoffMs: 300 },
           );
