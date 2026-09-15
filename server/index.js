@@ -6178,10 +6178,10 @@ io.on('connection', (socket) => {
         return;
       }
 
+      room.mixFinalized = true;
+      // After mixFinalized so ID+meta rematerialize includes durations (5×15 / 1×75).
       emitFinalizedOrderFromRoomState(roomId, room);
 
-      room.mixFinalized = true;
-      
       emitMixFinalized(roomId, room, socket, playlists, poolForCards);
       
       routineServerLog('✅ Mix finalized for room:', roomId);
@@ -10446,6 +10446,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null, options =
                 explicit: m?.explicit === true,
                 youtubeMusic: m?.youtubeMusic === true,
                 appleMusic: m?.appleMusic === true,
+                ...durationFieldsFromSong(m),
                 sourcePlaylistId: m?.sourcePlaylistId,
                 sourcePlaylistName: m?.sourcePlaylistName,
               };
