@@ -149,7 +149,44 @@ const OrgPortalPage: React.FC = () => {
     }>;
   } | null>(null);
 
+  const [endAllBusy, setEndAllBusy] = useState(false);
+
   const billingNotice = searchParams.get('billing');
+
+  const endAllActiveRooms = async () => {
+    const confirmed = window.confirm(
+      'End ALL of your active host rooms on this server?\n\n' +
+        'This clears orphaned live/paused sessions that can lock Spotify Connect, ' +
+        'and permanently ends the game for players in those rooms.',
+    );
+    if (!confirmed) return;
+    setEndAllBusy(true);
+    setBanner(null);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/host/rooms/end-all`, { method: 'POST' });
+      const j = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        endedRoomIds?: string[];
+        endedCount?: number;
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok || !j.ok) {
+        setBanner(j.message || j.error || `Could not end rooms (${res.status})`);
+        return;
+      }
+      const n = typeof j.endedCount === 'number' ? j.endedCount : (j.endedRoomIds || []).length;
+      setBanner(
+        n > 0
+          ? `Ended ${n} active room${n === 1 ? '' : 's'}${(j.endedRoomIds || []).length ? `: ${(j.endedRoomIds || []).join(', ')}` : ''}.`
+          : 'No active host rooms to end.',
+      );
+    } catch (e) {
+      setBanner(String(e));
+    } finally {
+      setEndAllBusy(false);
+    }
+  };
 
   const refresh = useCallback(async () => {
     setLoadError(null);
@@ -492,6 +529,25 @@ const OrgPortalPage: React.FC = () => {
           {banner}
         </div>
       ) : null}
+
+      <section className="org-portal__card">
+        <div className="org-portal__section-head">
+          <h2>Active rooms</h2>
+        </div>
+        <p className="org-portal__muted" style={{ marginTop: 0 }}>
+          If Spotify Connect is stuck after a failed Start Game, end every room you own on this
+          server — including orphaned live/paused sessions.
+        </p>
+        <button
+          type="button"
+          className="btn-secondary"
+          disabled={endAllBusy}
+          onClick={() => void endAllActiveRooms()}
+        >
+          {endAllBusy ? <Loader2 className="org-portal__spin" aria-hidden /> : null}
+          {endAllBusy ? ' Ending…' : 'End all active rooms'}
+        </button>
+      </section>
 
       {data?.billing?.gateEnforced && !data.billing.active ? (
         <div className="org-portal__notice org-portal__notice--warn" role="note">
