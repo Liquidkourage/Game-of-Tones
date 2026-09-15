@@ -33,7 +33,9 @@ export const CALL_CARD_STACK_PAD_PX = 4;
  * Canvas↔DOM slack — keep title/artist from being clipped mid-glyph when paint runs
  * slightly taller than the measure (common on 1×75 short rows + host font zoom).
  */
-export const CALL_CARD_FIT_HEIGHT_SAFETY_PX = 18;
+export const CALL_CARD_FIT_HEIGHT_SAFETY_PX = 22;
+/** Extra slack when letter-reveal titles wrap to 2+ lines (tiles taller than plain text). */
+export const CALL_CARD_FIT_HEIGHT_SAFETY_MASKED_WRAP_PX = 34;
 
 /** Box is the only lid — high enough that short titles can fill a tall card. */
 const FIT_MAX_SCALE = 12;
@@ -649,12 +651,17 @@ export function fitCallCardText(
       hasArtist,
       tileScale: ts,
     });
+    const titleLines = Math.max(1, t.lines);
+    const safetyPx =
+      opts.masked && titleLines >= 2
+        ? CALL_CARD_FIT_HEIGHT_SAFETY_MASKED_WRAP_PX
+        : CALL_CARD_FIT_HEIGHT_SAFETY_PX;
     return {
       fits:
         !t.overflowsWidth &&
         !a.overflowsWidth &&
-        heightPx <= opts.boxHeightPx - CALL_CARD_FIT_HEIGHT_SAFETY_PX,
-      titleLines: Math.max(1, t.lines),
+        heightPx <= opts.boxHeightPx - safetyPx,
+      titleLines,
       artistLines,
       heightPx,
     };
