@@ -1475,6 +1475,7 @@ class SpotifyService {
   // Start playback on user's device.
   // Always load at position 0, then seek — large position_ms in the play body often
   // returns 204 with empty Now Playing on desktop Connect (Early/Random offsets).
+  // Desktop Connect often leaves is_playing=false after seek — resume after seek.
   async startPlayback(deviceId, uris, position = 0) {
     await this._ensureCanCallWebApi('startPlayback');
     const seekMs = Math.max(0, Math.floor(Number(position) || 0));
@@ -1494,6 +1495,15 @@ class SpotifyService {
             `⚠️ startPlayback seek failed (track may still be at 0): ${seekErr?.body?.error?.message || seekErr?.message || seekErr}`,
           );
         }
+      }
+      // Seek (and some Connect clients after transfer(play=false)) leave the track loaded but paused.
+      try {
+        await this.resumePlayback(deviceId);
+        routineSpotifyLog(`▶️ startPlayback resume after play@0/seek on ${deviceId}`);
+      } catch (resumeErr) {
+        routineSpotifyLog(
+          `⚠️ startPlayback resume failed: ${resumeErr?.body?.error?.message || resumeErr?.message || resumeErr}`,
+        );
       }
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlayback');
@@ -2201,6 +2211,14 @@ class SpotifyService {
         } catch (seekErr) {
           routineSpotifyLog(`⚠️ playlist seek failed: ${seekErr?.body?.error?.message || seekErr?.message || seekErr}`);
         }
+      }
+      try {
+        await this.resumePlayback(deviceId);
+        routineSpotifyLog(`▶️ playlist resume after play@0/seek on ${deviceId}`);
+      } catch (resumeErr) {
+        routineSpotifyLog(
+          `⚠️ playlist resume failed: ${resumeErr?.body?.error?.message || resumeErr?.message || resumeErr}`,
+        );
       }
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlaybackFromPlaylist');

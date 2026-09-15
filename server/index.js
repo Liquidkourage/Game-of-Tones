@@ -4613,6 +4613,18 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
         routineServerLog(
           `🔎 Simple playback verify ${i + 1}/4: is_playing=${playing} correct_track=${correctTrack}`,
         );
+        // Track loaded but paused (common after seek on desktop Connect) — resume, don't re-seek spam.
+        if (!playing && correctTrack) {
+          try {
+            await spPlay.resumePlayback(resolvedDeviceId);
+            continue;
+          } catch (resumeErr) {
+            const msg = resumeErr?.body?.error?.message || resumeErr?.message || '';
+            if (!/restriction/i.test(msg)) {
+              console.warn('⚠️ Simple verify resume failed:', msg);
+            }
+          }
+        }
         try {
           if (room.temporaryPlaylistId) {
             await spPlay.startPlaybackFromPlaylist(
@@ -12209,9 +12221,10 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     let startMs = 0;
     try {
       // Prefer transfer first (saves one paced GET /me/player/devices when the device is already valid).
+      // play=true — transfer(play=false) was leaving desktop Connect with the track loaded but paused.
       let transferred = false;
       try {
-        await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
+        await spotifyFor(roomId).transferPlayback(targetDeviceId, true);
         transferred = true;
       } catch (e) {
         routineServerLog('⚠️ transfer-first failed; resolving device list…', e?.body?.error?.message || e?.message || e);
@@ -12242,7 +12255,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             return;
           }
         }
-        await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
+        await spotifyFor(roomId).transferPlayback(targetDeviceId, true);
       }
       // Skip-based queue clearing removed to avoid context hijacks
       // Enforce deterministic playback mode to avoid context/radio fallbacks with delays
