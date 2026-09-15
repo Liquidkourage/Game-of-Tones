@@ -148,8 +148,6 @@ const OrgPortalPage: React.FC = () => {
       savedMixSnapshot?: unknown;
     }>;
   } | null>(null);
-  const [endAllBusy, setEndAllBusy] = useState(false);
-  const [closeEventBusyId, setCloseEventBusyId] = useState<number | null>(null);
 
   const billingNotice = searchParams.get('billing');
 
@@ -477,79 +475,6 @@ const OrgPortalPage: React.FC = () => {
     }
   };
 
-  const endAllActiveRooms = async () => {
-    const confirmed = window.confirm(
-      'End ALL of your active host rooms on this server?\n\n' +
-        'This clears orphaned live/paused sessions that can lock Spotify Connect, ' +
-        'and permanently ends the game for players in those rooms.',
-    );
-    if (!confirmed) return;
-    setEndAllBusy(true);
-    setBanner(null);
-    try {
-      const res = await hostFetch(`${API_BASE || ''}/api/host/rooms/end-all`, { method: 'POST' });
-      const j = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        endedRoomIds?: string[];
-        endedCount?: number;
-        message?: string;
-        error?: string;
-      };
-      if (!res.ok || !j.ok) {
-        setBanner(j.message || j.error || `Could not end rooms (${res.status})`);
-        return;
-      }
-      const n = typeof j.endedCount === 'number' ? j.endedCount : (j.endedRoomIds || []).length;
-      setBanner(
-        n === 0
-          ? 'No live host rooms were open on this server.'
-          : `Ended ${n} live room${n === 1 ? '' : 's'}${j.endedRoomIds?.length ? `: ${j.endedRoomIds.join(', ')}` : ''}.`,
-      );
-      await refresh();
-    } catch (e) {
-      setBanner(String(e));
-    } finally {
-      setEndAllBusy(false);
-    }
-  };
-
-  const closeOrgEvent = async (roomId: string, eventId: number) => {
-    const confirmed = window.confirm(
-      `Close the Active billing event for room ${roomId}?\n\n` +
-        'This ends that event window (and any live session for that room). ' +
-        'It does not delete prep backups.',
-    );
-    if (!confirmed) return;
-    setCloseEventBusyId(eventId);
-    setBanner(null);
-    try {
-      const res = await hostFetch(
-        `${API_BASE || ''}/api/org/events/${encodeURIComponent(roomId)}/close`,
-        { method: 'POST' },
-      );
-      const j = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        closed?: boolean;
-        refunded?: boolean;
-        message?: string;
-      };
-      if (!res.ok || !j.ok) {
-        setBanner(j.message || `Could not close event (${res.status})`);
-        return;
-      }
-      setBanner(
-        j.closed
-          ? `Closed event for room ${roomId}${j.refunded ? ' (credit refunded)' : ''}.`
-          : `No Active event found for room ${roomId}.`,
-      );
-      await refresh();
-    } catch (e) {
-      setBanner(String(e));
-    } finally {
-      setCloseEventBusyId(null);
-    }
-  };
-
   return (
     <div className="org-portal">
       <Link to="/" className="org-portal__back">
@@ -837,20 +762,6 @@ const OrgPortalPage: React.FC = () => {
                       {ev.creditConsumed && ev.status !== 'void' ? ' · 1 credit' : ''}
                       {ev.status === 'void' ? ' · credit refunded' : ''}
                     </span>
-                    {ev.status === 'active' ? (
-                      <>
-                        {' '}
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          style={{ marginLeft: 8, padding: '2px 10px', fontSize: '0.85rem' }}
-                          disabled={closeEventBusyId === ev.id}
-                          onClick={() => void closeOrgEvent(ev.roomId, ev.id)}
-                        >
-                          {closeEventBusyId === ev.id ? 'Closing…' : 'Close event'}
-                        </button>
-                      </>
-                    ) : null}
                     {isOwner ? (
                       <>
                         {' '}
@@ -950,30 +861,11 @@ const OrgPortalPage: React.FC = () => {
                 ))}
               </ul>
               <p className="org-portal__muted">
-                Active events are billing windows (~36 hours). Use Close event on leftovers like an
-                old room code; that is separate from live Spotify sessions.
+                Active events close automatically 36 hours after activation — nothing to clean up
+                between shows.
               </p>
             </section>
           ) : null}
-
-          <section className="org-portal__card">
-            <div className="org-portal__section-head">
-              <h2>Active rooms</h2>
-            </div>
-            <p className="org-portal__muted" style={{ marginTop: 0 }}>
-              If Spotify Connect is stuck after a failed Start Game, end every room you own on this
-              server — including orphaned live/paused sessions.
-            </p>
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={endAllBusy}
-              onClick={() => void endAllActiveRooms()}
-            >
-              {endAllBusy ? <Loader2 className="org-portal__spin" aria-hidden /> : null}
-              {endAllBusy ? ' Ending…' : 'End all active rooms'}
-            </button>
-          </section>
 
           {isOwner && data?.payments && data.payments.length > 0 ? (
             <section className="org-portal__card">

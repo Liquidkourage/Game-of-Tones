@@ -3981,74 +3981,6 @@ async function pauseSpotifyForRoom(roomId, room) {
   }
 }
 
-/**
- * End one in-memory room session (timers, Spotify pause attempt, billing close, client notify).
- * Used by end-game-session and end-all-host-sessions.
- */
-function endRoomSessionInternal(roomId, room, { reason = 'host_ended' } = {}) {
-  if (!room) return false;
-  void finalizeOrgEventForRoom(room);
-  stopLiveRoundTimers(roomId, room);
-  clearPlayerCardUpdateTimer(roomId);
-  clearSpotifyCallRetryTimer(room);
-  clearPlaybackWatcher(roomId);
-  room.simpleProgressionActive = false;
-  room.gameState = 'ended';
-  room.archived = true;
-  room.archivedAt = Date.now();
-  pauseSpotifyForRoom(roomId, room).catch(() => {});
-  if (room.temporaryPlaylistId) {
-    const plId = room.temporaryPlaylistId;
-    room.temporaryPlaylistId = null;
-    try {
-      spotifyFor(roomId)
-        .deleteTemporaryPlaylist(plId)
-        .catch((err) => console.warn('⚠️ Failed to delete temporary playlist:', err));
-    } catch (_) {
-      /* ignore */
-    }
-  }
-  clearPublicDisplaySessionState(room);
-  clearPlayerBingoCallState(room);
-  clearPlayerSessionBingoWins(room);
-  const rounds = room.roundWinners?.length || 0;
-  io.to(roomId).emit('game-session-ended', {
-    roomId,
-    reason,
-    totalRounds: rounds,
-    roundWinners: room.roundWinners || [],
-    finalMessage:
-      reason === 'end_all_host_sessions'
-        ? 'All of your active host sessions were ended.'
-        : `Game session complete! ${rounds} rounds played.`,
-  });
-  io.to(roomId).emit('game-ended', { roomId, reason });
-  routineServerLog(`✅ Ended room session ${roomId} (reason=${reason}, rounds=${rounds})`);
-  return true;
-}
-
-/** End every non-ended room owned by this host user (clears orphan live/paused Connect locks). */
-function endAllActiveRoomsForOwner(ownerUserId, reason = 'end_all_host_sessions') {
-  if (ownerUserId == null || !Number.isFinite(Number(ownerUserId))) return [];
-  const uid = Number(ownerUserId);
-  const ended = [];
-  for (const [rid, r] of [...rooms.entries()]) {
-    if (r?.ownerUserId == null || Number(r.ownerUserId) !== uid) continue;
-    if (r.gameState === 'ended') {
-      r.archived = true;
-      r.archivedAt = r.archivedAt || Date.now();
-      continue;
-    }
-    if (endRoomSessionInternal(rid, r, { reason })) ended.push(rid);
-  }
-  routineServerLog(
-    `🏁 endAllActiveRoomsForOwner user_${uid}: ended ${ended.length} room(s)${
-      ended.length ? ` [${ended.join(', ')}]` : ''
-    }`,
-  );
-  return ended;
-}
-
 async function transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, currentDeviceId, state, sp) {
   if (!spotifyDevices.shouldEnforceDeviceLock(room)) {
     if (currentDeviceId) spotifyDevices.cacheJamDeviceId(room, currentDeviceId);
@@ -4613,18 +4545,6 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
         routineServerLog(
           `🔎 Simple playback verify ${i + 1}/4: is_playing=${playing} correct_track=${correctTrack}`,
         );
-        // Track loaded but paused (common after seek on desktop Connect) — resume, don't re-seek spam.
-        if (!playing && correctTrack) {
-          try {
-            await spPlay.resumePlayback(resolvedDeviceId);
-            continue;
-          } catch (resumeErr) {
-            const msg = resumeErr?.body?.error?.message || resumeErr?.message || '';
-            if (!/restriction/i.test(msg)) {
-              console.warn('⚠️ Simple verify resume failed:', msg);
-            }
-          }
-        }
         try {
           if (room.temporaryPlaylistId) {
             await spPlay.startPlaybackFromPlaylist(
@@ -7973,51 +7893,41 @@ io.on('connection', (socket) => {
     const { roomId } = data || {};
     const room = rooms.get(roomId);
     if (!room) return;
-
+    
+    // Verify this is the host
     const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
     if (!isHost) return;
-
+    
     routineServerLog(`🏁 Host ending game session for room ${roomId}`);
-    endRoomSessionInternal(roomId, room, { reason: 'host_ended' });
-  });
-
-  /** End every in-memory room owned by this signed-in host (orphan live/paused cleanup). */
-  socket.on('end-all-host-sessions', (data = {}) => {
-    try {
-      const uid = socket.hostUserId;
-      if (uid == null) {
-        socket.emit('end-all-host-sessions-result', {
-          ok: false,
-          error: 'not_signed_in',
-          message: 'Sign in as host first.',
-        });
-        return;
-      }
-      const roomId = typeof data.roomId === 'string' ? data.roomId : '';
-      if (roomId) {
-        const room = rooms.get(roomId);
-        const isHost =
-          !!room &&
-          (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
-        if (room && !isHost) {
-          socket.emit('end-all-host-sessions-result', {
-            ok: false,
-            error: 'forbidden',
-            message: 'Only the host can end all sessions.',
-          });
-          return;
-        }
-      }
-      const endedRoomIds = endAllActiveRoomsForOwner(uid, 'end_all_host_sessions');
-      socket.emit('end-all-host-sessions-result', { ok: true, endedRoomIds });
-    } catch (e) {
-      console.warn('end-all-host-sessions:', e?.message || e);
-      socket.emit('end-all-host-sessions-result', {
-        ok: false,
-        error: 'server_error',
-        message: e?.message || 'Failed to end sessions',
-      });
+    
+    void finalizeOrgEventForRoom(room);
+    
+    stopLiveRoundTimers(roomId, room);
+    clearPlayerCardUpdateTimer(roomId); // Clear debounce timer
+    room.gameState = 'ended';
+    pauseSpotifyForRoom(roomId, room).catch(() => {});
+    
+    // Clean up temporary playlist
+    if (room.temporaryPlaylistId) {
+      spotifyFor(roomId).deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
+        console.warn('⚠️ Failed to delete temporary playlist:', err)
+      );
+      room.temporaryPlaylistId = null;
     }
+    
+    clearPublicDisplaySessionState(room);
+    clearPlayerBingoCallState(room);
+    clearPlayerSessionBingoWins(room);
+    
+    // Notify all clients that the entire game session has ended
+    io.to(roomId).emit('game-session-ended', { 
+      roomId,
+      totalRounds: room.roundWinners?.length || 0,
+      roundWinners: room.roundWinners || [],
+      finalMessage: `Game session complete! ${room.roundWinners?.length || 0} rounds played.`
+    });
+    
+    routineServerLog(`✅ Game session ended for room ${roomId} after ${room.roundWinners?.length || 0} rounds`);
   });
 
   // Client requests a state sync (useful if they joined before start or missed events)
@@ -12220,48 +12130,71 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
 
     let startMs = 0;
     try {
-      // Do NOT transfer/shuffle before first play — that was leaving Connect Active with item=none.
-      // Play (uris → context wake) first; shuffle/repeat only after audio confirms.
-      startMs = computeSpotifySnippetRandomStartMs(room, firstSong, 'auto first');
-      routineServerLog(
-        `🎯 Starting first song play@0 then seek→${startMs}ms (${Math.floor(startMs / 1000)}s) mode=${room.randomStarts}`,
-      );
-
-      await spotifyFor(roomId).startPlayback(
-        targetDeviceId,
-        [`spotify:track:${firstSong.id}`],
-        startMs,
-      );
+      // Prefer transfer first (saves one paced GET /me/player/devices when the device is already valid).
+      let transferred = false;
       try {
-        await spotifyFor(roomId).setShuffleState(false, targetDeviceId);
-      } catch (_) {}
-      try {
-        await spotifyFor(roomId).setRepeatState('track', targetDeviceId);
-      } catch (_) {}
-
-      await new Promise((r) => setTimeout(r, 300));
-      const confirm = await spotifyFor(roomId).getCurrentPlaybackState();
-      if (!confirm?.is_playing || confirm?.item?.id !== firstSong.id) {
-        const err = new Error(
-          `Spotify did not confirm audio after play (is_playing=${!!confirm?.is_playing}, item=${confirm?.item?.id || 'none'}). ` +
-            `Open Spotify on the locked computer, press play once to wake Connect, leave it open, then Start Game.`,
-        );
-        err.code = 'spotify_not_playing';
-        throw err;
+        await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
+        transferred = true;
+      } catch (e) {
+        routineServerLog('⚠️ transfer-first failed; resolving device list…', e?.body?.error?.message || e?.message || e);
       }
-
-      routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId}`);
+      if (!transferred) {
+        const spPlay = spotifyFor(roomId);
+        let devices = await spPlay.getUserDevices();
+        let deviceInList = devices.find((d) => d.id === targetDeviceId);
+        if (!deviceInList) {
+          routineServerLog('⚠️ Locked device not in list; attempting activation...');
+          try {
+            await spPlay.activateDevice(targetDeviceId);
+          } catch (activateErr) {
+            routineServerLog(
+              '⚠️ activateDevice failed:',
+              activateErr?.body?.error?.message || activateErr?.message || activateErr,
+            );
+          }
+          spPlay.invalidateUserDevicesCache();
+          devices = await spPlay.getUserDevices({ forceRefresh: true });
+          deviceInList = devices.find((d) => d.id === targetDeviceId);
+          if (!deviceInList) {
+            io.to(roomId).emit('playback-error', {
+              message:
+                'Spotify playback device is offline or missing. Open Spotify on that device (or pick another device in Connection → Refresh devices), then Start Game again.',
+              type: 'device_offline',
+            });
+            return;
+          }
+        }
+        await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
+      }
+      // Skip-based queue clearing removed to avoid context hijacks
+      // Enforce deterministic playback mode to avoid context/radio fallbacks with delays
+      try { await spotifyFor(roomId).withRetries('setShuffle(false)', () => spotifyFor(roomId).setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
+      await new Promise(resolve => setTimeout(resolve, 100));
+      // First track always starts via URIs (temp playlist, if any, is still building asynchronously)
+      await new Promise(resolve => setTimeout(resolve, 100));
+      startMs = computeSpotifySnippetRandomStartMs(room, firstSong, 'auto first');
+      routineServerLog(`🎯 Starting first song with randomized offset: ${startMs}ms (${Math.floor(startMs / 1000)}s) mode=${room.randomStarts}`);
+      
+      await spotifyFor(roomId).withRetries('startPlayback(initial)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
       try {
-        const r = rooms.get(roomId);
+        await spotifyFor(roomId).withRetries('setRepeat(track,initial)', () => spotifyFor(roomId).setRepeatState('track', targetDeviceId), { attempts: 2, backoffMs: 200 });
+      } catch (_) {}
+      routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId}`);
+      try { 
+        const r = rooms.get(roomId); 
         if (r) {
           r.songStartAtMs = Date.now();
-          r.currentSongStartMs = startMs;
+          r.currentSongStartMs = startMs; // Store for restart correction
         }
       } catch {}
-
+      
+      // Brief settle before volume API (shorter than historical 800ms — audio already started)
+      await new Promise(resolve => setTimeout(resolve, 400));
+      
+      // Set initial volume to 100% (or room's saved volume)
       try {
         const initialVolume = room.volume || 100;
-        await spotifyFor(roomId).setVolume(initialVolume, targetDeviceId);
+        await spotifyFor(roomId).withRetries('setVolume(initial)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
         routineServerLog(`🔊 Set initial volume to ${initialVolume}%`);
       } catch (volumeError) {
         console.error('❌ Error setting initial volume:', volumeError);
@@ -12274,15 +12207,19 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         try {
           const spRefresh = spotifyFor(roomId);
           await spRefresh.refreshAccessToken();
-          await spotifyFor(roomId).startPlayback(
-            targetDeviceId,
-            [`spotify:track:${firstSong.id}`],
-            startMs,
-          );
-          const confirm2 = await spotifyFor(roomId).getCurrentPlaybackState();
-          if (!confirm2?.is_playing || confirm2?.item?.id !== firstSong.id) {
-            throw new Error('Still no audio after token refresh');
+          spRefresh.invalidateUserDevicesCache();
+          const devicesAfter = await spRefresh.getUserDevices({ forceRefresh: true });
+          const stillMissing = !devicesAfter.find((d) => d.id === targetDeviceId);
+          if (stillMissing) {
+            routineServerLog('⚠️ Locked device still missing after refresh; attempting activation...');
+            await spRefresh.activateDevice(targetDeviceId);
           }
+          await spotifyFor(roomId).withRetries('transferPlayback(after-refresh)', () => spotifyFor(roomId).transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
+          // Skip-based queue clearing removed to avoid context hijacks
+          await spotifyFor(roomId).withRetries('startPlayback(after-refresh)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+          try {
+            await spotifyFor(roomId).withRetries('setRepeat(track,after-refresh)', () => spotifyFor(roomId).setRepeatState('track', targetDeviceId), { attempts: 2, backoffMs: 200 });
+          } catch (_) {}
           routineServerLog(`✅ Successfully started playback after token refresh`);
           try {
             const r = rooms.get(roomId);
@@ -12291,22 +12228,23 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
               r.currentSongStartMs = startMs;
             }
           } catch {}
+          
+          await new Promise(resolve => setTimeout(resolve, 400));
+          
+          // Set initial volume to 100% (or room's saved volume)
+          try {
+            const initialVolume = room.volume || 100;
+            await spotifyFor(roomId).withRetries('setVolume(after-refresh)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
+            routineServerLog(`🔊 Set initial volume to ${initialVolume}% after token refresh`);
+          } catch (volumeError) {
+            console.error('❌ Error setting initial volume after token refresh:', volumeError);
+          }
         } catch (refreshError) {
           console.error('❌ Error after token refresh:', refreshError);
-          const refreshMsg = refreshError?.body?.error?.message || refreshError?.message || message;
-          io.to(roomId).emit('playback-error', {
-            message: refreshMsg || 'Unable to start on locked device after token refresh.',
-            type: refreshError?.code || 'playback_start_failed',
-          });
           return;
         }
       } else {
-        io.to(roomId).emit('playback-error', {
-          message:
-            message ||
-            'Spotify did not start audio on the locked device. Open Spotify on that computer, press play once, then Start Game.',
-          type: playbackError?.code || 'playback_start_failed',
-        });
+        io.to(roomId).emit('playback-error', { message: 'Unable to start on locked device. Ensure it is online and try again.' });
         return;
       }
     }
@@ -12343,13 +12281,13 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         if (!QUIET_MODE) logger.log(`🔎 Playback verify attempt ${i + 1}: is_playing=${playing} correct_track=${correctTrack} progress=${state?.progress_ms}ms`, 'playback-verify', 5);
         if (playing && correctTrack) break; // Only break if BOTH conditions are met
         
-        // Only try hard re-play if not playing AND we have the right track (avoid empty resume Restriction)
+        // Only try resume if not playing AND we have the right track (avoid restriction errors)
         if (!playing && correctTrack) {
           try { 
-            await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs); 
+            await spotifyFor(roomId).resumePlayback(targetDeviceId); 
           } catch (e) {
-            if (!e?.message?.includes('Restriction violated') && e?.code !== 'spotify_not_playing') {
-              logger.warn('⚠️ Re-play during verify failed:', 'replay-verify-error', 5);
+            if (!e?.message?.includes('Restriction violated')) {
+              logger.warn('⚠️ Resume during verify failed:', 'resume-verify-error', 5);
             }
           }
         }
@@ -15112,53 +15050,6 @@ function allocateHostOwnedRoom(uid, options = {}) {
   }
   return null;
 }
-
-app.post('/api/host/rooms/end-all', async (req, res) => {
-  try {
-    const uid = await requireApprovedHostUid(req, res);
-    if (!uid) return;
-    const endedRoomIds = endAllActiveRoomsForOwner(uid, 'end_all_host_sessions');
-    return res.json({ ok: true, endedRoomIds, endedCount: endedRoomIds.length });
-  } catch (e) {
-    console.error('POST /api/host/rooms/end-all:', e?.message || e);
-    return res.status(500).json({ error: 'failed', message: e?.message || 'Failed to end rooms' });
-  }
-});
-
-/** Close an Active billing event for a room (does not require joining that room). */
-app.post('/api/org/events/:roomId/close', async (req, res) => {
-  try {
-    const uid = await requireApprovedHostUid(req, res);
-    if (!uid) return;
-    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
-    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
-    if (!ctx.organization) {
-      return res.status(404).json({ error: 'no_org', message: 'No organization found.' });
-    }
-    if (ctx.role !== 'owner' && ctx.role !== 'host') {
-      return res.status(403).json({ error: 'forbidden', message: 'Hosts/owners only.' });
-    }
-    const roomId = String(req.params.roomId || '').trim();
-    if (!roomId) return res.status(400).json({ error: 'room_required' });
-
-    // Also end any in-memory live session for this room if this host owns it.
-    const live = rooms.get(roomId);
-    if (live && live.ownerUserId != null && Number(live.ownerUserId) === Number(uid) && live.gameState !== 'ended') {
-      endRoomSessionInternal(roomId, live, { reason: 'org_event_closed' });
-    }
-
-    const result = await billingStore.eventCredits.closeActiveOrgEvent(db, ctx.organization.id, roomId);
-    return res.json({
-      ok: true,
-      closed: !!result.closed,
-      refunded: !!result.refunded,
-      roomId,
-    });
-  } catch (e) {
-    console.error('POST /api/org/events/:roomId/close:', e?.message || e);
-    return res.status(500).json({ error: 'failed', message: e?.message || 'Failed to close event' });
-  }
-});
 
 /** Create a new room owned by the logged-in host (default code = MDY + user id). */
 app.post('/api/host/rooms', async (req, res) => {
