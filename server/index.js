@@ -12305,9 +12305,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             routineServerLog('⚠️ Locked device still missing after refresh; attempting activation...');
             await spRefresh.activateDevice(targetDeviceId);
           }
-          await spotifyFor(roomId).withRetries('transferPlayback(after-refresh)', () => spotifyFor(roomId).transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
-          // Skip-based queue clearing removed to avoid context hijacks
-          await spotifyFor(roomId).withRetries('startPlayback(after-refresh)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+          await spotifyFor(roomId).withRetries('transferPlayback(after-refresh)', () => spotifyFor(roomId).transferPlayback(targetDeviceId, true), { attempts: 3, backoffMs: 300 });
+          await spotifyFor(roomId).withRetries('startPlayback(after-refresh)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 2, backoffMs: 400 });
           try {
             await spotifyFor(roomId).withRetries('setRepeat(track,after-refresh)', () => spotifyFor(roomId).setRepeatState('track', targetDeviceId), { attempts: 2, backoffMs: 200 });
           } catch (_) {}
@@ -12322,7 +12321,6 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           
           await new Promise(resolve => setTimeout(resolve, 400));
           
-          // Set initial volume to 100% (or room's saved volume)
           try {
             const initialVolume = room.volume || 100;
             await spotifyFor(roomId).withRetries('setVolume(after-refresh)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
@@ -12332,10 +12330,21 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           }
         } catch (refreshError) {
           console.error('❌ Error after token refresh:', refreshError);
+          const refreshMsg = refreshError?.body?.error?.message || refreshError?.message || message;
+          io.to(roomId).emit('playback-error', {
+            message: refreshMsg || 'Unable to start on locked device after token refresh.',
+            type: refreshError?.code || 'playback_start_failed',
+          });
           return;
         }
       } else {
-        io.to(roomId).emit('playback-error', { message: 'Unable to start on locked device. Ensure it is online and try again.' });
+        // Do NOT advance the board — Spotify never confirmed audio (often Restriction / wrong account).
+        io.to(roomId).emit('playback-error', {
+          message:
+            message ||
+            'Spotify refused to play on the locked device. Use the same Premium account in the Spotify app as Tempo Connection, play any song once on that computer, refresh devices, then Start Game.',
+          type: playbackError?.code || 'playback_start_failed',
+        });
         return;
       }
     }
@@ -12372,13 +12381,13 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         if (!QUIET_MODE) logger.log(`🔎 Playback verify attempt ${i + 1}: is_playing=${playing} correct_track=${correctTrack} progress=${state?.progress_ms}ms`, 'playback-verify', 5);
         if (playing && correctTrack) break; // Only break if BOTH conditions are met
         
-        // Only try resume if not playing AND we have the right track (avoid restriction errors)
+        // Only try hard re-play if not playing AND we have the right track (avoid empty resume Restriction)
         if (!playing && correctTrack) {
           try { 
-            await spotifyFor(roomId).resumePlayback(targetDeviceId); 
+            await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs); 
           } catch (e) {
-            if (!e?.message?.includes('Restriction violated')) {
-              logger.warn('⚠️ Resume during verify failed:', 'resume-verify-error', 5);
+            if (!e?.message?.includes('Restriction violated') && e?.code !== 'spotify_not_playing') {
+              logger.warn('⚠️ Re-play during verify failed:', 'replay-verify-error', 5);
             }
           }
         }
