@@ -12373,7 +12373,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     try {
       const spPlay = spotifyFor(roomId);
       try {
-        const profile = await spPlay.getCurrentUserProfile();
+        // Cached when possible — an extra GET /me before every Start Game added ~700ms+.
+        const profile = await spPlay.getCurrentUserProfile({ allowCache: true });
         playDiag.product = profile?.product || 'n/a';
         playDiag.accountId = profile?.id || undefined;
         playDiag.accountName = profile?.display_name || undefined;
@@ -12393,11 +12394,10 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         routineServerLog(`⚠️ Could not read Spotify profile before play: ${profErr?.message || profErr}`);
       }
 
-      // Nuclear: if locked device is already listed, skip transfer entirely before first play.
-      // Transfer(play=true) with no context often leaves desktop Connect active-but-empty.
+      // Trust the locked device id for Start Game. Only hit /devices when it's missing from cache.
       let devices = [];
       try {
-        devices = await spPlay.getUserDevices({ forceRefresh: true });
+        devices = await spPlay.getUserDevices({ forceRefresh: false });
       } catch (devListErr) {
         routineServerLog(
           `⚠️ devices list before play failed: ${devListErr?.body?.error?.message || devListErr?.message || devListErr}`,
@@ -12409,6 +12409,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         routineServerLog(
           `⏩ Skip pre-play transfer — device already listed: ${deviceInList.name} (${deviceInList.type})`,
         );
+      } else if (devices.length === 0) {
+        // No cache / empty — still attempt play on the locked id (Connect often accepts it).
+        routineServerLog('⏩ No devices cache — playing on locked device id without refresh');
       } else {
         routineServerLog('⚠️ Locked device not in list; resolving before play…');
         const saved = loadSavedDeviceForRoom(roomId);
@@ -12451,7 +12454,6 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           return;
         }
         playDiag.deviceName = deviceInList.name || playDiag.deviceName;
-        // Device was missing then recovered — one transfer to claim it, then play uris.
         try {
           await spPlay.transferPlayback(targetDeviceId, false);
         } catch (xferErr) {
@@ -12491,14 +12493,6 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         return;
       }
 
-      // Shuffle/repeat AFTER audio binds — do not re-run startConnectTrack here.
-      try {
-        await spotifyFor(roomId).setShuffleState(false, targetDeviceId);
-      } catch (_) {}
-      try {
-        await spotifyFor(roomId).setRepeatState('track', targetDeviceId);
-      } catch (_) {}
-
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId}`);
       try {
         const r = rooms.get(roomId);
@@ -12508,18 +12502,23 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         }
       } catch {}
 
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      try {
-        const initialVolume = room.volume || 100;
-        await spotifyFor(roomId).withRetries(
-          'setVolume(initial)',
-          () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId),
-          { attempts: 2, backoffMs: 300 },
-        );
-        routineServerLog(`🔊 Set initial volume to ${initialVolume}%`);
-      } catch (volumeError) {
-        console.error('❌ Error setting initial volume:', volumeError);
-      }
+      // Shuffle / repeat / volume after audio — don't block the host hearing the first note.
+      const postDeviceId = targetDeviceId;
+      const postVolume = room.volume || 100;
+      void (async () => {
+        try {
+          await spotifyFor(roomId).setShuffleState(false, postDeviceId);
+        } catch (_) {}
+        try {
+          await spotifyFor(roomId).setRepeatState('track', postDeviceId);
+        } catch (_) {}
+        try {
+          await spotifyFor(roomId).setVolume(postVolume, postDeviceId);
+          routineServerLog(`🔊 Set initial volume to ${postVolume}%`);
+        } catch (volumeError) {
+          console.error('❌ Error setting initial volume:', volumeError);
+        }
+      })();
     } catch (playbackError) {
       console.error('❌ Error starting playback in strict mode:', playbackError);
       const message = playbackError?.body?.error?.message || playbackError?.message || '';

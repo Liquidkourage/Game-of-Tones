@@ -364,6 +364,15 @@ class SpotifyService {
     this._onQuarantineApplied = null;
     /** Reused Connect wake playlist id (uris→empty desktop fallback). */
     this._connectWakePlaylistId = null;
+    this._connectWakeLastUris = null;
+    /**
+     * Desktop Connect often accepts uris play with 204 + empty Now Playing; context_uri binds.
+     * Once true (default after silence crisis), skip the doomed uris attempt on Start Game.
+     */
+    this._preferContextConnectPlay = true;
+    /** Cached GET /v1/me for Start Game free-check (avoid an extra paced call). */
+    this._cachedUserProfile = null;
+    this._cachedUserProfileAt = 0;
     /** Coalesce parallel ensureValidToken → refreshAccessToken. */
     this._refreshInflight = null;
   }
@@ -1590,6 +1599,23 @@ class SpotifyService {
   }
 
   /**
+   * Temporarily tighten Web API pacing for the few Start Game play/confirm calls.
+   * Restores the normal interval afterward so library traffic stays 429-safe.
+   */
+  async _withConnectBurstPacing(fn) {
+    const prev = this._pacingMinIntervalMs;
+    const burst = 100;
+    if (prev && prev > burst) {
+      this._pacingMinIntervalMs = burst;
+    }
+    try {
+      return await fn();
+    } finally {
+      this._pacingMinIntervalMs = prev;
+    }
+  }
+
+  /**
    * Tiny playlist used only when uris leave Connect empty (desktop). Essential — not blocked
    * by live-show lock (createTemporaryPlaylist is). Reuses one playlist per token to avoid
    * create+items latency (~2 paced API calls) on every Start Game.
@@ -1600,6 +1626,14 @@ class SpotifyService {
     if (!uris.length) throw new Error('createWakePlaylist: no track uris');
 
     if (this._connectWakePlaylistId) {
+      const sameTracks =
+        Array.isArray(this._connectWakeLastUris) &&
+        this._connectWakeLastUris.length === uris.length &&
+        this._connectWakeLastUris.every((u, i) => u === uris[i]);
+      if (sameTracks) {
+        routineSpotifyLog(`⏩ Wake playlist already loaded ${this._connectWakePlaylistId}`);
+        return this._connectWakePlaylistId;
+      }
       try {
         await this._webApiRequest(
           'PUT',
@@ -1607,6 +1641,7 @@ class SpotifyService {
           { uris },
           'createWakePlaylist',
         );
+        this._connectWakeLastUris = uris;
         routineSpotifyLog(
           `✅ Wake playlist reused ${this._connectWakePlaylistId} (${uris.length} track(s))`,
         );
@@ -1616,6 +1651,7 @@ class SpotifyService {
           `⚠️ Wake playlist reuse failed — creating new: ${reuseErr?.body?.error?.message || reuseErr?.message || reuseErr}`,
         );
         this._connectWakePlaylistId = null;
+        this._connectWakeLastUris = null;
       }
     }
 
@@ -1639,18 +1675,18 @@ class SpotifyService {
       'createWakePlaylist',
     );
     this._connectWakePlaylistId = playlistId;
+    this._connectWakeLastUris = uris;
     routineSpotifyLog(`✅ Wake playlist ${playlistId} with ${uris.length} track(s)`);
     return playlistId;
   }
 
   /**
    * Connect-safe start: never put Early/Random offset in the play body.
-   * Fast path: uris@0 → confirm → seek.
-   * Desktop often accepts uris with 204 + empty Now Playing — then jump straight to
-   * context_uri wake playlist (what actually binds). Skip the long omit-device /
-   * transfer ladder that stacked ~30s with 700ms API pacing.
+   * Prefer context_uri wake playlist first (desktop binds this; uris often 204+empty).
+   * Uses burst pacing so Start Game is ~1–3s instead of stacked 700ms gaps.
    */
   async startConnectTrack(deviceId, uris, seekMs = 0, expectedTrackId = null) {
+    return this._withConnectBurstPacing(async () => {
     await this._ensureCanCallWebApi('startPlayback');
     const trackUris = Array.isArray(uris) ? uris : [uris];
     const trackId =
@@ -1731,44 +1767,61 @@ class SpotifyService {
       }
     };
 
-    // 1) Fast path — uris@0 on locked device
-    await playUrisAtZero(false);
-    let check = await readPlayer('after-play0');
-    if (!check.ok && check.hasItem) {
-      await settle(250);
-      check = await readPlayer('after-play0-settle');
-    } else if (!check.hasItem) {
-      // One short wait — desktop sometimes binds a beat late; don't stack long settles.
-      await settle(350);
-      check = await readPlayer('after-play0-settle');
-    }
+    const tryContextWake = async () => {
+      routineSpotifyLog('🔧 connect: context_uri wake playlist');
+      wakePlaylistId = await this.createWakePlaylist(
+        `Wake ${new Date().toISOString().slice(0, 16)}`,
+        trackUris,
+      );
+      await playContextAtZero(wakePlaylistId, false);
+      let check = await readPlayer('after-context');
+      if (!check.ok && check.hasItem) {
+        await settle(200);
+        check = await readPlayer('after-context-settle');
+      }
+      if (!check.hasItem) {
+        await playContextAtZero(wakePlaylistId, true);
+        check = await readPlayer('after-context-active');
+      }
+      if (check.ok) this._preferContextConnectPlay = true;
+      return check;
+    };
 
-    // 2) Empty → context_uri wake playlist immediately (this is what binds on MINIBEAST-class desktop)
-    if (!check.hasItem) {
-      routineSpotifyLog('🔧 connect: empty after uris — context_uri wake (skip long transfer ladder)');
+    let check = { ok: false, hasItem: false, playing: false, correct: false, state: null };
+
+    // 1) Prefer context first — uris often return 204 with empty Now Playing on desktop Connect.
+    if (this._preferContextConnectPlay) {
       try {
-        wakePlaylistId = await this.createWakePlaylist(
-          `Wake ${new Date().toISOString().slice(0, 16)}`,
-          trackUris,
-        );
-        await playContextAtZero(wakePlaylistId, false);
-        check = await readPlayer('after-context');
-        if (!check.ok) {
-          await settle(300);
-          check = await readPlayer('after-context-settle');
-        }
-        if (!check.hasItem) {
-          await playContextAtZero(wakePlaylistId, true);
-          check = await readPlayer('after-context-active');
-        }
+        check = await tryContextWake();
       } catch (wakePlErr) {
         routineSpotifyLog(
-          `⚠️ context wake playlist failed: ${wakePlErr?.body?.error?.message || wakePlErr?.message || wakePlErr}`,
+          `⚠️ context wake failed, falling back to uris: ${wakePlErr?.body?.error?.message || wakePlErr?.message || wakePlErr}`,
         );
       }
     }
 
-    // 3) Last resort — one omit-device uris + one transfer(play=true) wake (kept short)
+    // 2) Uris path (fallback, or when preferContext is off)
+    if (!check.ok) {
+      await playUrisAtZero(false);
+      check = await readPlayer('after-play0');
+      if (!check.hasItem) {
+        // Don't burn a second poll — go context immediately if we haven't yet.
+        if (!wakePlaylistId) {
+          try {
+            check = await tryContextWake();
+          } catch (wakePlErr) {
+            routineSpotifyLog(
+              `⚠️ context wake after uris failed: ${wakePlErr?.body?.error?.message || wakePlErr?.message || wakePlErr}`,
+            );
+          }
+        }
+      } else if (!check.ok) {
+        await settle(200);
+        check = await readPlayer('after-play0-settle');
+      }
+    }
+
+    // 3) Last resort — omit-device + transfer wake
     if (!check.hasItem && activeDeviceId) {
       routineSpotifyLog('🔧 connect: still empty — last-resort omit-device + transfer wake');
       try {
@@ -1781,7 +1834,7 @@ class SpotifyService {
         } catch (wakeErr) {
           routineSpotifyLog(`⚠️ wake transfer failed: ${wakeErr?.body?.error?.message || wakeErr?.message || wakeErr}`);
         }
-        await settle(400);
+        await settle(300);
         await playUrisAtZero(false);
         check = await readPlayer('after-wake');
       }
@@ -1812,7 +1865,6 @@ class SpotifyService {
     }
 
     if (targetSeek > 0) {
-      await settle(200);
       try {
         await this.seekToPosition(targetSeek, activeDeviceId);
         routineSpotifyLog(`✅ connect seek to Early offset ${targetSeek}ms after audio confirm`);
@@ -1828,6 +1880,7 @@ class SpotifyService {
       itemId: trackId,
       wakePlaylistId,
     };
+    });
   }
 
   // Pause playback
@@ -2602,18 +2655,30 @@ class SpotifyService {
   }
 
   // Get current user profile (to verify correct Spotify account). Email omitted from scopes — field may be null.
-  async getCurrentUserProfile() {
+  async getCurrentUserProfile(options = {}) {
+    const maxAgeMs = Number(options.maxAgeMs);
+    const allowCache = options.allowCache !== false;
+    if (
+      allowCache &&
+      this._cachedUserProfile &&
+      Date.now() - (this._cachedUserProfileAt || 0) < (Number.isFinite(maxAgeMs) ? maxAgeMs : 10 * 60 * 1000)
+    ) {
+      return this._cachedUserProfile;
+    }
     await this._ensureCanCallWebApi('getCurrentUserProfile');
     try {
       const response = await this.spotifyApi.getMe();
       const b = response.body || {};
-      return {
+      const profile = {
         id: b.id,
         display_name: b.display_name,
         email: b.email != null ? b.email : null,
         product: b.product,
         country: b.country
       };
+      this._cachedUserProfile = profile;
+      this._cachedUserProfileAt = Date.now();
+      return profile;
     } catch (error) {
       this._rethrowIfRateLimited(error, 'getCurrentUserProfile');
       console.error('Error getting current user profile:', error);
