@@ -4582,12 +4582,6 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
         );
         try {
           if (room.temporaryPlaylistId) {
-            try {
-              await spPlay.transferPlayback(resolvedDeviceId, false);
-            } catch (_) {
-              /* ignore */
-            }
-            await new Promise((r) => setTimeout(r, 300));
             await spPlay.startPlaybackFromPlaylist(
               resolvedDeviceId,
               room.temporaryPlaylistId,
@@ -12370,12 +12364,6 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         routineServerLog(`🔧 Verification failed (playing=${playing}, correctTrack=${correctTrack}), correcting with startMs=${startMs}ms`);
         try { 
           if (room.temporaryPlaylistId) {
-            try {
-              await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
-            } catch (_) {
-              /* ignore */
-            }
-            await new Promise((r) => setTimeout(r, 350));
             await spotifyFor(roomId).startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, 0, startMs);
           } else {
             await spotifyFor(roomId).startPlaybackEnsuringActive(

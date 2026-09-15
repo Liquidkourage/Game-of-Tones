@@ -100,6 +100,7 @@ const SPOTIFY_SOURCE_ROUTE_HINT = {
   removeTracksFromPlaylist: 'DELETE /v1/playlists/{playlist_id}/items',
   replaceTrackInPlaylist: 'DELETE+POST /v1/playlists/{playlist_id}/items',
   _transferPlaybackDirect: 'PUT /v1/me/player',
+  _startPlaybackDirect: 'PUT /v1/me/player/play',
 };
 
 /** @param {Record<string, string>} h */
@@ -1477,10 +1478,11 @@ class SpotifyService {
     await this._ensureCanCallWebApi('startPlayback');
     
     try {
+      const positionMs = Math.max(0, Math.floor(Number(position) || 0));
       await this.spotifyApi.play({
         device_id: deviceId,
         uris: uris,
-        position_ms: position
+        position_ms: positionMs,
       });
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlayback');
@@ -1525,55 +1527,145 @@ class SpotifyService {
   }
 
   /**
-   * Hard start that re-asserts device control when Connect returns 2xx but leaves
-   * the desktop idle / with no active item (common after a mid-song manual play).
+   * Hard start when Connect returns 2xx but leaves desktop with empty Now Playing.
+   * Strategy: load track at 0ms (most reliable), confirm item, then seek to offset.
+   * Avoid transfer(play=false) on retry — that clears Now Playing and worsens silence.
    */
   async startPlaybackEnsuringActive(deviceId, uris, position = 0, expectedTrackId = null) {
     await this._ensureCanCallWebApi('startPlayback');
     const trackId =
       expectedTrackId ||
       (typeof uris?.[0] === 'string' ? String(uris[0]).replace(/^spotify:track:/i, '') : '');
+    const targetPos = Math.max(0, Math.floor(Number(position) || 0));
 
-    const confirm = async () => {
-      await new Promise((r) => setTimeout(r, 450));
+    const confirm = async (waitMs = 550) => {
+      await new Promise((r) => setTimeout(r, waitMs));
       const state = await this.getCurrentPlaybackState();
-      const id = state?.item?.id;
+      const id = state?.item?.id || null;
       const playing = !!state?.is_playing;
-      const correct = !trackId || id === trackId;
-      return { state, playing, correct, ok: playing && correct };
+      const correct = !!trackId && id === trackId;
+      return { state, playing, correct, ok: playing && correct, id };
+    };
+
+    const playAtZero = async (viaDirect) => {
+      if (viaDirect) {
+        await this._startPlaybackDirect(deviceId, uris, 0);
+      } else {
+        await this.startPlayback(deviceId, uris, 0);
+      }
     };
 
     try {
-      await this.startPlayback(deviceId, uris, position);
-      let check = await confirm();
-      if (check.ok) return check.state;
-
-      routineSpotifyLog(
-        `🔧 startPlaybackEnsuringActive: not active (playing=${check.playing} track=${check.state?.item?.id || 'none'}) — re-transfer + retry`,
-      );
-      try {
-        await this.transferPlayback(deviceId, false);
-      } catch (_) {
-        /* continue — play may still work */
-      }
-      await new Promise((r) => setTimeout(r, 400));
-      await this.startPlayback(deviceId, uris, position);
-      check = await confirm();
-      if (check.ok) return check.state;
-
-      if (check.correct && !check.playing) {
+      // 1) Load at 0 — play+large position_ms often returns 204 with item=none on desktop Connect.
+      await playAtZero(false);
+      let check = await confirm(600);
+      if (!check.id) {
+        routineSpotifyLog(
+          '🔧 startPlaybackEnsuringActive: no item after play@0 — wake device (transfer play=true) + direct play',
+        );
         try {
-          await this.resumePlayback(deviceId);
+          await this.transferPlayback(deviceId, true);
         } catch (_) {
           /* ignore */
         }
-        check = await confirm();
+        await new Promise((r) => setTimeout(r, 450));
+        try {
+          await playAtZero(true);
+        } catch (directErr) {
+          routineSpotifyLog(
+            `⚠️ Direct play failed: ${directErr?.message || directErr} — retrying SDK play@0`,
+          );
+          await playAtZero(false);
+        }
+        check = await confirm(700);
+      }
+
+      if (check.correct || (check.id && !trackId)) {
+        if (targetPos > 0) {
+          try {
+            await this.seekToPosition(targetPos, deviceId);
+          } catch (seekErr) {
+            routineSpotifyLog(`⚠️ seek after play@0 failed: ${seekErr?.message || seekErr}`);
+          }
+        }
+        if (!check.playing) {
+          try {
+            await this.resumePlayback(deviceId);
+          } catch (_) {
+            /* ignore */
+          }
+          check = await confirm(400);
+        } else {
+          check = await confirm(250);
+        }
+      } else {
+        routineSpotifyLog(
+          `🔧 startPlaybackEnsuringActive: still no track (item=${check.id || 'none'}) after recovery`,
+        );
       }
       return check.state;
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlaybackEnsuringActive');
       throw error;
     }
+  }
+
+  async _startPlaybackDirect(deviceId, uris, positionMs = 0) {
+    if (this.isQuarantined()) throw this._makeQuarantineError('startPlaybackDirect');
+    await this.ensureValidToken();
+    await this._paceBeforeWebApiRequest();
+    const pos = Math.max(0, Math.floor(Number(positionMs) || 0));
+    const bodyObj = { uris: Array.isArray(uris) ? uris : [uris] };
+    if (pos > 0) bodyObj.position_ms = pos;
+    const body = JSON.stringify(bodyObj);
+    const path = `/v1/me/player/play?device_id=${encodeURIComponent(String(deviceId))}`;
+    return new Promise((resolve, reject) => {
+      webApi.record(1);
+      const req = https.request(
+        {
+          hostname: 'api.spotify.com',
+          path,
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+          },
+        },
+        (res) => {
+          let data = '';
+          res.on('data', (chunk) => (data += chunk));
+          res.on('end', () => {
+            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+              routineSpotifyLog('✅ Direct startPlayback success');
+              resolve(true);
+              return;
+            }
+            if (res.statusCode === 429) {
+              const syn = new Error('Direct startPlayback rate limited');
+              syn.statusCode = 429;
+              syn.headers = res.headers || {};
+              try {
+                syn.body = data ? JSON.parse(data) : {};
+              } catch {
+                syn.body = { _parseError: true };
+              }
+              this.applyRateLimitQuarantine(syn, '_startPlaybackDirect', {
+                httpMethod: 'PUT',
+                httpPath: '/v1/me/player/play',
+              });
+              reject(syn);
+              return;
+            }
+            console.error('❌ Direct startPlayback failed:', res.statusCode, data);
+            reject(new Error(`Direct startPlayback failed: ${res.statusCode} ${data}`));
+          });
+        },
+      );
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
   }
 
   async _transferPlaybackDirect(deviceId, play) {
