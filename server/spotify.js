@@ -1642,10 +1642,9 @@ class SpotifyService {
 
   /**
    * Hard start when Connect returns 2xx but leaves desktop with empty Now Playing.
-   * Strategy: load track at 0ms (most reliable), confirm item, then seek to offset.
+   * Strategy: load track at 0ms, confirm is_playing+correct track, wait ~500ms, then seek.
    * Prefer direct PUT /play; if device_id play "succeeds" but hasItem=false, retry without
-   * device_id (active device). Never transfer(play=false) here — that clears Now Playing.
-   * Avoid transfer(play=true) thrash loops.
+   * device_id. At most one transfer(play=true); never transfer(play=false) here.
    */
   async startPlaybackEnsuringActive(deviceId, uris, position = 0, expectedTrackId = null) {
     await this._ensureCanCallWebApi('startPlayback');
@@ -1738,13 +1737,27 @@ class SpotifyService {
         check = await readState(800, 'after-play0-active');
       }
 
-      // 3) One gentle wake if still empty: direct transfer(play=true) once, then play@0 again.
-      if (!check.hasItem && activeDeviceId) {
+      // 3) If locked id was stale, retarget then play-only (no transfer yet).
+      if (!check.hasItem) {
         const before = activeDeviceId;
         await refreshTargetDevice();
+        if (activeDeviceId && activeDeviceId !== before) {
+          routineSpotifyLog(
+            `🔧 startPlaybackEnsuringActive: retarget play-only ${before}→${activeDeviceId}`,
+          );
+          await playAtZero(false);
+          check = await readState(700, 'after-retarget');
+          if (!check.hasItem) {
+            await playAtZero(true);
+            check = await readState(700, 'after-retarget-active');
+          }
+        }
+      }
+
+      // 4) At most one wake transfer(play=true), then play@0 again. Never transfer(play=false).
+      if (!check.hasItem && activeDeviceId) {
         routineSpotifyLog(
-          `🔧 startPlaybackEnsuringActive: still empty — one wake transfer(play=true) then play@0` +
-            (activeDeviceId !== before ? ` (retarget ${before}→${activeDeviceId})` : ''),
+          '🔧 startPlaybackEnsuringActive: still empty — one wake transfer(play=true) then play@0',
         );
         try {
           await this._transferPlaybackDirect(activeDeviceId, true);
@@ -1760,27 +1773,29 @@ class SpotifyService {
         }
       }
 
-      if (check.hasItem && (check.correct || !trackId)) {
-        if (targetPos > 0) {
-          try {
-            await this.seekToPosition(targetPos, activeDeviceId);
-          } catch (seekErr) {
-            routineSpotifyLog(`⚠️ seek after play@0 failed: ${seekErr?.message || seekErr}`);
-          }
+      // Resume first if we have the right item but Connect is paused.
+      if (check.hasItem && (check.correct || !trackId) && !check.playing) {
+        try {
+          await this.resumePlayback(activeDeviceId);
+        } catch (_) {
+          /* ignore */
         }
-        if (!check.playing) {
-          try {
-            await this.resumePlayback(activeDeviceId);
-          } catch (_) {
-            /* ignore */
-          }
-          check = await readState(400, 'after-resume');
-        } else {
-          check = await readState(250, 'after-seek');
+        check = await readState(450, 'after-resume');
+      }
+
+      // Seek only when is_playing && correct track — never on item-id alone.
+      if (check.ok && targetPos > 0) {
+        await settleMs(500);
+        try {
+          await this.seekToPosition(targetPos, activeDeviceId);
+          routineSpotifyLog(`✅ seek after play@0 → ${targetPos}ms`);
+        } catch (seekErr) {
+          routineSpotifyLog(`⚠️ seek after play@0 failed: ${seekErr?.message || seekErr}`);
         }
-      } else {
+        check = await readState(350, 'after-seek');
+      } else if (!check.ok) {
         routineSpotifyLog(
-          `🔧 startPlaybackEnsuringActive: still no track (item=${check.id || 'none'}) after recovery`,
+          `🔧 startPlaybackEnsuringActive: still no audio (item=${check.id || 'none'} playing=${check.playing}) after recovery`,
         );
       }
 

@@ -1134,9 +1134,13 @@ async function replayCurrentSnippet(roomId, deviceId) {
       await sp.seekToPosition(startMs, targetDeviceId);
       routineServerLog(`✅ Bump seek completed in ${Date.now() - t0}ms (same track)`);
     } else if (sp) {
-      // Lean restart: no transfer retries, no 800ms volume settle.
-      await sp.startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs);
-      routineServerLog(`✅ Bump startPlayback completed in ${Date.now() - t0}ms`);
+      // Lean restart: play@0 then seek — never Early offset in the play body.
+      await sp.startPlayback(targetDeviceId, [`spotify:track:${song.id}`], 0);
+      await new Promise((r) => setTimeout(r, 500));
+      if (startMs > 0) {
+        await sp.seekToPosition(startMs, targetDeviceId);
+      }
+      routineServerLog(`✅ Bump play@0+seek completed in ${Date.now() - t0}ms`);
     } else {
       return { ok: false, error: 'no_spotify', songIndex: idx };
     }
@@ -1598,13 +1602,14 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
     room.selectedDeviceId = targetDeviceId;
 
     // Bump fallback: skip transfer retries (device should already be active).
+    // Avoid transfer(play=false) immediately before uris play — clears Now Playing on Connect.
     if (!skipStabilization) {
       try {
-        await spotifyFor(roomId).withRetries(
-          'transferPlayback(initial)',
-          () => spotifyFor(roomId).transferPlayback(targetDeviceId, false),
-          { attempts: 3, backoffMs: 300 },
-        );
+        const pre = await spotifyFor(roomId)._probePlayerDirect('pre-index');
+        if (!(pre.deviceId === targetDeviceId && pre.hasItem)) {
+          await spotifyFor(roomId).transferPlayback(targetDeviceId, true);
+          await new Promise((r) => setTimeout(r, 500));
+        }
       } catch (e) {
         console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
       }
@@ -1615,9 +1620,6 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
     try {
       const startTime = Date.now();
       routineServerLog(`🎵 Starting playback at ${startTime} - Song: ${song.name} by ${song.artist}`);
-      // Enforce deterministic playback mode for direct index plays
-      try { await spotifyFor(roomId).setShuffleState(false, targetDeviceId); } catch (_) {}
-      try { await spotifyFor(roomId).setRepeatState('off', targetDeviceId); } catch (_) {}
       startMs = bump
         ? computeBumpSnippetStartMs(room, song, {
             avoidMs: room.currentSongStartMs,
@@ -1627,7 +1629,49 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
       if (bump) {
         routineServerLog(`🔁 Bump snippet start → ${startMs}ms (${Math.floor(startMs / 1000)}s) for ${song.name}`);
       }
-      await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs);
+      room.currentSongStartMs = startMs;
+      // play@0 then seek — never put Early/Random offset in the play body.
+      const startState = await spotifyFor(roomId).startPlaybackEnsuringActive(
+        targetDeviceId,
+        [`spotify:track:${song.id}`],
+        0,
+        song.id,
+      );
+      if (startState?._resolvedDeviceId) {
+        targetDeviceId = startState._resolvedDeviceId;
+        room.selectedDeviceId = targetDeviceId;
+      }
+      let audioOk =
+        !!startState?.is_playing && startState?.item?.id === song.id;
+      if (!audioOk) {
+        for (let i = 0; i < 3; i++) {
+          await new Promise((r) => setTimeout(r, 400));
+          const st = await spotifyFor(roomId).getCurrentPlaybackState();
+          if (st?.is_playing && st?.item?.id === song.id) {
+            audioOk = true;
+            break;
+          }
+          try {
+            await spotifyFor(roomId).startPlaybackEnsuringActive(
+              targetDeviceId,
+              [`spotify:track:${song.id}`],
+              0,
+              song.id,
+            );
+          } catch (_) {}
+        }
+      }
+      if (audioOk && startMs > 0) {
+        await new Promise((r) => setTimeout(r, 500));
+        try {
+          await spotifyFor(roomId).seekToPosition(startMs, targetDeviceId);
+        } catch (seekErr) {
+          routineServerLog(`⚠️ playSongAtIndex seek failed: ${seekErr?.message || seekErr}`);
+        }
+      }
+      // Shuffle/repeat AFTER confirmed play — settings before play can hijack Connect.
+      try { await spotifyFor(roomId).setShuffleState(false, targetDeviceId); } catch (_) {}
+      try { await spotifyFor(roomId).setRepeatState('off', targetDeviceId); } catch (_) {}
       const endTime = Date.now();
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId} (took ${endTime - startTime}ms)`);
 
@@ -4874,8 +4918,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           if (!roomStillPlaying(roomId)) return;
           // Hard pause to stop any stray context audio before restart
           try { await spotifyFor(roomId).pausePlayback(deviceId); } catch {}
-          // Restart intended track (position 0 to avoid drift); timers already handle overrun
-          // Try to calculate expected progress from when song started
+          // Restart intended track at play@0 then seek — large position_ms in play body empties Connect.
           let expectedProgress = 0;
           try {
             const r = rooms.get(roomId);
@@ -4884,9 +4927,9 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           // Use playlist context for correction if available
           if (room.temporaryPlaylistId && room.currentSongIndex !== undefined) {
             routineServerLog(`🎼 Watchdog correcting via playlist context at index ${room.currentSongIndex}`);
-            await spotifyFor(roomId).startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, expectedProgress);
+            await spotifyFor(roomId).startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, 0);
           } else {
-            await spotifyFor(roomId).startPlayback(deviceId, [`spotify:track:${expectedId}`], expectedProgress);
+            await spotifyFor(roomId).startPlayback(deviceId, [`spotify:track:${expectedId}`], 0);
           }
           // Double-seek to clamp exact resume position and avoid restart sputter
           try {
@@ -4978,7 +5021,11 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
             } catch {}
             try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
             try { await spotifyFor(roomId).pausePlayback(deviceId); } catch {}
-            await spotifyFor(roomId).startPlayback(deviceId, [`spotify:track:${currentExpectedId}`], expectedProgress);
+            await spotifyFor(roomId).startPlayback(deviceId, [`spotify:track:${currentExpectedId}`], 0);
+            if (expectedProgress > 0) {
+              await new Promise((r) => setTimeout(r, 400));
+              try { await spotifyFor(roomId).seekToPosition(expectedProgress, deviceId); } catch {}
+            }
             try { await new Promise(res => setTimeout(res, 150)); await spotifyFor(roomId).seekToPosition(expectedProgress, deviceId); } catch {}
             try {
               if (r) syncClipClockFromPlaybackProgress(r, expectedProgress);
@@ -12394,7 +12441,28 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       }
 
       startMs = computeSpotifySnippetRandomStartMs(room, firstSong, 'auto first');
+      room.currentSongStartMs = startMs;
       routineServerLog(`🎯 Starting first song with randomized offset: ${startMs}ms (${Math.floor(startMs / 1000)}s) mode=${room.randomStarts}`);
+
+      // Always play@0 via ensuring; seek Early offset only after audio is confirmed.
+      try {
+        const pre = await spotifyFor(roomId)._probePlayerDirect('pre-first');
+        const onTarget = pre.deviceId && pre.deviceId === targetDeviceId;
+        if (!onTarget || !pre.hasItem || pre.statusCode === 204) {
+          // Empty/204 after end-all: wake with play=true (never play=false before first uris play).
+          routineServerLog('🔀 First-song wake transfer(play=true) — player empty or not on target');
+          try {
+            await spotifyFor(roomId).transferPlayback(targetDeviceId, true);
+          } catch (wakeErr) {
+            routineServerLog(`⚠️ First-song wake transfer failed: ${wakeErr?.message || wakeErr}`);
+          }
+          await new Promise((r) => setTimeout(r, 700));
+        } else {
+          routineServerLog('🔒 First-song skip transfer — target already active with item');
+        }
+      } catch (_) {
+        /* probe optional */
+      }
 
       const startState = await spotifyFor(roomId).withRetries(
         'startPlayback(initial)',
@@ -12402,7 +12470,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           spotifyFor(roomId).startPlaybackEnsuringActive(
             targetDeviceId,
             [`spotify:track:${firstSong.id}`],
-            startMs,
+            0,
             firstSong.id,
           ),
         { attempts: 2, backoffMs: 500 },
@@ -12432,7 +12500,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             await spConfirm.startPlaybackEnsuringActive(
               targetDeviceId,
               [`spotify:track:${firstSong.id}`],
-              startMs,
+              0,
               firstSong.id,
             );
           } catch (retryErr) {
@@ -12444,6 +12512,16 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       if (!audioConfirmed) {
         haltRoomOnSilentSpotifyPlayback(roomId, room);
         return;
+      }
+
+      if (startMs > 0) {
+        await new Promise((r) => setTimeout(r, 500));
+        try {
+          await spotifyFor(roomId).seekToPosition(startMs, targetDeviceId);
+          routineServerLog(`✅ First-song seek to Early offset ${startMs}ms after audio confirm`);
+        } catch (seekErr) {
+          routineServerLog(`⚠️ First-song seek failed: ${seekErr?.message || seekErr}`);
+        }
       }
 
       try {
@@ -12509,7 +12587,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
               spotifyFor(roomId).startPlaybackEnsuringActive(
                 targetDeviceId,
                 [`spotify:track:${firstSong.id}`],
-                startMs,
+                0,
                 firstSong.id,
               ),
             { attempts: 2, backoffMs: 500 },
@@ -12525,6 +12603,12 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           if (!audioConfirmed) {
             haltRoomOnSilentSpotifyPlayback(roomId, room);
             return;
+          }
+          if (startMs > 0) {
+            await new Promise((r) => setTimeout(r, 500));
+            try {
+              await spotifyFor(roomId).seekToPosition(startMs, targetDeviceId);
+            } catch (_) {}
           }
           try {
             await spotifyFor(roomId).setShuffleState(false, targetDeviceId);
@@ -12680,7 +12764,7 @@ async function playNextSong(roomId, deviceId) {
           return;
     }
 
-    // Assert playback on the locked/saved device to prevent hijacking
+    // Assert playback on the locked/saved device — prefer play=true when empty; skip if already on target.
     try {
       let needTransfer = true;
       try {
@@ -12692,8 +12776,11 @@ async function playNextSong(roomId, deviceId) {
         }
       } catch (_) {}
       if (needTransfer) {
-        await spotifyFor(roomId).withRetries('transferPlayback(next)', () => spotifyFor(roomId).transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
-        // Skip-based queue clearing removed to avoid context hijacks
+        await spotifyFor(roomId).withRetries(
+          'transferPlayback(next)',
+          () => spotifyFor(roomId).transferPlayback(targetDeviceId, true),
+          { attempts: 2, backoffMs: 300 },
+        );
       }
     } catch (e) {
       console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
@@ -12703,6 +12790,7 @@ async function playNextSong(roomId, deviceId) {
 
     markNextSongCalledAndNotify(roomId, room, nextSong, room.currentSongIndex);
 
+    const startMs = room.currentSongStartMs || 0;
     try {
       // Ensure device still visible; attempt activation if not
       const devices = await spotifyFor(roomId).getUserDevices();
@@ -12712,24 +12800,35 @@ async function playNextSong(roomId, deviceId) {
         await spotifyFor(roomId).activateDevice(targetDeviceId);
       }
 
-      const playbackStartTime = Date.now();
       routineServerLog(`🎵 Starting Spotify playback for: ${nextSong.name}`);
-      // Enforce deterministic playback mode on each advance with delays
-      try { await spotifyFor(roomId).withRetries('setShuffle(false,next)', () => spotifyFor(roomId).setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
-      await new Promise(resolve => setTimeout(resolve, 200));
-      // Reset repeat to 'off' before advancing (clears any previous 'track' repeat)
-      try { await spotifyFor(roomId).withRetries('setRepeat(off,next)', () => spotifyFor(roomId).setRepeatState('off', targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
-      await new Promise(resolve => setTimeout(resolve, 200));
       if (!roomStillPlaying(roomId)) return;
-      const startMs = room.currentSongStartMs || 0;
-      // Use playlist context if available, otherwise fall back to individual track
+      // play@0 then seek — never Early offset in the play body.
       if (room.temporaryPlaylistId) {
         routineServerLog(`🎼 Playing next song from playlist context at index ${room.currentSongIndex}`);
-        await spotifyFor(roomId).withRetries('startPlaybackFromPlaylist(next)', () => spotifyFor(roomId).startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, room.currentSongIndex, startMs), { attempts: 3, backoffMs: 400 });
+        await spotifyFor(roomId).withRetries(
+          'startPlaybackFromPlaylist(next)',
+          () =>
+            spotifyFor(roomId).startPlaybackFromPlaylist(
+              targetDeviceId,
+              room.temporaryPlaylistId,
+              room.currentSongIndex,
+              0,
+            ),
+          { attempts: 3, backoffMs: 400 },
+        );
       } else {
-        await spotifyFor(roomId).withRetries('startPlayback(next)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+        await spotifyFor(roomId).withRetries(
+          'startPlayback(next)',
+          () =>
+            spotifyFor(roomId).startPlaybackEnsuringActive(
+              targetDeviceId,
+              [`spotify:track:${nextSong.id}`],
+              0,
+              nextSong.id,
+            ),
+          { attempts: 2, backoffMs: 400 },
+        );
       }
-      const playbackEndTime = Date.now();
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId}`);
       
       // Stabilization delay to prevent context hijacks from volume changes
@@ -12769,8 +12868,7 @@ async function playNextSong(roomId, deviceId) {
 
     routineServerLog(`✅ Call recorded and playback started for: ${nextSong.name} by ${nextSong.artist} on device ${targetDeviceId}`);
 
-    // Verify playback actually started and is the correct track.
-    // Prefer hard startPlayback over resume — resume often 403s with Restriction violated and does nothing.
+    // Verify playback actually started and is the correct track (play@0 retries only).
     try {
       let playing = false;
       let correctTrack = false;
@@ -12786,24 +12884,48 @@ async function playNextSong(roomId, deviceId) {
           await spotifyFor(roomId).withRetries(
             'startPlayback(verify-next)',
             () =>
-              spotifyFor(roomId).startPlayback(
+              spotifyFor(roomId).startPlaybackEnsuringActive(
                 targetDeviceId,
                 [`spotify:track:${nextSong.id}`],
-                startMs,
+                0,
+                nextSong.id,
               ),
             { attempts: 2, backoffMs: 200 },
           );
         } catch {}
       }
       if (!playing || !correctTrack) {
-        // Attempt to correct to the intended track once more
-        try { await spotifyFor(roomId).withRetries('startPlayback(correct-next)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs), { attempts: 2, backoffMs: 300 }); } catch {}
+        try {
+          await spotifyFor(roomId).withRetries(
+            'startPlayback(correct-next)',
+            () =>
+              spotifyFor(roomId).startPlaybackEnsuringActive(
+                targetDeviceId,
+                [`spotify:track:${nextSong.id}`],
+                0,
+                nextSong.id,
+              ),
+            { attempts: 2, backoffMs: 300 },
+          );
+        } catch {}
         try {
           const after = await spotifyFor(roomId).getCurrentPlaybackState();
           playing = !!after?.is_playing;
           correctTrack = after?.item?.id === nextSong.id;
         } catch (_) {}
       }
+      if (playing && correctTrack && startMs > 0) {
+        await new Promise((r) => setTimeout(r, 500));
+        try {
+          await spotifyFor(roomId).seekToPosition(startMs, targetDeviceId);
+          routineServerLog(`✅ Next-song seek to Early offset ${startMs}ms after audio confirm`);
+        } catch (seekErr) {
+          routineServerLog(`⚠️ Next-song seek failed: ${seekErr?.message || seekErr}`);
+        }
+      }
+      // Shuffle/repeat AFTER confirmed play
+      try { await spotifyFor(roomId).setShuffleState(false, targetDeviceId); } catch (_) {}
+      try { await spotifyFor(roomId).setRepeatState('off', targetDeviceId); } catch (_) {}
       if (!playing) {
         io.to(roomId).emit('playback-warning', {
           message:
