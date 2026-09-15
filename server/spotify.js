@@ -91,6 +91,7 @@ const SPOTIFY_SOURCE_ROUTE_HINT = {
   setShuffleState: 'PUT /v1/me/player/shuffle',
   setRepeatState: 'PUT /v1/me/player/repeat',
   createTemporaryPlaylist: 'POST /v1/me/playlists + …/items',
+  createWakePlaylist: 'POST /v1/me/playlists + …/items (wake)',
   createOutputPlaylist: 'POST /v1/me/playlists + …/items',
   getGameOfTonesPlaylists: 'GET /v1/me/playlists',
   startPlaybackFromPlaylist: 'PUT /v1/me/player/play (context_uri)',
@@ -287,7 +288,7 @@ const NON_ESSENTIAL_WEB_API_CALLERS = new Set([
   'getGameOfTonesPlaylists',
   'deleteMultiplePlaylists',
   'getCurrentUserProfileBrief',
-  'getCurrentUserProfile',
+  // getCurrentUserProfile is essential for Start Game diagnostics (product / account mismatch).
   'getCurrentTrack',
   'unfollowPlaylist',
   'deletePlaylist',
@@ -1495,13 +1496,26 @@ class SpotifyService {
   /**
    * Direct PUT /v1/me/player/play — logs HTTP status. Omit device_id to target the
    * already-active Connect device (desktop often needs this after empty Now Playing).
+   * Supports uris OR context_uri (+ optional offset). Always play@0 in the body.
    */
-  async _startPlaybackDirect(deviceId, uris, positionMs = 0, { omitDeviceId = false } = {}) {
+  async _startPlaybackDirect(
+    deviceId,
+    uris,
+    positionMs = 0,
+    { omitDeviceId = false, contextUri = null, offset = null } = {},
+  ) {
     if (this.isQuarantined()) throw this._makeQuarantineError('startPlaybackDirect');
     await this.ensureValidToken();
     await this._paceBeforeWebApiRequest();
     const pos = Math.max(0, Math.floor(Number(positionMs) || 0));
-    const bodyObj = { uris: Array.isArray(uris) ? uris : [uris], position_ms: pos };
+    /** @type {Record<string, unknown>} */
+    const bodyObj = { position_ms: pos };
+    if (contextUri) {
+      bodyObj.context_uri = String(contextUri);
+      if (offset != null && typeof offset === 'object') bodyObj.offset = offset;
+    } else {
+      bodyObj.uris = Array.isArray(uris) ? uris : [uris];
+    }
     const body = JSON.stringify(bodyObj);
     const q =
       !omitDeviceId && deviceId
@@ -1525,7 +1539,7 @@ class SpotifyService {
           res.on('data', (chunk) => (data += chunk));
           res.on('end', () => {
             const statusCode = res.statusCode || 0;
-            const uri0 = bodyObj.uris?.[0] || 'none';
+            const uri0 = bodyObj.uris?.[0] || bodyObj.context_uri || 'none';
             routineSpotifyLog(
               `▶️ direct play status=${statusCode} omitDevice=${!!omitDeviceId}` +
                 ` device=${omitDeviceId ? 'active' : deviceId || 'none'} uri=${uri0} pos=${pos}` +
@@ -1574,17 +1588,56 @@ class SpotifyService {
   }
 
   /**
-   * Connect-safe start: never put Early/Random offset in the play body (large position_ms
-   * often returns 2xx with item=none on desktop). Play@0 → confirm → seek.
-   * Fallback: play without device_id; one transfer(play=true) wake if still empty.
+   * Tiny playlist used only when uris leave Connect empty (desktop). Essential — not blocked
+   * by live-show lock (createTemporaryPlaylist is). Max a few tracks to keep quota low.
+   */
+  async createWakePlaylist(name, trackUris) {
+    await this._ensureCanCallWebApi('createWakePlaylist');
+    const uris = this._asSpotifyTrackUris(trackUris).slice(0, 5);
+    if (!uris.length) throw new Error('createWakePlaylist: no track uris');
+    const organizedName = `${GOT_OUTPUT_PLAYLIST_NAME_PREFIX}${String(name || 'Wake').slice(0, 80)}`;
+    const { body: createBody } = await this._webApiRequest(
+      'POST',
+      '/v1/me/playlists',
+      {
+        name: organizedName,
+        description: 'TEMPO Connect wake playlist (auto)',
+        public: false,
+      },
+      'createWakePlaylist',
+    );
+    const playlistId = createBody && createBody.id;
+    if (!playlistId) throw new Error('createWakePlaylist: missing id');
+    await this._webApiRequest(
+      'POST',
+      `/v1/playlists/${encodeURIComponent(playlistId)}/items`,
+      { uris },
+      'createWakePlaylist',
+    );
+    routineSpotifyLog(`✅ Wake playlist ${playlistId} with ${uris.length} track(s)`);
+    return playlistId;
+  }
+
+  /**
+   * Connect-safe start: never put Early/Random offset in the play body.
+   * Nuclear desktop wake (uris often 204 + item=none):
+   *  1) play uris@0 with device_id
+   *  2) play uris@0 without device_id
+   *  3) GET devices → transfer(play=true) → play uris again
+   *  4) context_uri via tiny wake playlist (binds when uris don't on desktop)
+   * Then seek to Early/Random offset only after Now Playing confirms.
    */
   async startConnectTrack(deviceId, uris, seekMs = 0, expectedTrackId = null) {
     await this._ensureCanCallWebApi('startPlayback');
+    const trackUris = Array.isArray(uris) ? uris : [uris];
     const trackId =
       expectedTrackId ||
-      (typeof uris?.[0] === 'string' ? String(uris[0]).replace(/^spotify:track:/i, '') : '');
+      (typeof trackUris?.[0] === 'string' ? String(trackUris[0]).replace(/^spotify:track:/i, '') : '');
     const targetSeek = Math.max(0, Math.floor(Number(seekMs) || 0));
     let activeDeviceId = deviceId ? String(deviceId) : null;
+    let lastPlayStatus = null;
+    let lastDeviceName = 'n/a';
+    let wakePlaylistId = null;
     const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 
     const readPlayer = async (label) => {
@@ -1598,6 +1651,7 @@ class SpotifyService {
       const playing = !!state?.is_playing;
       const correct = !!trackId && id === trackId;
       if (state?.device?.id) activeDeviceId = state.device.id;
+      if (state?.device?.name) lastDeviceName = state.device.name;
       routineSpotifyLog(
         `🔎 connect ${label}: is_playing=${playing} correct=${correct}` +
           ` item=${id || 'none'} device=${state?.device?.id || 'none'}/${state?.device?.name || 'n/a'}` +
@@ -1606,11 +1660,15 @@ class SpotifyService {
       return { state, playing, correct, hasItem: !!id, ok: playing && correct };
     };
 
-    const playAtZero = async (omitDeviceId) => {
+    const playUrisAtZero = async (omitDeviceId) => {
       try {
-        await this._startPlaybackDirect(activeDeviceId, uris, 0, { omitDeviceId: !!omitDeviceId });
+        const res = await this._startPlaybackDirect(activeDeviceId, trackUris, 0, {
+          omitDeviceId: !!omitDeviceId,
+        });
+        lastPlayStatus = res?.statusCode ?? 204;
         return true;
       } catch (directErr) {
+        lastPlayStatus = directErr?.statusCode ?? null;
         routineSpotifyLog(
           `⚠️ direct play@0 failed (${omitDeviceId ? 'no device_id' : 'with device_id'}): ${
             directErr?.body?.error?.message || directErr?.message || directErr
@@ -1618,9 +1676,11 @@ class SpotifyService {
         );
         if (!omitDeviceId && activeDeviceId) {
           try {
-            await this.startPlayback(activeDeviceId, uris, 0);
+            await this.startPlayback(activeDeviceId, trackUris, 0);
+            lastPlayStatus = 204;
             return true;
           } catch (sdkErr) {
+            lastPlayStatus = sdkErr?.statusCode ?? lastPlayStatus;
             routineSpotifyLog(`⚠️ SDK play@0 failed: ${sdkErr?.body?.error?.message || sdkErr?.message || sdkErr}`);
             throw sdkErr;
           }
@@ -1629,52 +1689,125 @@ class SpotifyService {
       }
     };
 
-    // 1) Play@0 on locked device
-    await playAtZero(false);
+    const playContextAtZero = async (playlistId, omitDeviceId) => {
+      const contextUri = `spotify:playlist:${playlistId}`;
+      const offset = trackId ? { uri: `spotify:track:${trackId}` } : { position: 0 };
+      try {
+        const res = await this._startPlaybackDirect(activeDeviceId, null, 0, {
+          omitDeviceId: !!omitDeviceId,
+          contextUri,
+          offset,
+        });
+        lastPlayStatus = res?.statusCode ?? 204;
+        return true;
+      } catch (ctxErr) {
+        lastPlayStatus = ctxErr?.statusCode ?? null;
+        routineSpotifyLog(
+          `⚠️ context_uri play@0 failed: ${ctxErr?.body?.error?.message || ctxErr?.message || ctxErr}`,
+        );
+        throw ctxErr;
+      }
+    };
+
+    // 1) Play@0 on locked device (caller should skip transfer when device already listed)
+    await playUrisAtZero(false);
     let check = await readPlayer('after-play0');
-    await settle(check.hasItem ? 200 : 500);
+    await settle(check.hasItem ? 200 : 600);
     if (!check.ok) check = await readPlayer('after-play0-settle');
 
-    // 2) Empty Now Playing → retry on active device (no device_id)
+    // 2) Empty → retry without device_id (targets active Connect session)
     if (!check.hasItem) {
       routineSpotifyLog('🔧 connect: empty item after play@0 — retry without device_id');
-      await playAtZero(true);
-      await settle(700);
+      await playUrisAtZero(true);
+      await settle(800);
       check = await readPlayer('after-play0-active');
     }
 
-    // 3) Still empty → wake transfer(play=true) once, then play@0 again
+    // 3) Still empty → refresh devices, transfer(play=true), then uris again
     if (!check.hasItem && activeDeviceId) {
-      routineSpotifyLog('🔧 connect: still empty — wake transfer(play=true) then play@0');
+      routineSpotifyLog('🔧 connect: still empty — GET devices + wake transfer(play=true) then play@0');
+      try {
+        this.invalidateUserDevicesCache();
+        const devices = await this.getUserDevices({ forceRefresh: true });
+        const listed = devices.find((d) => d.id === activeDeviceId);
+        routineSpotifyLog(
+          `📱 wake devices: count=${devices.length} locked=${listed ? `${listed.name}/${listed.type}` : 'missing'}`,
+        );
+        if (!listed && devices[0]?.id) {
+          activeDeviceId = devices[0].id;
+          lastDeviceName = devices[0].name || lastDeviceName;
+          routineSpotifyLog(`🎵 wake retarget → ${activeDeviceId}/${lastDeviceName}`);
+        }
+      } catch (devErr) {
+        routineSpotifyLog(`⚠️ wake devices refresh failed: ${devErr?.message || devErr}`);
+      }
       try {
         await this.transferPlayback(activeDeviceId, true);
       } catch (wakeErr) {
         routineSpotifyLog(`⚠️ wake transfer failed: ${wakeErr?.body?.error?.message || wakeErr?.message || wakeErr}`);
       }
-      await settle(700);
-      await playAtZero(false);
-      await settle(700);
+      await settle(900);
+      await playUrisAtZero(false);
+      await settle(800);
       check = await readPlayer('after-wake');
       if (!check.hasItem) {
-        await playAtZero(true);
-        await settle(700);
+        await playUrisAtZero(true);
+        await settle(800);
         check = await readPlayer('after-wake-active');
       }
     }
 
-    // 4) Playing wrong/paused → one more play@0
+    // 4) Still empty → context_uri via tiny wake playlist (desktop often binds this when uris don't)
+    if (!check.hasItem) {
+      routineSpotifyLog('🔧 connect: still empty — context_uri wake playlist');
+      try {
+        wakePlaylistId = await this.createWakePlaylist(
+          `Wake ${new Date().toISOString().slice(0, 16)}`,
+          trackUris,
+        );
+        await playContextAtZero(wakePlaylistId, false);
+        await settle(1000);
+        check = await readPlayer('after-context');
+        if (!check.hasItem) {
+          await playContextAtZero(wakePlaylistId, true);
+          await settle(1000);
+          check = await readPlayer('after-context-active');
+        }
+      } catch (wakePlErr) {
+        routineSpotifyLog(
+          `⚠️ context wake playlist failed: ${wakePlErr?.body?.error?.message || wakePlErr?.message || wakePlErr}`,
+        );
+      }
+    }
+
+    // 5) Playing wrong/paused → one more uris play@0
     if (!check.ok) {
-      await playAtZero(!check.hasItem);
-      await settle(600);
+      await playUrisAtZero(!check.hasItem);
+      await settle(700);
       check = await readPlayer('after-retry');
     }
 
     if (!check.ok) {
+      const statusPart =
+        lastPlayStatus != null ? `play HTTP ${lastPlayStatus}` : 'play status unknown';
       const err = new Error(
-        'Spotify Connect play returned success but Now Playing stayed empty (no is_playing + track)',
+        `Spotify Connect ${statusPart} but Now Playing stayed empty on ${lastDeviceName}` +
+          ` (item=none, is_playing=false). Desktop often needs Spotify open and recently playing —` +
+          ` play any song once in the Spotify app on that device, then Start Game again.`,
       );
       err.code = 'connect_empty_now_playing';
-      err.body = { error: { message: err.message, status: 502 } };
+      err.lastPlayStatus = lastPlayStatus;
+      err.deviceName = lastDeviceName;
+      err.deviceId = activeDeviceId;
+      err.wakePlaylistId = wakePlaylistId;
+      err.body = {
+        error: {
+          message: err.message,
+          status: lastPlayStatus || 502,
+          device: lastDeviceName,
+          device_id: activeDeviceId,
+        },
+      };
       throw err;
     }
 
@@ -1693,6 +1826,7 @@ class SpotifyService {
       _resolvedDeviceId: activeDeviceId,
       is_playing: true,
       itemId: trackId,
+      wakePlaylistId,
     };
   }
 
@@ -1919,9 +2053,8 @@ class SpotifyService {
       const deviceId = devices[0].id;
       const deviceName = devices[0].name;
       try {
+        // Transfer only — do not setShuffle/setRepeat on an empty player (wedges desktop Connect).
         await this.transferPlayback(deviceId, false);
-        try { await this.setShuffleState(false, deviceId); } catch (_) {}
-        try { await this.setRepeatState('off', deviceId); } catch (_) {}
         routineSpotifyLog(`Successfully asserted control on device without playback: ${deviceName}`);
       } catch (_) {
         routineSpotifyLog(`Could not assert control on ${deviceName}, but device is available`);
@@ -1937,9 +2070,8 @@ class SpotifyService {
   async activateDevice(deviceId, pauseAfterMs = 0) {
     await this._ensureCanCallWebApi('activateDevice');
     try {
+      // Transfer only — shuffle/repeat after audio binds in startConnectTrack callers.
       await this.transferPlayback(deviceId, false);
-      try { await this.setShuffleState(false, deviceId); } catch (_) {}
-      try { await this.setRepeatState('off', deviceId); } catch (_) {}
       // pauseAfterMs retained for signature compatibility, but no autoplay occurs
       return true;
     } catch (error) {

@@ -1629,10 +1629,8 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
         routineServerLog(`🔁 Bump snippet start → ${startMs}ms (${Math.floor(startMs / 1000)}s) for ${song.name}`);
       }
       room.currentSongStartMs = startMs;
-      // Enforce deterministic playback mode for direct index plays
-      try { await spotifyFor(roomId).setShuffleState(false, targetDeviceId); } catch (_) {}
-      try { await spotifyFor(roomId).setRepeatState('off', targetDeviceId); } catch (_) {}
       // play@0 then seek — never put Early/Random offset in the play body (empties Connect).
+      // Shuffle/repeat after bind — empty Connect + setShuffle can wedge desktop.
       const startState = await spotifyFor(roomId).startConnectTrack(
         targetDeviceId,
         [`spotify:track:${song.id}`],
@@ -1643,6 +1641,8 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
         targetDeviceId = startState._resolvedDeviceId;
         room.selectedDeviceId = targetDeviceId;
       }
+      try { await spotifyFor(roomId).setShuffleState(false, targetDeviceId); } catch (_) {}
+      try { await spotifyFor(roomId).setRepeatState('off', targetDeviceId); } catch (_) {}
       const endTime = Date.now();
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId} (took ${endTime - startTime}ms)`);
 
@@ -3972,24 +3972,40 @@ function stopLiveRoundTimers(roomId, room) {
 /**
  * Connect accepted play (2xx) but Now Playing stayed empty — freeze the round so we never
  * advance the call list on silence. Host can Skip / re-transfer / Start Game again.
+ * @param {string} roomId
+ * @param {object} room
+ * @param {string} [message]
+ * @param {{ product?: string, deviceName?: string, playStatus?: number|string, accountId?: string, accountName?: string }} [diag]
  */
-function haltRoomOnSilentSpotifyPlayback(roomId, room, message) {
+function haltRoomOnSilentSpotifyPlayback(roomId, room, message, diag = {}) {
   if (!room) return;
   stopLiveRoundTimers(roomId, room);
   room.gameState = 'paused';
+  const parts = [];
+  if (diag.playStatus != null) parts.push(`play HTTP ${diag.playStatus}`);
+  if (diag.deviceName) parts.push(`device=${diag.deviceName}`);
+  if (diag.product) parts.push(`account product=${diag.product}`);
+  if (diag.accountName || diag.accountId) {
+    parts.push(`spotify=${diag.accountName || diag.accountId}`);
+  }
+  const diagSuffix = parts.length ? ` [${parts.join(', ')}]` : '';
   const msg =
-    message ||
-    'Spotify Connect accepted play but Now Playing stayed empty on the locked device. Open Spotify on that speaker, re-select it under Connection, then Start Game or Skip.';
+    (message ||
+      'Spotify Connect accepted play but Now Playing stayed empty on the locked device. Open Spotify on that speaker, play any song once to wake Connect, re-select the device under Connection, then Start Game again.') +
+    diagSuffix;
   try {
     io.to(roomId).emit('playback-error', {
       message: msg,
       type: 'audio_unconfirmed',
+      product: diag.product || null,
+      deviceName: diag.deviceName || null,
+      playStatus: diag.playStatus ?? null,
     });
     io.to(roomId).emit('playback-paused');
   } catch (_) {
     /* ignore */
   }
-  console.warn(`🛑 Room ${roomId} paused — Spotify audio not confirmed (no silent advance)`);
+  console.warn(`🛑 Room ${roomId} paused — Spotify audio not confirmed (no silent advance)${diagSuffix}`);
 }
 
 /**
@@ -12352,48 +12368,58 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
 
     let startMs = 0;
     let audioConfirmed = false;
+    /** @type {{ product?: string, deviceName?: string, playStatus?: number|string, accountId?: string, accountName?: string }} */
+    let playDiag = {};
     try {
       const spPlay = spotifyFor(roomId);
       try {
         const profile = await spPlay.getCurrentUserProfile();
+        playDiag.product = profile?.product || 'n/a';
+        playDiag.accountId = profile?.id || undefined;
+        playDiag.accountName = profile?.display_name || undefined;
         routineServerLog(
           `🔑 Spotify account for play: id=${profile?.id || 'n/a'} name=${profile?.display_name || 'n/a'} product=${profile?.product || 'n/a'}`,
         );
+        if (String(profile?.product || '').toLowerCase() === 'free') {
+          haltRoomOnSilentSpotifyPlayback(
+            roomId,
+            room,
+            'Spotify Free cannot use Connect remote play. Upgrade the connected Spotify account to Premium, reconnect under Connection, then Start Game again.',
+            playDiag,
+          );
+          return;
+        }
       } catch (profErr) {
         routineServerLog(`⚠️ Could not read Spotify profile before play: ${profErr?.message || profErr}`);
       }
 
-      // Prefer transfer first; if player empty/204, wake with play=true (desktop Connect).
-      let transferred = false;
-      let preEmpty = false;
+      // Nuclear: if locked device is already listed, skip transfer entirely before first play.
+      // Transfer(play=true) with no context often leaves desktop Connect active-but-empty.
+      let devices = [];
       try {
-        const pre = await spPlay.getCurrentPlaybackState();
-        preEmpty = !pre || !pre.item || !pre.device;
-        if (preEmpty) {
-          routineServerLog('🔀 First-song wake transfer(play=true) — player empty or 204');
-          await spPlay.transferPlayback(targetDeviceId, true);
-        } else {
-          await spPlay.transferPlayback(targetDeviceId, false);
-        }
-        transferred = true;
-      } catch (e) {
-        routineServerLog('⚠️ transfer-first failed; resolving device list…', e?.body?.error?.message || e?.message || e);
+        devices = await spPlay.getUserDevices({ forceRefresh: true });
+      } catch (devListErr) {
+        routineServerLog(
+          `⚠️ devices list before play failed: ${devListErr?.body?.error?.message || devListErr?.message || devListErr}`,
+        );
       }
-      if (!transferred) {
-        let devices = await spPlay.getUserDevices();
-        let deviceInList = devices.find((d) => d.id === targetDeviceId);
-        if (!deviceInList) {
-          const saved = loadSavedDeviceForRoom(roomId);
-          const retarget = spPlay._pickConnectDeviceId(devices, targetDeviceId, saved?.name);
-          if (retarget && retarget !== targetDeviceId) {
-            routineServerLog(`🎵 Locked id missing — retargeting to ${retarget}`);
-            targetDeviceId = retarget;
-            room.selectedDeviceId = targetDeviceId;
-            deviceInList = devices.find((d) => d.id === targetDeviceId);
-          }
+      let deviceInList = devices.find((d) => d.id === targetDeviceId);
+      if (deviceInList) {
+        playDiag.deviceName = deviceInList.name || playDiag.deviceName;
+        routineServerLog(
+          `⏩ Skip pre-play transfer — device already listed: ${deviceInList.name} (${deviceInList.type})`,
+        );
+      } else {
+        routineServerLog('⚠️ Locked device not in list; resolving before play…');
+        const saved = loadSavedDeviceForRoom(roomId);
+        const retarget = spPlay._pickConnectDeviceId(devices, targetDeviceId, saved?.name);
+        if (retarget && retarget !== targetDeviceId) {
+          routineServerLog(`🎵 Locked id missing — retargeting to ${retarget}`);
+          targetDeviceId = retarget;
+          room.selectedDeviceId = targetDeviceId;
+          deviceInList = devices.find((d) => d.id === targetDeviceId);
         }
         if (!deviceInList) {
-          routineServerLog('⚠️ Locked device not in list; attempting activation...');
           try {
             await spPlay.activateDevice(targetDeviceId);
           } catch (activateErr) {
@@ -12406,28 +12432,34 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           devices = await spPlay.getUserDevices({ forceRefresh: true });
           deviceInList = devices.find((d) => d.id === targetDeviceId);
           if (!deviceInList) {
-            const saved = loadSavedDeviceForRoom(roomId);
-            const retarget = spPlay._pickConnectDeviceId(devices, targetDeviceId, saved?.name);
-            if (retarget) {
-              targetDeviceId = retarget;
+            const saved2 = loadSavedDeviceForRoom(roomId);
+            const retarget2 = spPlay._pickConnectDeviceId(devices, targetDeviceId, saved2?.name);
+            if (retarget2) {
+              targetDeviceId = retarget2;
               room.selectedDeviceId = targetDeviceId;
               deviceInList = devices.find((d) => d.id === targetDeviceId);
             }
           }
-          if (!deviceInList) {
-            haltRoomOnSilentSpotifyPlayback(
-              roomId,
-              room,
-              'Spotify playback device is offline or missing. Open Spotify on that device (or pick another device in Connection → Refresh devices), then Start Game again.',
-            );
-            return;
-          }
         }
-        await spotifyFor(roomId).transferPlayback(targetDeviceId, preEmpty);
+        if (!deviceInList) {
+          haltRoomOnSilentSpotifyPlayback(
+            roomId,
+            room,
+            'Spotify playback device is offline or missing. Open Spotify on that device (or pick another device in Connection → Refresh devices), then Start Game again.',
+            playDiag,
+          );
+          return;
+        }
+        playDiag.deviceName = deviceInList.name || playDiag.deviceName;
+        // Device was missing then recovered — one transfer to claim it, then play uris.
+        try {
+          await spPlay.transferPlayback(targetDeviceId, false);
+        } catch (xferErr) {
+          routineServerLog(
+            `⚠️ transfer after device recover failed: ${xferErr?.body?.error?.message || xferErr?.message || xferErr}`,
+          );
+        }
       }
-
-      try { await spotifyFor(roomId).withRetries('setShuffle(false)', () => spotifyFor(roomId).setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
-      await new Promise((resolve) => setTimeout(resolve, 100));
 
       startMs = computeSpotifySnippetRandomStartMs(room, firstSong, 'auto first');
       room.currentSongStartMs = startMs;
@@ -12451,6 +12483,18 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         targetDeviceId = startState._resolvedDeviceId;
         room.selectedDeviceId = targetDeviceId;
       }
+      if (startState?.wakePlaylistId && !room.temporaryPlaylistId) {
+        room.temporaryPlaylistId = startState.wakePlaylistId;
+      }
+
+      // Shuffle/repeat AFTER audio binds — calling them on an empty Connect session can wedge desktop.
+      try {
+        await spotifyFor(roomId).withRetries(
+          'setShuffle(false,after-play)',
+          () => spotifyFor(roomId).setShuffleState(false, targetDeviceId),
+          { attempts: 2, backoffMs: 200 },
+        );
+      } catch (_) {}
       try {
         await spotifyFor(roomId).withRetries(
           'setRepeat(track,initial)',
@@ -12466,6 +12510,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         const playing = !!state?.is_playing;
         const currentId = state?.item?.id;
         const correctTrack = currentId === firstSong.id;
+        if (state?.device?.name) playDiag.deviceName = state.device.name;
         routineServerLog(
           `🔎 First-song verify ${i + 1}/4: is_playing=${playing} correct_track=${correctTrack} item=${currentId || 'none'}`,
         );
@@ -12482,6 +12527,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
               firstSong.id,
             );
           } catch (retryErr) {
+            playDiag.playStatus = retryErr?.lastPlayStatus ?? retryErr?.body?.error?.status ?? playDiag.playStatus;
+            if (retryErr?.deviceName) playDiag.deviceName = retryErr.deviceName;
             routineServerLog(
               `⚠️ First-song re-start failed: ${retryErr?.body?.error?.message || retryErr?.message || retryErr}`,
             );
@@ -12490,7 +12537,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       }
 
       if (!audioConfirmed) {
-        haltRoomOnSilentSpotifyPlayback(roomId, room);
+        haltRoomOnSilentSpotifyPlayback(roomId, room, undefined, playDiag);
         return;
       }
 
@@ -12518,6 +12565,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     } catch (playbackError) {
       console.error('❌ Error starting playback in strict mode:', playbackError);
       const message = playbackError?.body?.error?.message || playbackError?.message || '';
+      playDiag.playStatus =
+        playbackError?.lastPlayStatus ?? playbackError?.body?.error?.status ?? playDiag.playStatus;
+      if (playbackError?.deviceName) playDiag.deviceName = playbackError.deviceName;
       if (/token expired/i.test(message)) {
         routineServerLog('🔄 Token expired, refreshing and retrying...');
         try {
@@ -12557,9 +12607,10 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             }
           }
           if (!audioConfirmed) {
-            haltRoomOnSilentSpotifyPlayback(roomId, room);
+            haltRoomOnSilentSpotifyPlayback(roomId, room, undefined, playDiag);
             return;
           }
+          try { await spotifyFor(roomId).setShuffleState(false, targetDeviceId); } catch (_) {}
           try { await spotifyFor(roomId).setRepeatState('track', targetDeviceId); } catch (_) {}
           routineServerLog(`✅ Successfully started playback after token refresh`);
           try {
@@ -12588,6 +12639,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             roomId,
             room,
             `Unable to start on locked device after token refresh${refreshMsg ? `: ${refreshMsg}` : ''}. Ensure Spotify is online and try again.`,
+            playDiag,
           );
           return;
         }
@@ -12598,13 +12650,14 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           message
             ? `Unable to start on locked device: ${message}`
             : 'Unable to start on locked device. Ensure it is online and try again.',
+          playDiag,
         );
         return;
       }
     }
 
     if (!audioConfirmed) {
-      haltRoomOnSilentSpotifyPlayback(roomId, room);
+      haltRoomOnSilentSpotifyPlayback(roomId, room, undefined, playDiag);
       return;
     }
 
