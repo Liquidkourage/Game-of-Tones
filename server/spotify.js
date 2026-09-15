@@ -1475,39 +1475,100 @@ class SpotifyService {
   // Start playback on user's device.
   // Always load at position 0, then seek — large position_ms in the play body often
   // returns 204 with empty Now Playing on desktop Connect (Early/Random offsets).
-  // Desktop Connect often leaves is_playing=false after seek — resume after seek.
+  // Never use empty resume() after seek — desktop often returns Restriction violated while
+  // leaving is_playing=false; re-send play with uris instead.
   async startPlayback(deviceId, uris, position = 0) {
     await this._ensureCanCallWebApi('startPlayback');
     const seekMs = Math.max(0, Math.floor(Number(position) || 0));
-    try {
+    const trackUris = Array.isArray(uris) ? uris : [uris];
+
+    const playUrisAtZero = async () => {
       await this.spotifyApi.play({
         device_id: deviceId,
-        uris: uris,
+        uris: trackUris,
         position_ms: 0,
       });
+    };
+
+    const confirmPlaying = async (label) => {
+      await new Promise((r) => setTimeout(r, 400));
+      let state = null;
+      try {
+        state = await this.getCurrentPlaybackState();
+      } catch (_) {
+        state = null;
+      }
+      const playing = !!state?.is_playing;
+      const itemId = state?.item?.id || null;
+      routineSpotifyLog(
+        `🔎 startPlayback ${label}: is_playing=${playing} item=${itemId || 'none'} device=${state?.device?.name || 'n/a'}`,
+      );
+      return { playing, itemId, state };
+    };
+
+    try {
+      await playUrisAtZero();
+      let check = await confirmPlaying('after-play0');
+
+      // Empty play()/resume without uris hits Restriction on this desktop — force uris play again.
+      if (!check.playing) {
+        routineSpotifyLog('🔧 startPlayback: not playing after play@0 — hard re-play with uris (skip empty resume)');
+        await playUrisAtZero();
+        check = await confirmPlaying('after-replay');
+      }
+
+      if (!check.playing) {
+        let product = 'unknown';
+        try {
+          const profile = await this.getCurrentUserProfile();
+          product = profile?.product || 'unknown';
+        } catch (_) {}
+        const err = new Error(
+          `Spotify refused to start audio on the locked device (is_playing=false after play). ` +
+            `Account product=${product}. Use the same Premium Spotify account in the desktop app as Tempo Connection, ` +
+            `play any song once on that computer, then Start Game again. ` +
+            `(Empty resume often returns Restriction violated — Tempo will not advance on silence.)`,
+        );
+        err.code = 'spotify_not_playing';
+        err.product = product;
+        err.body = { error: { message: err.message, status: 403, reason: 'not_playing_after_play' } };
+        throw err;
+      }
+
       if (seekMs > 0) {
-        await new Promise((r) => setTimeout(r, 350));
         try {
           await this.seekToPosition(seekMs, deviceId);
-          routineSpotifyLog(`✅ startPlayback seek→${seekMs}ms after play@0`);
+          routineSpotifyLog(`✅ startPlayback seek→${seekMs}ms after confirmed play`);
         } catch (seekErr) {
           routineSpotifyLog(
-            `⚠️ startPlayback seek failed (track may still be at 0): ${seekErr?.body?.error?.message || seekErr?.message || seekErr}`,
+            `⚠️ startPlayback seek failed (audio should still be playing at 0): ${seekErr?.body?.error?.message || seekErr?.message || seekErr}`,
           );
         }
-      }
-      // Seek (and some Connect clients after transfer(play=false)) leave the track loaded but paused.
-      try {
-        await this.resumePlayback(deviceId);
-        routineSpotifyLog(`▶️ startPlayback resume after play@0/seek on ${deviceId}`);
-      } catch (resumeErr) {
-        routineSpotifyLog(
-          `⚠️ startPlayback resume failed: ${resumeErr?.body?.error?.message || resumeErr?.message || resumeErr}`,
-        );
+        const afterSeek = await confirmPlaying('after-seek');
+        if (!afterSeek.playing) {
+          routineSpotifyLog('🔧 startPlayback: seek paused audio — re-play uris@0 then re-seek');
+          await playUrisAtZero();
+          const replayed = await confirmPlaying('after-seek-replay');
+          if (replayed.playing && seekMs > 0) {
+            try {
+              await this.seekToPosition(seekMs, deviceId);
+            } catch (_) {}
+          }
+          if (!replayed.playing) {
+            const err = new Error(
+              'Spotify loaded the track but would not keep playing after seek (Restriction / Connect).',
+            );
+            err.code = 'spotify_not_playing';
+            err.body = { error: { message: err.message, status: 403 } };
+            throw err;
+          }
+        }
       }
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlayback');
-      showLog.logSpotifyApiError('startPlayback', error);
+      if (error?.code !== 'spotify_not_playing') {
+        showLog.logSpotifyApiError('startPlayback', error);
+      }
       throw error;
     }
   }
