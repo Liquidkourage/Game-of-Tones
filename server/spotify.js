@@ -1506,8 +1506,10 @@ class SpotifyService {
   async transferPlayback(deviceId, play = true) {
     await this._ensureCanCallWebApi('transferPlayback');
     try {
-      await this.spotifyApi.transferMyPlayback({ deviceIds: [deviceId], play });
-      routineSpotifyLog(`🔀 Transferred playback to device ${deviceId} (play=${play})`);
+      // spotify-web-api-node signature is (deviceIds: string[], options?: { play?: boolean }).
+      // Passing a single object made device_ids an object → Spotify "Malformed json".
+      await this.spotifyApi.transferMyPlayback([String(deviceId)], { play: !!play });
+      routineSpotifyLog(`🔀 Transferred playback to device ${deviceId} (play=${!!play})`);
     } catch (error) {
       this._rethrowIfRateLimited(error, 'transferPlayback');
       const msg = error?.body?.error?.message || error?.message || '';
@@ -1518,6 +1520,58 @@ class SpotifyService {
         const ok = await this._transferPlaybackDirect(deviceId, !!play);
         if (ok) return;
       }
+      throw error;
+    }
+  }
+
+  /**
+   * Hard start that re-asserts device control when Connect returns 2xx but leaves
+   * the desktop idle / with no active item (common after a mid-song manual play).
+   */
+  async startPlaybackEnsuringActive(deviceId, uris, position = 0, expectedTrackId = null) {
+    await this._ensureCanCallWebApi('startPlayback');
+    const trackId =
+      expectedTrackId ||
+      (typeof uris?.[0] === 'string' ? String(uris[0]).replace(/^spotify:track:/i, '') : '');
+
+    const confirm = async () => {
+      await new Promise((r) => setTimeout(r, 450));
+      const state = await this.getCurrentPlaybackState();
+      const id = state?.item?.id;
+      const playing = !!state?.is_playing;
+      const correct = !trackId || id === trackId;
+      return { state, playing, correct, ok: playing && correct };
+    };
+
+    try {
+      await this.startPlayback(deviceId, uris, position);
+      let check = await confirm();
+      if (check.ok) return check.state;
+
+      routineSpotifyLog(
+        `🔧 startPlaybackEnsuringActive: not active (playing=${check.playing} track=${check.state?.item?.id || 'none'}) — re-transfer + retry`,
+      );
+      try {
+        await this.transferPlayback(deviceId, false);
+      } catch (_) {
+        /* continue — play may still work */
+      }
+      await new Promise((r) => setTimeout(r, 400));
+      await this.startPlayback(deviceId, uris, position);
+      check = await confirm();
+      if (check.ok) return check.state;
+
+      if (check.correct && !check.playing) {
+        try {
+          await this.resumePlayback(deviceId);
+        } catch (_) {
+          /* ignore */
+        }
+        check = await confirm();
+      }
+      return check.state;
+    } catch (error) {
+      this._rethrowIfRateLimited(error, 'startPlaybackEnsuringActive');
       throw error;
     }
   }

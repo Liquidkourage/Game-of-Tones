@@ -3954,6 +3954,35 @@ function stopLiveRoundTimers(roomId, room) {
   clearPlaybackWatcher(roomId);
 }
 
+/**
+ * Host opened/started another room while an older session was still advancing Spotify.
+ * Stop those timers so two rooms cannot fight the same Connect device (empty Now Playing).
+ */
+function haltSiblingLiveRoomsForHost(activeRoomId, ownerUserId, reason) {
+  if (ownerUserId == null || !Number.isFinite(Number(ownerUserId))) return;
+  const uid = Number(ownerUserId);
+  for (const [rid, r] of rooms.entries()) {
+    if (rid === activeRoomId) continue;
+    if (r?.ownerUserId == null || Number(r.ownerUserId) !== uid) continue;
+    const gs = r.gameState;
+    if (gs !== 'playing' && gs !== 'paused_for_verification' && gs !== 'paused') continue;
+    routineServerLog(
+      `🛑 Stopping sibling live room ${rid} (was ${gs}) — ${reason} (active ${activeRoomId})`,
+    );
+    stopLiveRoundTimers(rid, r);
+    r.gameState = 'ended';
+    try {
+      io.to(rid).emit('game-session-ended', {
+        roomId: rid,
+        reason: 'host_moved_to_new_room',
+        message: 'This room stopped because the host started another session.',
+      });
+    } catch (_) {
+      /* ignore */
+    }
+  }
+}
+
 async function pauseSpotifyForRoom(roomId, room) {
   const deviceId = room?.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
   if (!deviceId) return;
@@ -4508,7 +4537,12 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
       await spPlay.startPlaybackFromPlaylist(resolvedDeviceId, room.temporaryPlaylistId, room.currentSongIndex, room.currentSongStartMs);
     } else {
       routineServerLog(`🎵 Using individual track: ${nextSong.id}`);
-      await spPlay.startPlayback(resolvedDeviceId, [`spotify:track:${nextSong.id}`], room.currentSongStartMs);
+      await spPlay.startPlaybackEnsuringActive(
+        resolvedDeviceId,
+        [`spotify:track:${nextSong.id}`],
+        room.currentSongStartMs,
+        nextSong.id,
+      );
     }
 
     routineServerLog(`✅ Playback started successfully for: ${nextSong.name}`);
@@ -4525,7 +4559,8 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
         const state = await spPlay.getCurrentPlaybackState();
         const playing = !!state?.is_playing;
         const currentId = state?.item?.id;
-        const correctTrack = !currentId || currentId === nextSong.id;
+        // Empty Now Playing must NOT count as "correct" (!currentId used to mask silence).
+        const correctTrack = currentId === nextSong.id;
         // Learn real length from Connect for bump / later seeks if pool meta lacked it.
         const liveDur = normalizeTrackDurationMs(state?.item?.duration_ms);
         if (liveDur != null && pickSongDurationMs(nextSong) == null) {
@@ -4543,10 +4578,16 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
           break;
         }
         routineServerLog(
-          `🔎 Simple playback verify ${i + 1}/4: is_playing=${playing} correct_track=${correctTrack}`,
+          `🔎 Simple playback verify ${i + 1}/4: is_playing=${playing} correct_track=${correctTrack} item=${currentId || 'none'}`,
         );
         try {
           if (room.temporaryPlaylistId) {
+            try {
+              await spPlay.transferPlayback(resolvedDeviceId, false);
+            } catch (_) {
+              /* ignore */
+            }
+            await new Promise((r) => setTimeout(r, 300));
             await spPlay.startPlaybackFromPlaylist(
               resolvedDeviceId,
               room.temporaryPlaylistId,
@@ -4554,10 +4595,11 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
               room.currentSongStartMs || 0,
             );
           } else {
-            await spPlay.startPlayback(
+            await spPlay.startPlaybackEnsuringActive(
               resolvedDeviceId,
               [`spotify:track:${nextSong.id}`],
               room.currentSongStartMs || 0,
+              nextSong.id,
             );
           }
         } catch (verifyStartErr) {
@@ -5372,6 +5414,10 @@ io.on('connection', (socket) => {
      */
     if (wantsHost && claimUid != null && room && room.ownerUserId == null) {
       room.ownerUserId = claimUid;
+    }
+
+    if (wantsHost && claimUid != null) {
+      haltSiblingLiveRoomsForHost(roomId, claimUid, 'host-joined-new-room');
     }
 
     /** Host-owned rooms: only the signed-in host may take the host role. */
@@ -8202,6 +8248,11 @@ io.on('connection', (socket) => {
           }
         }
         routineServerLog('✅ Starting game for room:', roomId);
+        haltSiblingLiveRoomsForHost(
+          roomId,
+          room.ownerUserId ?? socket.hostUserId,
+          'start-game',
+        );
       room.gameState = 'playing';
       room.snippetLength = snippetLength;
       room.playlists = playlists;
@@ -12172,13 +12223,22 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       // Skip-based queue clearing removed to avoid context hijacks
       // Enforce deterministic playback mode to avoid context/radio fallbacks with delays
       try { await spotifyFor(roomId).withRetries('setShuffle(false)', () => spotifyFor(roomId).setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
-      await new Promise(resolve => setTimeout(resolve, 100));
-      // First track always starts via URIs (temp playlist, if any, is still building asynchronously)
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Let Connect settle after transfer(play=false) — too-fast play often returns 204 with empty Now Playing.
+      await new Promise(resolve => setTimeout(resolve, 400));
       startMs = computeSpotifySnippetRandomStartMs(room, firstSong, 'auto first');
       routineServerLog(`🎯 Starting first song with randomized offset: ${startMs}ms (${Math.floor(startMs / 1000)}s) mode=${room.randomStarts}`);
       
-      await spotifyFor(roomId).withRetries('startPlayback(initial)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+      await spotifyFor(roomId).withRetries(
+        'startPlayback(initial)',
+        () =>
+          spotifyFor(roomId).startPlaybackEnsuringActive(
+            targetDeviceId,
+            [`spotify:track:${firstSong.id}`],
+            startMs,
+            firstSong.id,
+          ),
+        { attempts: 2, backoffMs: 500 },
+      );
       try {
         await spotifyFor(roomId).withRetries('setRepeat(track,initial)', () => spotifyFor(roomId).setRepeatState('track', targetDeviceId), { attempts: 2, backoffMs: 200 });
       } catch (_) {}
@@ -12219,7 +12279,17 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           }
           await spotifyFor(roomId).withRetries('transferPlayback(after-refresh)', () => spotifyFor(roomId).transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
           // Skip-based queue clearing removed to avoid context hijacks
-          await spotifyFor(roomId).withRetries('startPlayback(after-refresh)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+          await spotifyFor(roomId).withRetries(
+            'startPlayback(after-refresh)',
+            () =>
+              spotifyFor(roomId).startPlaybackEnsuringActive(
+                targetDeviceId,
+                [`spotify:track:${firstSong.id}`],
+                startMs,
+                firstSong.id,
+              ),
+            { attempts: 2, backoffMs: 500 },
+          );
           try {
             await spotifyFor(roomId).withRetries('setRepeat(track,after-refresh)', () => spotifyFor(roomId).setRepeatState('track', targetDeviceId), { attempts: 2, backoffMs: 200 });
           } catch (_) {}
@@ -12300,9 +12370,20 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         routineServerLog(`🔧 Verification failed (playing=${playing}, correctTrack=${correctTrack}), correcting with startMs=${startMs}ms`);
         try { 
           if (room.temporaryPlaylistId) {
+            try {
+              await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
+            } catch (_) {
+              /* ignore */
+            }
+            await new Promise((r) => setTimeout(r, 350));
             await spotifyFor(roomId).startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, 0, startMs);
           } else {
-            await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs);
+            await spotifyFor(roomId).startPlaybackEnsuringActive(
+              targetDeviceId,
+              [`spotify:track:${firstSong.id}`],
+              startMs,
+              firstSong.id,
+            );
             try {
               await spotifyFor(roomId).setRepeatState('track', targetDeviceId);
             } catch (_) {}
