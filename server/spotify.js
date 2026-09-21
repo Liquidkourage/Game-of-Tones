@@ -1477,20 +1477,84 @@ class SpotifyService {
     return this.getPlaylistTracks(playlistId, { name: 'Playlist' });
   }
 
-  // Start playback — plain URI + Early/Random position_ms (show-night path).
-  async startPlayback(deviceId, uris, position = 0) {
+  // Start playback with Early/Random in position_ms.
+  // Prefer context_uri from the track's existing Spotify playlist when provided — on Windows
+  // Connect, URI-only play often returns 2xx but leaves item=none and clears Now Playing.
+  // No wake-playlist create; no transfer(play=false) thrash.
+  async startPlayback(deviceId, uris, position = 0, options = {}) {
     await this._ensureCanCallWebApi('startPlayback');
     const positionMs = Math.max(0, Math.floor(Number(position) || 0));
     const trackUris = Array.isArray(uris) ? uris : [uris];
-    try {
+    const trackId =
+      typeof trackUris[0] === 'string' ? String(trackUris[0]).replace(/^spotify:track:/i, '') : '';
+    const rawCtx =
+      options && options.contextPlaylistId != null ? String(options.contextPlaylistId).trim() : '';
+    // Spotify playlist ids are 22-char base62; skip internal / non-Spotify ids.
+    const contextPlaylistId = /^[A-Za-z0-9]{22}$/.test(rawCtx) ? rawCtx : null;
+    const confirm = options.confirm !== false;
+
+    const playViaContext = async () => {
+      await this.spotifyApi.play({
+        device_id: deviceId,
+        context_uri: `spotify:playlist:${contextPlaylistId}`,
+        offset: trackId ? { uri: `spotify:track:${trackId}` } : { position: 0 },
+        position_ms: positionMs,
+      });
+    };
+    const playViaUris = async () => {
       await this.spotifyApi.play({
         device_id: deviceId,
         uris: trackUris,
         position_ms: positionMs,
       });
+    };
+    const snap = async (label) => {
+      await new Promise((r) => setTimeout(r, 350));
+      let state = null;
+      try {
+        state = await this.getCurrentPlaybackState();
+      } catch (_) {
+        state = null;
+      }
+      const playing = !!state?.is_playing;
+      const itemId = state?.item?.id || null;
+      const ok = playing && (!trackId || itemId === trackId);
+      routineSpotifyLog(
+        `🔎 startPlayback ${label}: is_playing=${playing} item=${itemId || 'none'} ok=${ok}`,
+      );
+      return ok;
+    };
+
+    try {
+      if (contextPlaylistId && trackId) {
+        routineSpotifyLog(
+          `🎵 startPlayback context_uri playlist=${contextPlaylistId} @${positionMs}ms (avoid URI empty-bind)`,
+        );
+        await playViaContext();
+        if (!confirm) return;
+        if (await snap('after-context')) return;
+        // Context failed to bind — URI rarely helps on this host, but try once before failing loud.
+        routineSpotifyLog('🔧 context play not confirmed — trying URI once');
+        await playViaUris();
+        if (await snap('after-uri-fallback')) return;
+      } else {
+        await playViaUris();
+        if (!confirm) return;
+        if (await snap('after-uri')) return;
+      }
+
+      const err = new Error(
+        'Spotify accepted play but is_playing stayed false on the locked PC (Now Playing empty). ' +
+          'Open Spotify on that computer, click any song once so you hear sound, leave it open, then Start Game again.',
+      );
+      err.code = 'spotify_not_playing';
+      err.body = { error: { message: err.message, status: 409 } };
+      throw err;
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlayback');
-      showLog.logSpotifyApiError('startPlayback', error);
+      if (error?.code !== 'spotify_not_playing') {
+        showLog.logSpotifyApiError('startPlayback', error);
+      }
       throw error;
     }
   }

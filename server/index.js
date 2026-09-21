@@ -1135,7 +1135,9 @@ async function replayCurrentSnippet(roomId, deviceId) {
       routineServerLog(`✅ Bump seek completed in ${Date.now() - t0}ms (same track)`);
     } else if (sp) {
       // Lean restart: no transfer retries, no 800ms volume settle.
-      await sp.startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs);
+      await sp.startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs, {
+        contextPlaylistId: songSpotifyContextPlaylistId(song),
+      });
       routineServerLog(`✅ Bump startPlayback completed in ${Date.now() - t0}ms`);
     } else {
       return { ok: false, error: 'no_spotify', songIndex: idx };
@@ -1617,7 +1619,9 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
       if (bump) {
         routineServerLog(`🔁 Bump snippet start → ${startMs}ms (${Math.floor(startMs / 1000)}s) for ${song.name}`);
       }
-      await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs);
+      await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs, {
+        contextPlaylistId: songSpotifyContextPlaylistId(song),
+      });
       const endTime = Date.now();
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId} (took ${endTime - startTime}ms)`);
 
@@ -4492,6 +4496,7 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
         resolvedDeviceId,
         [`spotify:track:${nextSong.id}`],
         room.currentSongStartMs,
+        { contextPlaylistId: songSpotifyContextPlaylistId(nextSong) },
       );
     }
 
@@ -4506,6 +4511,17 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
   } catch (error) {
     showLog.logSpotifyApiError('simple song advance', error);
     const spErr = spotifyFor(roomId);
+
+    if (error?.code === 'spotify_not_playing') {
+      clearRoomTimer(roomId);
+      io.to(roomId).emit('playback-error', {
+        message:
+          error?.message ||
+          'Spotify is not actually playing on the locked PC. Press play once in the Spotify app, then Start Game again.',
+        type: 'spotify_not_playing',
+      });
+      return;
+    }
 
     if (isSpotifyRateLimitOrQuarantineError(error, spErr)) {
       lockRoomSpotifyPlayback(roomId, room, 'advance_429', spErr);
@@ -4522,6 +4538,7 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
               resolvedDeviceId,
               [`spotify:track:${nextSong.id}`],
               room.currentSongStartMs || 0,
+              { contextPlaylistId: songSpotifyContextPlaylistId(nextSong) },
             );
           } catch {
             await spErr.resumePlayback(resolvedDeviceId);
@@ -4530,6 +4547,14 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
         }
       } catch (resumeError) {
         console.warn('⚠️ Failed to recover playback:', showLog.spotifyErrorSummary(resumeError));
+        if (resumeError?.code === 'spotify_not_playing') {
+          clearRoomTimer(roomId);
+          io.to(roomId).emit('playback-error', {
+            message: resumeError.message,
+            type: 'spotify_not_playing',
+          });
+          return;
+        }
         if (isSpotifyRateLimitOrQuarantineError(resumeError, spErr)) {
           lockRoomSpotifyPlayback(roomId, room, 'resume_after_advance_429', spErr);
           return;
@@ -9562,6 +9587,15 @@ function isInternalPlaylistId(id) {
   return s.length > 4 && s.startsWith('__') && s.endsWith('__');
 }
 
+/** Real Spotify playlist id on a deck song — used as context_uri so Windows Connect binds (URI-only often clears Now Playing). */
+function songSpotifyContextPlaylistId(song) {
+  if (!song || song.youtubeMusic === true || song.appleMusic === true) return null;
+  const id = song.sourcePlaylistId != null ? String(song.sourcePlaylistId).trim() : '';
+  if (!id || isInternalPlaylistId(id)) return null;
+  if (!/^[A-Za-z0-9]{22}$/.test(id)) return null;
+  return id;
+}
+
 function makeFreeSpaceSquare() {
   return {
     position: '2-2',
@@ -12061,6 +12095,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         targetDeviceId,
         [`spotify:track:${firstSong.id}`],
         startMs,
+        { contextPlaylistId: songSpotifyContextPlaylistId(firstSong) },
       );
       try {
         await spotifyFor(roomId).setShuffleState(false, targetDeviceId);
@@ -12251,6 +12286,7 @@ async function playNextSong(roomId, deviceId) {
           targetDeviceId,
           [`spotify:track:${nextSong.id}`],
           startMs,
+          { contextPlaylistId: songSpotifyContextPlaylistId(nextSong) },
         );
       }
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId}`);
@@ -12275,7 +12311,7 @@ async function playNextSong(roomId, deviceId) {
 
     routineServerLog(`✅ Call recorded and playback started for: ${nextSong.name} by ${nextSong.artist} on device ${targetDeviceId}`);
 
-    // Light confirm only — no transfer/resume thrash after startPlayback.
+    // startPlayback confirms is_playing when possible — no transfer/resume thrash here.
     try {
       await new Promise((r) => setTimeout(r, 300));
       const state = await spotifyFor(roomId).getCurrentPlaybackState();
