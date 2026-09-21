@@ -76,7 +76,6 @@ const SPOTIFY_SOURCE_ROUTE_HINT = {
   getCurrentUserProfileBrief: 'GET /v1/me',
   getCurrentPlaybackState: 'GET /v1/me/player',
   startPlayback: 'PUT /v1/me/player/play',
-  createWakePlaylist: 'POST /v1/me/playlists + …/items (wake)',
   pausePlayback: 'PUT /v1/me/player/pause',
   transferPlayback: 'PUT /v1/me/player',
   resumePlayback: 'PUT /v1/me/player/play',
@@ -362,9 +361,6 @@ class SpotifyService {
     this._onQuarantineApplied = null;
     /** Coalesce parallel ensureValidToken → refreshAccessToken. */
     this._refreshInflight = null;
-    /** Reused Connect wake playlist when uris leave item=none on desktop. */
-    this._connectWakePlaylistId = null;
-    this._connectWakeLastUris = null;
   }
 
   setOnQuarantineApplied(fn) {
@@ -1482,167 +1478,21 @@ class SpotifyService {
     return this.getPlaylistTracks(playlistId, { name: 'Playlist' });
   }
 
-  /**
-   * Tiny playlist so we can play with context_uri when uris leave Connect empty (Windows desktop).
-   * Essential mid-show — not in NON_ESSENTIAL list.
-   */
-  async createWakePlaylist(name, trackUris) {
-    await this._ensureCanCallWebApi('createWakePlaylist');
-    const uris = this._asSpotifyTrackUris(trackUris).slice(0, 5);
-    if (!uris.length) throw new Error('createWakePlaylist: no track uris');
-
-    if (this._connectWakePlaylistId) {
-      const same =
-        Array.isArray(this._connectWakeLastUris) &&
-        this._connectWakeLastUris.length === uris.length &&
-        this._connectWakeLastUris.every((u, i) => u === uris[i]);
-      if (same) return this._connectWakePlaylistId;
-      try {
-        await this._webApiRequest(
-          'PUT',
-          `/v1/playlists/${encodeURIComponent(this._connectWakePlaylistId)}/items`,
-          { uris },
-          'createWakePlaylist',
-        );
-        this._connectWakeLastUris = uris;
-        routineSpotifyLog(`✅ Wake playlist reused ${this._connectWakePlaylistId}`);
-        return this._connectWakePlaylistId;
-      } catch (_) {
-        this._connectWakePlaylistId = null;
-        this._connectWakeLastUris = null;
-      }
-    }
-
-    const organizedName = `${GOT_OUTPUT_PLAYLIST_NAME_PREFIX}${String(name || 'Wake').slice(0, 80)}`;
-    const { body: createBody } = await this._webApiRequest(
-      'POST',
-      '/v1/me/playlists',
-      { name: organizedName, description: 'TEMPO Connect wake playlist', public: false },
-      'createWakePlaylist',
-    );
-    const playlistId = createBody && createBody.id;
-    if (!playlistId) throw new Error('createWakePlaylist: missing id');
-    await this._webApiRequest(
-      'POST',
-      `/v1/playlists/${encodeURIComponent(playlistId)}/items`,
-      { uris },
-      'createWakePlaylist',
-    );
-    this._connectWakePlaylistId = playlistId;
-    this._connectWakeLastUris = uris;
-    routineSpotifyLog(`✅ Wake playlist ${playlistId}`);
-    return playlistId;
-  }
-
-  // Start playback on user's device.
-  // Always play@0 then seek. If uris leave item=none (common on Windows desktop Connect),
-  // fall back to context_uri via a wake playlist — that binds the PC app when uris do not.
+  // Start playback on user's device — single play call with Early/Random in position_ms (show-night path).
   async startPlayback(deviceId, uris, position = 0) {
     await this._ensureCanCallWebApi('startPlayback');
-    const seekMs = Math.max(0, Math.floor(Number(position) || 0));
+    const positionMs = Math.max(0, Math.floor(Number(position) || 0));
     const trackUris = Array.isArray(uris) ? uris : [uris];
-    const trackId =
-      typeof trackUris[0] === 'string' ? String(trackUris[0]).replace(/^spotify:track:/i, '') : '';
-
-    const playUris = async (omitDeviceId) => {
-      const opts = { uris: trackUris, position_ms: 0 };
-      if (!omitDeviceId && deviceId) opts.device_id = deviceId;
-      await this.spotifyApi.play(opts);
-    };
-
-    const playContext = async (playlistId, omitDeviceId) => {
-      const opts = {
-        context_uri: `spotify:playlist:${playlistId}`,
-        offset: trackId ? { uri: `spotify:track:${trackId}` } : { position: 0 },
-        position_ms: 0,
-      };
-      if (!omitDeviceId && deviceId) opts.device_id = deviceId;
-      await this.spotifyApi.play(opts);
-    };
-
-    const snap = async (label) => {
-      await new Promise((r) => setTimeout(r, 400));
-      let state = null;
-      try {
-        state = await this.getCurrentPlaybackState();
-      } catch (_) {
-        state = null;
-      }
-      const playing = !!state?.is_playing;
-      const itemId = state?.item?.id || null;
-      const correct = !trackId || itemId === trackId;
-      routineSpotifyLog(
-        `🔎 startPlayback ${label}: is_playing=${playing} item=${itemId || 'none'} correct=${correct}`,
-      );
-      return { playing, itemId, correct, ok: playing && (!trackId || correct) };
-    };
 
     try {
-      await playUris(false);
-      let s = await snap('after-uris');
-
-      if (!s.ok) {
-        routineSpotifyLog('🔧 uris did not start audio — context_uri wake playlist');
-        const wakeId = await this.createWakePlaylist(
-          `Wake ${new Date().toISOString().slice(0, 16)}`,
-          trackUris,
-        );
-        await playContext(wakeId, false);
-        s = await snap('after-context');
-        if (!s.ok) {
-          await playContext(wakeId, true); // active device, no device_id
-          s = await snap('after-context-active');
-        }
-      }
-
-      if (!s.ok && !s.playing) {
-        await playUris(true);
-        s = await snap('after-uris-active');
-      }
-
-      if (!s.ok) {
-        const err = new Error(
-          'Spotify did not start audio on the locked device (uris and playlist play both left is_playing=false). ' +
-            'Open Spotify on that computer, press play on any song so you hear sound, leave Spotify open, then Start Game again. ' +
-            'If the Windows app stays dead, use Spotify Web Player in Tempo → Connection, or reinstall the desktop app.',
-        );
-        err.code = 'spotify_not_playing';
-        err.body = { error: { message: err.message, status: 409 } };
-        throw err;
-      }
-
-      if (seekMs > 0) {
-        try {
-          await this.seekToPosition(seekMs, deviceId);
-          routineSpotifyLog(`✅ startPlayback seek→${seekMs}ms`);
-        } catch (seekErr) {
-          routineSpotifyLog(`⚠️ seek failed: ${seekErr?.message || seekErr}`);
-        }
-        s = await snap('after-seek');
-        if (!s.playing) {
-          const wakeId =
-            this._connectWakePlaylistId ||
-            (await this.createWakePlaylist(`Wake ${new Date().toISOString().slice(0, 16)}`, trackUris));
-          await playContext(wakeId, false);
-          s = await snap('after-seek-context');
-          if (s.playing && seekMs > 0) {
-            try {
-              await this.seekToPosition(seekMs, deviceId);
-            } catch (_) {}
-          }
-          if (!s.playing) {
-            const err = new Error('Spotify would not stay playing after seek.');
-            err.code = 'spotify_not_playing';
-            err.body = { error: { message: err.message, status: 409 } };
-            throw err;
-          }
-        }
-      }
+      await this.spotifyApi.play({
+        device_id: deviceId,
+        uris: trackUris,
+        position_ms: positionMs,
+      });
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlayback');
-      if (error?.code !== 'spotify_not_playing') {
-        showLog.logSpotifyApiError('startPlayback', error);
-      }
+      showLog.logSpotifyApiError('startPlayback', error);
       throw error;
     }
   }
@@ -2331,23 +2181,16 @@ class SpotifyService {
   // Simplified playlist playback - let timer handle timing, not Spotify
   async startPlaybackFromPlaylist(deviceId, playlistId, trackIndex = 0, positionMs = 0) {
     await this._ensureCanCallWebApi('startPlaybackFromPlaylist');
-    const seekMs = Math.max(0, Math.floor(Number(positionMs) || 0));
     try {
       await this.spotifyApi.play({
         device_id: deviceId,
         context_uri: `spotify:playlist:${playlistId}`,
         offset: { position: trackIndex },
-        position_ms: 0,
+        position_ms: Math.max(0, Math.floor(Number(positionMs) || 0)),
       });
-      routineSpotifyLog(`✅ Started playlist playback: track ${trackIndex} at 0ms (seek→${seekMs}ms)`);
-      if (seekMs > 0) {
-        await new Promise((r) => setTimeout(r, 350));
-        try {
-          await this.seekToPosition(seekMs, deviceId);
-        } catch (seekErr) {
-          routineSpotifyLog(`⚠️ playlist seek failed: ${seekErr?.message || seekErr}`);
-        }
-      }
+      routineSpotifyLog(
+        `✅ Started playlist playback: track ${trackIndex} at ${Math.max(0, Math.floor(Number(positionMs) || 0))}ms`,
+      );
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlaybackFromPlaylist');
       showLog.logSpotifyApiError('startPlaybackFromPlaylist', error);

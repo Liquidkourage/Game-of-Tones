@@ -12080,7 +12080,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       // Skip transfer(play=false) before first play — it primes Windows Connect paused/empty.
       startMs = computeSpotifySnippetRandomStartMs(room, firstSong, 'auto first');
       routineServerLog(
-        `🎯 Starting first song play@0 then seek→${startMs}ms (${Math.floor(startMs / 1000)}s) mode=${room.randomStarts}`,
+        `🎯 Starting first song at ${startMs}ms (${Math.floor(startMs / 1000)}s) mode=${room.randomStarts}`,
       );
 
       await spotifyFor(roomId).startPlayback(
@@ -12094,16 +12094,6 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       try {
         await spotifyFor(roomId).setRepeatState('track', targetDeviceId);
       } catch (_) {}
-
-      await new Promise((r) => setTimeout(r, 300));
-      const confirm = await spotifyFor(roomId).getCurrentPlaybackState();
-      if (!confirm?.is_playing || confirm?.item?.id !== firstSong.id) {
-        const err = new Error(
-          `Spotify did not confirm playing audio (is_playing=${!!confirm?.is_playing}, item=${confirm?.item?.id || 'none'}).`,
-        );
-        err.code = 'spotify_not_playing';
-        throw err;
-      }
 
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId}`);
       try {
@@ -12151,52 +12141,6 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
 
     routineServerLog(`🚀 Starting simplified playback control for room ${roomId}`);
     startSimpleProgression(roomId, targetDeviceId, room.snippetLength);
-
-    // Verify playback actually started and is the correct track; attempt resume/correct if needed
-    try {
-      let playing = false;
-      let correctTrack = false;
-      for (let i = 0; i < 2; i++) {
-        await new Promise(r => setTimeout(r, 220));
-        const state = await spotifyFor(roomId).getCurrentPlaybackState();
-        playing = !!state?.is_playing;
-        const currentId = state?.item?.id;
-        correctTrack = currentId === firstSong.id;
-        if (!QUIET_MODE) logger.log(`🔎 Playback verify attempt ${i + 1}: is_playing=${playing} correct_track=${correctTrack} progress=${state?.progress_ms}ms`, 'playback-verify', 5);
-        if (playing && correctTrack) break; // Only break if BOTH conditions are met
-        
-        // Only try resume if not playing AND we have the right track (avoid restriction errors)
-        if (!playing && correctTrack) {
-          try { 
-            await spotifyFor(roomId).resumePlayback(targetDeviceId); 
-          } catch (e) {
-            if (!e?.message?.includes('Restriction violated')) {
-              logger.warn('⚠️ Resume during verify failed:', 'resume-verify-error', 5);
-            }
-          }
-        }
-      }
-      if (!playing || !correctTrack) {
-        // Attempt to correct to the intended track once using the same randomized offset
-        routineServerLog(`🔧 Verification failed (playing=${playing}, correctTrack=${correctTrack}), correcting with startMs=${startMs}ms`);
-        try { 
-          if (room.temporaryPlaylistId) {
-            await spotifyFor(roomId).startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, 0, startMs);
-          } else {
-            await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs);
-            try {
-              await spotifyFor(roomId).setRepeatState('track', targetDeviceId);
-            } catch (_) {}
-          }
-        } catch {}
-      }
-      if (!playing) {
-        io.to(roomId).emit('playback-warning', { message: 'Playback did not start reliably on the locked device. Please check Spotify is active and not muted.' });
-      }
-    } catch (e) {
-      console.warn('⚠️ Playback verification error:', e?.message || e);
-      io.to(roomId).emit('playback-warning', { message: `Playback verification error: ${e?.message || 'Unknown error'}` });
-    }
 
   } catch (error) {
     console.error('❌ Error starting automatic playback:', error);
