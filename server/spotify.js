@@ -913,11 +913,17 @@ class SpotifyService {
           try { await this.refreshAccessToken(); } catch (_) {}
           continue;
         }
-        // If 403 restriction on resume-type operations, treat as non-fatal for subsequent logic
-        if (this.isRestrictionError(err) && /resume|playback|seek|transfer|start/i.test(String(label))) {
+        // Soft-ignore Restriction only for mid-poll resume/seek/transfer — never for startPlayback.
+        // Ignoring startPlayback Restriction made Tempo fake success while Windows Connect stayed silent.
+        if (
+          this.isRestrictionError(err) &&
+          /resume|seek|transfer/i.test(String(label)) &&
+          !/startPlayback/i.test(String(label))
+        ) {
           console.warn(`⚠️ ${label} got restriction (ignored):`, err?.body?.error?.message || err?.message || err);
           return null;
         }
+        if (err?.code === 'spotify_not_playing') throw err;
         if (attempt === attempts) break;
       }
     }
@@ -1472,19 +1478,83 @@ class SpotifyService {
     return this.getPlaylistTracks(playlistId, { name: 'Playlist' });
   }
 
-  // Start playback on user's device
+  // Start playback on user's device.
+  // Always play@0 then seek. Putting Early offsets in position_ms loads the track but often
+  // leaves is_playing=false on Windows desktop Connect (correct_track=true, is_playing=false).
   async startPlayback(deviceId, uris, position = 0) {
     await this._ensureCanCallWebApi('startPlayback');
-    
-    try {
+    const seekMs = Math.max(0, Math.floor(Number(position) || 0));
+    const trackUris = Array.isArray(uris) ? uris : [uris];
+
+    const playAtZero = async () => {
       await this.spotifyApi.play({
         device_id: deviceId,
-        uris: uris,
-        position_ms: position
+        uris: trackUris,
+        position_ms: 0,
       });
+    };
+
+    const snap = async (label) => {
+      await new Promise((r) => setTimeout(r, 350));
+      let state = null;
+      try {
+        state = await this.getCurrentPlaybackState();
+      } catch (_) {
+        state = null;
+      }
+      const playing = !!state?.is_playing;
+      const itemId = state?.item?.id || null;
+      routineSpotifyLog(
+        `🔎 startPlayback ${label}: is_playing=${playing} item=${itemId || 'none'}`,
+      );
+      return { playing, itemId, state };
+    };
+
+    try {
+      await playAtZero();
+      let s = await snap('after-play0');
+      // Track loaded but paused — empty resume hits Restriction; re-send play with uris.
+      if (!s.playing) {
+        await playAtZero();
+        s = await snap('after-replay');
+      }
+      if (!s.playing) {
+        const err = new Error(
+          'Spotify loaded or accepted play but is_playing stayed false on the locked device.',
+        );
+        err.code = 'spotify_not_playing';
+        err.body = { error: { message: err.message, status: 409 } };
+        throw err;
+      }
+      if (seekMs > 0) {
+        try {
+          await this.seekToPosition(seekMs, deviceId);
+          routineSpotifyLog(`✅ startPlayback seek→${seekMs}ms`);
+        } catch (seekErr) {
+          routineSpotifyLog(`⚠️ seek failed: ${seekErr?.message || seekErr}`);
+        }
+        s = await snap('after-seek');
+        if (!s.playing) {
+          await playAtZero();
+          s = await snap('after-seek-replay');
+          if (s.playing && seekMs > 0) {
+            try {
+              await this.seekToPosition(seekMs, deviceId);
+            } catch (_) {}
+          }
+          if (!s.playing) {
+            const err = new Error('Spotify would not stay playing after seek.');
+            err.code = 'spotify_not_playing';
+            err.body = { error: { message: err.message, status: 409 } };
+            throw err;
+          }
+        }
+      }
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlayback');
-      showLog.logSpotifyApiError('startPlayback', error);
+      if (error?.code !== 'spotify_not_playing') {
+        showLog.logSpotifyApiError('startPlayback', error);
+      }
       throw error;
     }
   }
@@ -1506,8 +1576,9 @@ class SpotifyService {
   async transferPlayback(deviceId, play = true) {
     await this._ensureCanCallWebApi('transferPlayback');
     try {
-      await this.spotifyApi.transferMyPlayback({ deviceIds: [deviceId], play });
-      routineSpotifyLog(`🔀 Transferred playback to device ${deviceId} (play=${play})`);
+      // spotify-web-api-node signature is (deviceIds: string[], options?: { play?: boolean }).
+      await this.spotifyApi.transferMyPlayback([String(deviceId)], { play: !!play });
+      routineSpotifyLog(`🔀 Transferred playback to device ${deviceId} (play=${!!play})`);
     } catch (error) {
       this._rethrowIfRateLimited(error, 'transferPlayback');
       const msg = error?.body?.error?.message || error?.message || '';
@@ -2172,16 +2243,23 @@ class SpotifyService {
   // Simplified playlist playback - let timer handle timing, not Spotify
   async startPlaybackFromPlaylist(deviceId, playlistId, trackIndex = 0, positionMs = 0) {
     await this._ensureCanCallWebApi('startPlaybackFromPlaylist');
+    const seekMs = Math.max(0, Math.floor(Number(positionMs) || 0));
     try {
-      // Simple playlist playback - no complex verification or repeat manipulation
       await this.spotifyApi.play({
         device_id: deviceId,
         context_uri: `spotify:playlist:${playlistId}`,
         offset: { position: trackIndex },
-        position_ms: positionMs
+        position_ms: 0,
       });
-      
-      routineSpotifyLog(`✅ Started playlist playback: track ${trackIndex} at ${positionMs}ms`);
+      routineSpotifyLog(`✅ Started playlist playback: track ${trackIndex} at 0ms (seek→${seekMs}ms)`);
+      if (seekMs > 0) {
+        await new Promise((r) => setTimeout(r, 350));
+        try {
+          await this.seekToPosition(seekMs, deviceId);
+        } catch (seekErr) {
+          routineSpotifyLog(`⚠️ playlist seek failed: ${seekErr?.message || seekErr}`);
+        }
+      }
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlaybackFromPlaylist');
       showLog.logSpotifyApiError('startPlaybackFromPlaylist', error);
