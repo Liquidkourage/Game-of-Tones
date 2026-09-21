@@ -2071,7 +2071,7 @@ const HostView: React.FC = () => {
       return {
         status: 'device_inactive',
         label: `Spotify connected · ${selectedDevice.name} idle`,
-        detail: `${selectedDevice.name} is online but idle — Start Game activates it automatically. To activate now: Settings → Playback → Activate device.`,
+        detail: `${selectedDevice.name} is online but idle — use Activate device (Tempo can briefly play/pause a pool track to wake an empty Spotify window).`,
       };
     }
     return { status: 'ready', label: 'Spotify connected' };
@@ -3454,27 +3454,40 @@ const HostView: React.FC = () => {
     }
   }, [syncSelectedPlaybackDeviceToRoom, venueSpotifyJamMode]);
 
-  /** One-click fix for "selected but inactive": transfer playback to the selected device
-   *  (play=false, so nothing blasts at the venue) instead of making the host walk over and
-   *  press play/pause on the machine. Start Game transfers anyway — this just clears the
-   *  warning and proves the device is reachable. */
+  /** Wake Windows Connect on the locked device. Empty Spotify (no track) needs a brief play/pause —
+   *  we use a pool track when available so the host does not pick one by hand. */
   const activateSelectedDevice = useCallback(async () => {
     const d = selectedDevice;
     if (!d?.id || activateDeviceBusy) return;
     setActivateDeviceBusy(true);
     try {
+      const pool = finalizedOrderRef.current?.length
+        ? finalizedOrderRef.current
+        : songListRef.current;
+      const wakeTrackId =
+        pool?.find((s) => s?.id && /^[A-Za-z0-9]{22}$/.test(String(s.id)))?.id || undefined;
       const r = await hostFetch(`${API_BASE || ''}/api/spotify/transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId: d.id, play: false }),
+        body: JSON.stringify({ deviceId: d.id, play: true, wakeTrackId }),
       });
-      const data = (await r.json().catch(() => ({}))) as { success?: boolean; error?: string };
+      const data = (await r.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        needManualPlay?: boolean;
+      };
       if (r.ok && data.success) {
-        showToast(`${d.name} is now Spotify's active device.`, 'success');
+        showToast(
+          `${d.name} is ready for Tempo${wakeTrackId ? ' (Connect woken)' : ''}.`,
+          'success',
+        );
         await loadDevices({ force: true });
       } else {
         showToast(
-          data.error || `Couldn't activate ${d.name}. Open Spotify on it, then tap Refresh devices.`,
+          data.error ||
+            (data.needManualPlay
+              ? `Open Spotify on ${d.name}, click any song once, then Activate again.`
+              : `Couldn't activate ${d.name}. Open Spotify on it, then tap Refresh devices.`),
           'warn',
         );
       }
@@ -11634,8 +11647,8 @@ const HostView: React.FC = () => {
           }}
         >
           <p style={{ margin: 0, flex: '1 1 260px', fontSize: '0.8rem', color: '#ffb347', fontWeight: 600 }}>
-            “{selectedDevice.name}” is online but not Spotify&apos;s active device. Start Game
-            transfers playback to it automatically — or activate it now to be sure.
+            “{selectedDevice.name}” is idle or empty. Activate wakes Connect (brief play/pause of a
+            pool track if Spotify has nothing selected) — then Start Game.
           </p>
           <button
             type="button"

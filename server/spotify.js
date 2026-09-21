@@ -1479,8 +1479,9 @@ class SpotifyService {
   }
 
   // Start playback — URI play with Early/Random in position_ms.
-  // Spotify often returns 2xx while Windows Connect stays silent; require is_playing before success.
-  // One recovery: transfer(play=true) then replay. No wake playlists (those burn API quota).
+  // Spotify often returns 2xx while Windows Connect stays silent / empties Now Playing (item=none).
+  // Require is_playing. Recover by binding the track at 0 then seek — never transfer(play=false),
+  // never create wake playlists (those burn API quota). transfer(play=true) only after a bound item.
   async startPlayback(deviceId, uris, position = 0) {
     await this._ensureCanCallWebApi('startPlayback');
     const positionMs = Math.max(0, Math.floor(Number(position) || 0));
@@ -1488,16 +1489,16 @@ class SpotifyService {
     const trackId =
       typeof trackUris[0] === 'string' ? String(trackUris[0]).replace(/^spotify:track:/i, '') : '';
 
-    const playOnce = async () => {
+    const playAt = async (ms) => {
       await this.spotifyApi.play({
         device_id: deviceId,
         uris: trackUris,
-        position_ms: positionMs,
+        position_ms: Math.max(0, Math.floor(Number(ms) || 0)),
       });
     };
 
     const snap = async (label) => {
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((r) => setTimeout(r, 400));
       let state = null;
       try {
         state = await this.getCurrentPlaybackState();
@@ -1510,22 +1511,61 @@ class SpotifyService {
       routineSpotifyLog(
         `🔎 startPlayback ${label}: is_playing=${playing} item=${itemId || 'none'} correct=${correct}`,
       );
-      return playing && (!trackId || correct);
+      return { ok: playing && (!trackId || correct), playing, itemId };
+    };
+
+    /** Empty desktop often ignores URI+Early offset; play@0 fills Now Playing, then seek. */
+    const bindTrackThenSeek = async (labelPrefix) => {
+      routineSpotifyLog(
+        `🔧 ${labelPrefix}: bind track at 0 then seek to ${positionMs}ms (fills Now Playing)`,
+      );
+      await playAt(0);
+      let s = await snap(`${labelPrefix}-bind-0`);
+      if (!s.itemId || (trackId && s.itemId !== trackId)) return s;
+      if (positionMs > 0) {
+        try {
+          await this.seekToPosition(positionMs, deviceId);
+        } catch (seekErr) {
+          routineSpotifyLog(`⚠️ seek after bind: ${seekErr?.message || seekErr}`);
+        }
+        if (!s.playing) {
+          try {
+            await this.resumePlayback(deviceId);
+          } catch (_) {}
+        }
+        s = await snap(`${labelPrefix}-bind-seek`);
+      }
+      return s;
     };
 
     try {
-      await playOnce();
-      if (await snap('after-play')) return;
+      await playAt(positionMs);
+      let s = await snap('after-play');
+      if (s.ok) return;
 
-      routineSpotifyLog('🔧 Play accepted but not audible — transfer(play=true) then replay');
+      // item=none = Now Playing emptied / never bound. Do NOT transfer(play=true) on empty —
+      // that resumes nothing. Bind the intended URI first.
+      if (!s.itemId) {
+        s = await bindTrackThenSeek('empty-after-play');
+        if (s.ok) return;
+      }
+
+      // Session may be on another device or paused with a track — transfer(play=true) then replay.
+      routineSpotifyLog('🔧 Play not audible — transfer(play=true) then replay');
       try {
         await this.transferPlayback(deviceId, true);
       } catch (xferErr) {
         routineSpotifyLog(`⚠️ transfer recovery: ${xferErr?.message || xferErr}`);
       }
       await new Promise((r) => setTimeout(r, 200));
-      await playOnce();
-      if (await snap('after-transfer-replay')) return;
+      await playAt(positionMs);
+      s = await snap('after-transfer-replay');
+      if (s.ok) return;
+
+      if (!s.itemId) {
+        s = await bindTrackThenSeek('empty-after-transfer');
+        if (s.ok) return;
+      }
 
       const err = new Error(
         'Spotify accepted play but is_playing stayed false on the locked PC. ' +
@@ -1703,7 +1743,7 @@ class SpotifyService {
     }
   }
 
-  // Force device activation without starting playback
+  // Force device activation — transfer(play=true) so Windows Connect stays bound (not empty).
   async forceDeviceActivation() {
     await this._ensureCanCallWebApi('forceDeviceActivation');
     try {
@@ -1715,10 +1755,11 @@ class SpotifyService {
       const deviceId = devices[0].id;
       const deviceName = devices[0].name;
       try {
-        await this.transferPlayback(deviceId, false);
+        await this.transferPlayback(deviceId, true);
         try { await this.setShuffleState(false, deviceId); } catch (_) {}
         try { await this.setRepeatState('off', deviceId); } catch (_) {}
-        routineSpotifyLog(`Successfully asserted control on device without playback: ${deviceName}`);
+        try { await this.pausePlayback(deviceId); } catch (_) {}
+        routineSpotifyLog(`Successfully asserted control on device: ${deviceName}`);
       } catch (_) {
         routineSpotifyLog(`Could not assert control on ${deviceName}, but device is available`);
       }
@@ -1729,19 +1770,82 @@ class SpotifyService {
     }
   }
 
-  // Activate a specific device by transferring control without playback
+  // Activate device: transfer with play=true so Windows Connect gets a live session.
+  // transfer(play=false) leaves empty desktops unbound (no track, Tempo can't take over).
   async activateDevice(deviceId, pauseAfterMs = 0) {
     await this._ensureCanCallWebApi('activateDevice');
     try {
-      await this.transferPlayback(deviceId, false);
+      await this.transferPlayback(deviceId, true);
       try { await this.setShuffleState(false, deviceId); } catch (_) {}
       try { await this.setRepeatState('off', deviceId); } catch (_) {}
-      // pauseAfterMs retained for signature compatibility, but no autoplay occurs
+      if (pauseAfterMs > 0) {
+        await new Promise((r) => setTimeout(r, pauseAfterMs));
+        try { await this.pausePlayback(deviceId); } catch (_) {}
+      }
       return true;
     } catch (error) {
       console.error('Error activating device:', error);
       return false;
     }
+  }
+
+  /**
+   * Bind an empty Windows Spotify client so Tempo can control it.
+   * Prefer transfer(play=true); if Now Playing is still empty, briefly play wakeTrackId then pause.
+   */
+  async wakeConnectSession(deviceId, wakeTrackId = null) {
+    await this._ensureCanCallWebApi('transferPlayback');
+    const id = String(deviceId || '').trim();
+    if (!id) return { ok: false, error: 'deviceId required' };
+
+    await this.transferPlayback(id, true);
+    await new Promise((r) => setTimeout(r, 350));
+    let state = null;
+    try {
+      state = await this.getCurrentPlaybackState();
+    } catch (_) {
+      state = null;
+    }
+    if (state?.item?.id || state?.is_playing) {
+      if (state?.is_playing) {
+        try { await this.pausePlayback(id); } catch (_) {}
+      }
+      routineSpotifyLog(`✅ wakeConnectSession: session bound via transfer (item=${state?.item?.id || 'none'})`);
+      return { ok: true, method: 'transfer', itemId: state?.item?.id || null };
+    }
+
+    const trackId = String(wakeTrackId || '').trim();
+    if (!/^[A-Za-z0-9]{22}$/.test(trackId)) {
+      return {
+        ok: false,
+        needManualPlay: true,
+        error:
+          'Spotify has no track loaded on that PC. Click any song in the Spotify app once (pause is fine), then Activate again — or Finalize/Save a round first so Tempo can wake with a pool track.',
+      };
+    }
+
+    routineSpotifyLog(`🔧 wakeConnectSession: empty player — brief play then pause for ${trackId}`);
+    await this.spotifyApi.play({
+      device_id: id,
+      uris: [`spotify:track:${trackId}`],
+      position_ms: 0,
+    });
+    await new Promise((r) => setTimeout(r, 450));
+    try { await this.pausePlayback(id); } catch (_) {}
+    try {
+      state = await this.getCurrentPlaybackState();
+    } catch (_) {
+      state = null;
+    }
+    if (state?.item?.id) {
+      return { ok: true, method: 'brief_play_pause', itemId: state.item.id };
+    }
+    return {
+      ok: false,
+      needManualPlay: true,
+      error:
+        'Could not bind the Spotify PC app. Open Spotify on that computer, click any song once so you hear sound, leave Spotify open, then try again.',
+    };
   }
 
   // Get currently playing track
