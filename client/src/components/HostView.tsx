@@ -8780,11 +8780,16 @@ const HostView: React.FC = () => {
         return;
       }
       if (!readHostSpotifyWebEnabled()) return;
-      // Try to regain control and auto-play on selected device
+      // Regain control and bind empty Connect (brief pool-track wake if needed).
+      const pool = finalizedOrderRef.current?.length
+        ? finalizedOrderRef.current
+        : songListRef.current;
+      const wakeTrackId =
+        pool?.find((s) => s?.id && /^[A-Za-z0-9]{22}$/.test(String(s.id)))?.id || undefined;
       await hostFetch(`${API_BASE || ''}/api/spotify/transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId: selectedDevice.id, play: false })
+        body: JSON.stringify({ deviceId: selectedDevice.id, play: true, wakeTrackId }),
       });
     } catch {}
     try {
