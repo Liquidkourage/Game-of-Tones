@@ -1536,17 +1536,21 @@ class SpotifyService {
   /**
    * Start playback. Prefer one URI play with Early/Random in position_ms (warm Connect / show-night).
    * If Windows desktop leaves item=none / not playing, one context_uri wake with the same offset
-   * (no play@0→seek jump). Proven: ccf1ec9 restored PC audio; dc08ba7 URI-only broke it again.
+   * (no play@0→seek jump).
+   *
+   * @param {{ confirm?: boolean }} [options] confirm=false skips the post-play state wait (mid-round
+   *   advances — Connect is already warm; saves ~300–600ms of inter-track silence).
    */
-  async startPlayback(deviceId, uris, position = 0) {
+  async startPlayback(deviceId, uris, position = 0, options = {}) {
     await this._ensureCanCallWebApi('startPlayback');
     const positionMs = Math.max(0, Math.floor(Number(position) || 0));
     const trackUris = Array.isArray(uris) ? uris : [uris];
     const trackId =
       typeof trackUris[0] === 'string' ? String(trackUris[0]).replace(/^spotify:track:/i, '') : '';
+    const confirm = options?.confirm !== false;
 
     const snap = async (label) => {
-      await new Promise((r) => setTimeout(r, 280));
+      await new Promise((r) => setTimeout(r, 150));
       let state = null;
       try {
         state = await this.getCurrentPlaybackState();
@@ -1568,6 +1572,8 @@ class SpotifyService {
         uris: trackUris,
         position_ms: positionMs,
       });
+      if (!confirm) return;
+
       let s = await snap('after-uris');
       if (s.ok) return;
 
@@ -1585,7 +1591,6 @@ class SpotifyService {
       s = await snap('after-context');
       if (s.ok) return;
 
-      // Last resort: active-device context (no device_id) — still with Early offset, no seek jump.
       await this.spotifyApi.play({
         context_uri: `spotify:playlist:${wakeId}`,
         offset: trackId ? { uri: `spotify:track:${trackId}` } : { position: 0 },
