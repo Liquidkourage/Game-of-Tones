@@ -4507,18 +4507,6 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     showLog.logSpotifyApiError('simple song advance', error);
     const spErr = spotifyFor(roomId);
 
-    // Hard stop on silent Connect — do not soft-retry into more fake advances.
-    if (error?.code === 'spotify_not_playing') {
-      clearRoomTimer(roomId);
-      io.to(roomId).emit('playback-error', {
-        message:
-          error?.message ||
-          'Spotify is not actually playing on the locked PC. Press play once in the Spotify app, then Start Game again.',
-        type: 'spotify_not_playing',
-      });
-      return;
-    }
-
     if (isSpotifyRateLimitOrQuarantineError(error, spErr)) {
       lockRoomSpotifyPlayback(roomId, room, 'advance_429', spErr);
       routineServerLog('🛑 No auto-retry — Spotify 429/quarantine host lock engaged');
@@ -4542,14 +4530,6 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
         }
       } catch (resumeError) {
         console.warn('⚠️ Failed to recover playback:', showLog.spotifyErrorSummary(resumeError));
-        if (resumeError?.code === 'spotify_not_playing') {
-          clearRoomTimer(roomId);
-          io.to(roomId).emit('playback-error', {
-            message: resumeError.message,
-            type: 'spotify_not_playing',
-          });
-          return;
-        }
         if (isSpotifyRateLimitOrQuarantineError(resumeError, spErr)) {
           lockRoomSpotifyPlayback(roomId, room, 'resume_after_advance_429', spErr);
           return;
@@ -12295,7 +12275,7 @@ async function playNextSong(roomId, deviceId) {
 
     routineServerLog(`✅ Call recorded and playback started for: ${nextSong.name} by ${nextSong.artist} on device ${targetDeviceId}`);
 
-    // startPlayback already required is_playing; one light confirm only — no transfer/resume thrash.
+    // Light confirm only — no transfer/resume thrash after startPlayback.
     try {
       await new Promise((r) => setTimeout(r, 300));
       const state = await spotifyFor(roomId).getCurrentPlaybackState();
@@ -16631,10 +16611,10 @@ app.post('/api/spotify/next', async (req, res) => {
   }
 });
 
-// Explicit transfer / wake Connect on locked device
+// Explicit transfer to locked device (Activate / recover). play=true keeps Windows Now Playing bound.
 app.post('/api/spotify/transfer', async (req, res) => {
   try {
-    const { deviceId, play = true, wakeTrackId = null } = req.body || {};
+    const { deviceId, play = true } = req.body || {};
     if (!hostSpotifyHasTokens(req)) {
       return res.status(401).json({ success: false, error: 'Spotify not connected' });
     }
@@ -16642,7 +16622,7 @@ app.post('/api/spotify/transfer', async (req, res) => {
       return res.status(400).json({ success: false, error: 'deviceId required' });
     }
 
-    routineServerLog(`🔀 Transfer request to device ${deviceId} (play=${!!play}, wake=${wakeTrackId || 'none'})`);
+    routineServerLog(`🔀 Transfer request to device ${deviceId} (play=${!!play})`);
     await spotifyForRequest(req).ensureValidToken();
 
     const spTransfer = spotifyForRequest(req);
@@ -16657,24 +16637,9 @@ app.post('/api/spotify/transfer', async (req, res) => {
       }
     }
 
-    // Host "Activate device": bind empty Windows Connect (transfer + optional brief pool-track play/pause).
-    const wantWake = play === true || wakeTrackId;
-    let wake = null;
-    if (wantWake) {
-      wake = await spTransfer.wakeConnectSession(deviceId, wakeTrackId);
-      if (!wake.ok) {
-        return res.status(409).json({
-          success: false,
-          error: wake.error || 'Could not wake Spotify on that device',
-          needManualPlay: !!wake.needManualPlay,
-        });
-      }
-    } else {
-      await spTransfer.transferPlayback(deviceId, false);
-    }
-
+    await spTransfer.transferPlayback(deviceId, !!play);
     spTransfer.invalidateUserDevicesCache();
-    routineServerLog(`✅ Transferred/woke playback on ${deviceId}${wake ? ` (${wake.method})` : ''}`);
+    routineServerLog(`✅ Transferred playback to ${deviceId}`);
 
     let profile = null;
     try { profile = await spTransfer.getCurrentUserProfile(); } catch (_) {}
@@ -16683,7 +16648,6 @@ app.post('/api/spotify/transfer', async (req, res) => {
     res.json({ 
       success: true, 
       deviceId,
-      wake,
       profile,
       devices: devicesAfter,
       currentPlayback
