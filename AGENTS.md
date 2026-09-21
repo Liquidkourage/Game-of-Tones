@@ -23,6 +23,12 @@
 - Follow the [OpenAPI schema](https://developer.spotify.com/reference/web-api/open-api-schema.yaml) for paths and shapes; playlist track pages use `GET /v1/playlists/{id}/items` in `server/spotify.js` (`_fetchPlaylistItemsPage`).
 - OAuth is Authorization Code with server-side callback (no implicit grant). After changing requested **scopes** in `getAuthorizationURL`, hosts must **re-connect Spotify** to grant new scopes.
 
+### Windows Connect playback (do not regress)
+
+Detailed rules: `.cursor/rules/spotify-connect-playback.mdc` (always applied).
+
+Working path: play via track **source playlist** `context_uri` + Early/Random `position_ms`; poll until bound; **never** URI-fallback after context; no `transfer(play=false)` / ensuring-active thrash; no mid-show wake playlists. Verify with Railway `startPlayback` confirm lines + sustained audio — not typecheck alone.
+
 ## Repo layout
 
 - **UI:** `client/src/` (React, `PlayerView`, `HostView`, etc.)

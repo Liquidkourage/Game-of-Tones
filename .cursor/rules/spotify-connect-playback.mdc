@@ -1,0 +1,31 @@
+---
+description: Protect working Windows Spotify Connect playback (do not regress)
+alwaysApply: true
+---
+
+# Spotify Connect playback — do not break (Jay / Windows desktop)
+
+**Settled working path (Sep 2026):** Start Game / advance play via each track’s **existing** Spotify playlist as `context_uri` + Early/Random in `position_ms`, poll until the item is bound, **never** URI-fallback after a context play that may already have started audio. Activate/transfer uses `play: true` (not `play: false`). No wake-playlist create mid-round. No `startPlaybackEnsuringActive` / transfer thrash.
+
+Primary files: `server/spotify.js` (`startPlayback`, `transferPlayback`), `server/index.js` (`startAutomaticPlayback`, `playNextSongSimple`, `songSpotifyContextPlaylistId`, pause/transfer callers).
+
+## Hard rules (regressions we’ve already paid for)
+
+1. **Do not** call `transferPlayback(deviceId, false)` before Start Game / URI or context play — empties Windows Now Playing when transfer args work.
+2. **Do not** “fix silence” with ensuring-active loops that re-transfer `play=false` and retry play — that is what broke year-good Connect after the Sep 14 show (`6608ce3` lineage).
+3. **Do not** treat Spotify play 2xx alone as success and advance the board — confirm `item` / `is_playing` (with a short **poll**; Connect state lags).
+4. **Do not** URI-fallback after `context_uri` play when confirm is slow — URI play often returns 2xx, leaves `item=none`, and **clears** a session that already started (~0.5s audio then empty). Prefer longer poll, resume if item bound but paused, or bind@0 + seek for Early — **not** URI wipe.
+5. **Do not** invent mid-show wake playlists (`createWakePlaylist`) as the default path — quota/429 risk; use the track’s **source playlist** `context_uri` instead.
+6. **Do not** put Early/Random only in a post-play seek without a bound item first when debugging cold Connect — but once context binds, Early in `position_ms` (or bind@0 then seek) is fine. Keep Early/Random on both 5×15 and 1×75 duration paths.
+7. Keep **fixed** `transferMyPlayback([deviceId], { play })` SDK args (object form was malformed). Fixing args without stopping `play=false` thrash still empties the PC.
+
+## Safe changes
+
+- Pass `contextPlaylistId` from `song.sourcePlaylistId` (real 22-char Spotify id) into `startPlayback`.
+- Pause via `pausePlayback` only — no transfer-before-pause that empties Now Playing.
+- Host Activate / transfer: `play: true`, no brief play/pause wake thrash unless Jay explicitly asks.
+- Pull **Railway logs** first on any Connect/playback report (see `railway-logs-on-issues.mdc`).
+
+## Before claiming Connect work is done
+
+After deploy: hard-refresh host; Spotify desktop has *something* in Now Playing (even paused); Start Game; **audio continues** past the first second; Now Playing shows the called track; board does not advance on silence. Cite `startPlayback` log lines (`context_uri`, confirm `ok=true`) from Railway — not typecheck alone.
