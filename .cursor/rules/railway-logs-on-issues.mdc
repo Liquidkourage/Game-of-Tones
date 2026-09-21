@@ -1,0 +1,17 @@
+---
+description: Always check Railway deploy logs when Jay reports a runtime issue
+alwaysApply: true
+---
+
+# Railway logs on issues
+
+When Jay reports a problem that needs resolving (playback, Connect, rooms, deploy, 429s, Start Game, etc.):
+
+1. **Pull Railway deploy/runtime logs first** (or in parallel with code inspection) — do not diagnose from chat alone.
+2. Linked project: **Game Of Tones** / production / service **`Game-of-Tones`**.
+   - Example: `railway logs -n 200 -s Game-of-Tones`
+   - Use `-d` for deploy logs, default for runtime.
+3. Use recent log lines that match the failure window; cite concrete errors (Restriction, 429, item=none, quarantine, etc.).
+4. Only then change code or claim a root cause.
+
+Not required for pure UI/layout questions with no server symptom.
