@@ -1480,7 +1480,8 @@ class SpotifyService {
   // Start playback with Early/Random in position_ms.
   // Prefer context_uri from the track's existing Spotify playlist when provided — on Windows
   // Connect, URI-only play often returns 2xx but leaves item=none and clears Now Playing.
-  // No wake-playlist create; no transfer(play=false) thrash.
+  // Confirm with a short poll (Connect state lags). Never URI-fallback after context — that
+  // wipes a session that already started audio (~0.5s then empty Now Playing).
   async startPlayback(deviceId, uris, position = 0, options = {}) {
     await this._ensureCanCallWebApi('startPlayback');
     const positionMs = Math.max(0, Math.floor(Number(position) || 0));
@@ -1493,23 +1494,23 @@ class SpotifyService {
     const contextPlaylistId = /^[A-Za-z0-9]{22}$/.test(rawCtx) ? rawCtx : null;
     const confirm = options.confirm !== false;
 
-    const playViaContext = async () => {
+    const playViaContext = async (ms) => {
       await this.spotifyApi.play({
         device_id: deviceId,
         context_uri: `spotify:playlist:${contextPlaylistId}`,
         offset: trackId ? { uri: `spotify:track:${trackId}` } : { position: 0 },
-        position_ms: positionMs,
+        position_ms: Math.max(0, Math.floor(Number(ms) || 0)),
       });
     };
-    const playViaUris = async () => {
+    const playViaUris = async (ms) => {
       await this.spotifyApi.play({
         device_id: deviceId,
         uris: trackUris,
-        position_ms: positionMs,
+        position_ms: Math.max(0, Math.floor(Number(ms) || 0)),
       });
     };
-    const snap = async (label) => {
-      await new Promise((r) => setTimeout(r, 350));
+
+    const readSnap = async () => {
       let state = null;
       try {
         state = await this.getCurrentPlaybackState();
@@ -1518,30 +1519,75 @@ class SpotifyService {
       }
       const playing = !!state?.is_playing;
       const itemId = state?.item?.id || null;
-      const ok = playing && (!trackId || itemId === trackId);
-      routineSpotifyLog(
-        `🔎 startPlayback ${label}: is_playing=${playing} item=${itemId || 'none'} ok=${ok}`,
-      );
-      return ok;
+      return { playing, itemId, state };
+    };
+
+    /** Poll — Windows Connect often returns item=none for a few hundred ms after a successful play. */
+    const confirmPlaying = async (label) => {
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        await new Promise((r) => setTimeout(r, attempt === 1 ? 450 : 350));
+        let snap = await readSnap();
+        // Correct item loaded but paused — nudge resume (common right after context bind).
+        if (trackId && snap.itemId === trackId && !snap.playing) {
+          try {
+            await this.resumePlayback(deviceId);
+          } catch (_) {
+            /* ignore */
+          }
+          await new Promise((r) => setTimeout(r, 300));
+          snap = await readSnap();
+        }
+        const ok = snap.playing && (!trackId || snap.itemId === trackId);
+        routineSpotifyLog(
+          `🔎 startPlayback ${label}#${attempt}: is_playing=${snap.playing} item=${snap.itemId || 'none'} ok=${ok}`,
+        );
+        if (ok) return true;
+        // Bound with correct item even if is_playing flickers — don't destroy the session.
+        if (trackId && snap.itemId === trackId) {
+          routineSpotifyLog(
+            `🔎 startPlayback ${label}#${attempt}: item bound (is_playing=${snap.playing}) — treating as success`,
+          );
+          return true;
+        }
+      }
+      return false;
     };
 
     try {
       if (contextPlaylistId && trackId) {
         routineSpotifyLog(
-          `🎵 startPlayback context_uri playlist=${contextPlaylistId} @${positionMs}ms (avoid URI empty-bind)`,
+          `🎵 startPlayback context_uri playlist=${contextPlaylistId} @${positionMs}ms`,
         );
-        await playViaContext();
+        await playViaContext(positionMs);
         if (!confirm) return;
-        if (await snap('after-context')) return;
-        // Context failed to bind — URI rarely helps on this host, but try once before failing loud.
-        routineSpotifyLog('🔧 context play not confirmed — trying URI once');
-        await playViaUris();
-        if (await snap('after-uri-fallback')) return;
-      } else {
-        await playViaUris();
-        if (!confirm) return;
-        if (await snap('after-uri')) return;
+        if (await confirmPlaying('after-context')) return;
+
+        // Mid-track Early offset sometimes fails to bind — retry at 0 then seek (no URI).
+        if (positionMs > 0) {
+          routineSpotifyLog('🔧 context@Early not confirmed — bind@0 then seek');
+          await playViaContext(0);
+          if (await confirmPlaying('after-context-bind-0')) {
+            try {
+              await this.seekToPosition(positionMs, deviceId);
+            } catch (_) {
+              /* keep playing from 0 rather than wipe session */
+            }
+            return;
+          }
+        }
+
+        const errCtx = new Error(
+          'Spotify accepted play but did not keep audio on the locked PC. ' +
+            'Open Spotify on that computer, click any song once so you hear sound, leave it open, then Start Game again.',
+        );
+        errCtx.code = 'spotify_not_playing';
+        errCtx.body = { error: { message: errCtx.message, status: 409 } };
+        throw errCtx;
       }
+
+      await playViaUris(positionMs);
+      if (!confirm) return;
+      if (await confirmPlaying('after-uri')) return;
 
       const err = new Error(
         'Spotify accepted play but is_playing stayed false on the locked PC (Now Playing empty). ' +
