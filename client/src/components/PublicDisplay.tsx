@@ -1075,8 +1075,8 @@ const PublicDisplay: React.FC = () => {
   const [headerToastTopPx, setHeaderToastTopPx] = useState<number>(78);
 
   /**
-   * Host slider (1 = 100%). Fit runs at this zoom so title+artist stay one unit;
-   * 100% = largest combined size that fits the card with no post-fit px ceiling.
+   * Host Title size (1 = 100%). Fit always runs at 100% (max-fill); this multiplies
+   * only at paint via resolveCallCardFontSizes — >100% may overflow (host failsafe).
    */
   const hostZoom = Math.max(
     0.5,
@@ -3833,14 +3833,13 @@ const PublicDisplay: React.FC = () => {
 
     const backoff = callCardScaleBackoffRef.current[songId] ?? 1;
 
-    // One path: measure box → fit title+artist at hostZoom → paint.
+    // Fit at host 100% (max-fill); hostZoom multiplies only in callCardLineStyles.
     const titleForFit = formatCallCardTitle(meta.name);
     const fitBox = callCardFitBox(layout, plainFullTitle, masked);
     if (fitBox) {
       const fit = fitCallCardTextBest(titleForFit, meta.artist, {
         ...fitBox,
         masked,
-        hostZoom,
       });
       if (fit) {
         const base = typographyFromCallCardFit(fit, { masked, plainFullTitle, hasArtist });

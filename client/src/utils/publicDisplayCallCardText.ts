@@ -1,8 +1,9 @@
 import type { CSSProperties } from 'react';
 
 /**
- * Per-card call-list typography: one measure → binary-search → paint algorithm.
- * Host 100% = largest title+artist that fits this card’s box (no fake px / maxScale lid).
+ * Per-card call-list typography: measure → binary-search at host 100% → paint.
+ * Fit always runs at hostZoom=1 (max-fill). Host Title size multiplies only at paint
+ * via resolveCallCardFontSizes — 100% matches max-fill; ≠100% scales (may overflow).
  */
 
 /** Title size on call cards; artist is intentionally smaller for hierarchy. */
@@ -563,8 +564,9 @@ export type CallCardFitOpts = {
   /** Available text height inside the card (after vertical padding). */
   boxHeightPx: number;
   /**
-   * Host font % as a multiplier (1 = 100%). Must match resolveCallCardFontSizes
-   * so title+artist are fitted as one unit at the size that will actually paint.
+   * Ignored by the fitter (always fits at 100%). Host Title size is applied only
+   * at paint via resolveCallCardFontSizes / callCardLineStyles.
+   * @deprecated Pass hostZoom only at paint — kept so old call sites stay harmless.
    */
   hostZoom?: number;
   /** Letter-tile mode (title reveal "by letter"). */
@@ -611,10 +613,8 @@ export function fitCallCardText(
     Number.isFinite(opts.tileScale) && (opts.tileScale as number) > 0
       ? (opts.tileScale as number)
       : 1;
-  const hostZoom = Math.max(
-    0.5,
-    Math.min(3, Number.isFinite(opts.hostZoom) ? (opts.hostZoom as number) : 1),
-  );
+  // Always fit at 100% — hostZoom multiplies only at paint (Title size failsafe).
+  const hostZoom = 1;
   const minScale = opts.minScale ?? FIT_MIN_SCALE;
   const maxScale = opts.maxScale ?? FIT_MAX_SCALE;
   const titleText = formatCallCardTitle((title || '').trim() || 'Unknown');
@@ -813,10 +813,7 @@ export function fitCallCardTextBest(
     return fitCallCardText(title, artist, { ...opts, tileScale: 1 });
   }
 
-  const hostZoom = Math.max(
-    0.5,
-    Math.min(3, Number.isFinite(opts.hostZoom) ? (opts.hostZoom as number) : 1),
-  );
+  // Score at hostZoom=1 (same as fit) — paint applies host Title size separately.
   const tileCandidates = [1, 0.92, FIT_TILE_SCALE_FLOOR];
   let best: CallCardFitResult | null = null;
   let bestScore = -1;
@@ -824,7 +821,7 @@ export function fitCallCardTextBest(
   for (const ts of tileCandidates) {
     const fit = fitCallCardText(title, artist, { ...opts, tileScale: ts });
     if (!fit) continue;
-    const titlePx = PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * fit.textScale * hostZoom;
+    const titlePx = PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * fit.textScale;
     const score = (fit.fits ? 1e9 : 0) + titlePx * (fit.tileScale ?? ts);
     if (score > bestScore) {
       bestScore = score;
