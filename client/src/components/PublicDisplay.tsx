@@ -3847,6 +3847,8 @@ const PublicDisplay: React.FC = () => {
         return {
           ...base,
           textScale: base.textScale * backoff,
+          artistTextScale:
+            base.artistTextScale != null ? base.artistTextScale * backoff : undefined,
         };
       }
     }
