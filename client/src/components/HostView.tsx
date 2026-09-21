@@ -972,6 +972,39 @@ function selectionPlaylistKey(playlists: Array<{ id: string }>): string {
     .join('|');
 }
 
+/**
+ * Reorder a mix to the round's stored playlistIds (B–O / chip order).
+ * Selection UI keeps personal vs catalog in separate arrays and concatenating them
+ * scrambles interleaved 5×15 column order vs host chips / projector.
+ */
+function orderPlaylistsByRoundIds<T extends { id: string }>(
+  playlists: T[],
+  playlistIds: string[] | null | undefined,
+): T[] {
+  const wanted = Array.isArray(playlistIds) ? playlistIds : [];
+  if (!wanted.length || playlists.length === 0) return playlists;
+  const roundIds = wanted.map((id) => canonicalPlaylistIdForMatch(String(id)));
+  const playlistCanons = playlists.map((p) => canonicalPlaylistIdForMatch(String(p.id)));
+  if (
+    roundIds.length !== playlists.length ||
+    !playlistCanons.every((id) => roundIds.includes(id))
+  ) {
+    return playlists;
+  }
+  const byCanon = new Map<string, T>();
+  for (const p of playlists) {
+    const k = canonicalPlaylistIdForMatch(String(p.id));
+    if (!byCanon.has(k)) byCanon.set(k, p);
+  }
+  const ordered: T[] = [];
+  for (const id of roundIds) {
+    const row = byCanon.get(id);
+    if (!row) return playlists;
+    ordered.push(row);
+  }
+  return ordered.length === playlists.length ? ordered : playlists;
+}
+
 /** Stagger host playlist-tracks calls — multi-playlist mixes were bursting Spotify after OAuth reconnect. */
 function delayMsBetweenPlaylistTrackFetches(index: number, total: number): number {
   if (index <= 0) return 0;
@@ -1493,7 +1526,8 @@ const HostView: React.FC = () => {
   /** Debounce catalog /packs so it doesn’t fire in the same burst as host GET /v1/me/playlists (reduces Spotify 429). */
   const catalogPacksLoadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /** Personal selection first, then catalog-only ids (append). Dedupes by id. */
+  /** Personal selection first, then catalog-only ids (append). Dedupes by id.
+   *  Note: interleaved B–O order is restored at finalize/Start via orderPlaylistsByRoundIds. */
   const mixPlaylistSelection = useMemo(() => {
     const out: Playlist[] = [...selectedPlaylists];
     const ids = new Set(selectedPlaylists.map((p) => p.id));
@@ -5620,18 +5654,7 @@ const HostView: React.FC = () => {
     if (!opts?.playlists) {
       const ridx = currentRoundIndexRef.current;
       const round = ridx >= 0 ? eventRoundsRef.current[ridx] : null;
-      const roundIds = (round?.playlistIds || []).map((id) => canonicalPlaylistIdForMatch(String(id)));
-      if (
-        roundIds.length === playlists.length &&
-        playlists.every((p) => roundIds.includes(canonicalPlaylistIdForMatch(String(p.id))))
-      ) {
-        const orderIndex = new Map(roundIds.map((id, i) => [id, i]));
-        playlists = [...playlists].sort(
-          (a, b) =>
-            (orderIndex.get(canonicalPlaylistIdForMatch(String(a.id))) ?? 0) -
-            (orderIndex.get(canonicalPlaylistIdForMatch(String(b.id))) ?? 0),
-        );
-      }
+      playlists = orderPlaylistsByRoundIds(playlists, round?.playlistIds);
     }
     if (!socket || playlists.length === 0) return false;
     if (!isValidRoundPlaylistCount(playlists.length)) {
@@ -6246,8 +6269,14 @@ const HostView: React.FC = () => {
     const roundForStart =
       opts?.roundOverride ??
       (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length ? eventRounds[currentRoundIndex] : null);
-    const playlistsForStart =
-      opts?.playlistsOverride && opts.playlistsOverride.length > 0 ? opts.playlistsOverride : mixPlaylistSelection;
+    // Always prefer round playlistIds order for Start Game — mix UI personal/catalog split
+    // otherwise scrambles 5×15 projector columns vs host chips.
+    const playlistsForStart = orderPlaylistsByRoundIds(
+      opts?.playlistsOverride && opts.playlistsOverride.length > 0
+        ? opts.playlistsOverride
+        : mixPlaylistSelection,
+      roundForStart?.playlistIds,
+    );
     const needsHostSpotifyForStart = playlistsForStart.some(
       (p) => p.youtubeMusic !== true && p.appleMusic !== true && p.catalog !== true,
     );
@@ -6340,7 +6369,8 @@ const HostView: React.FC = () => {
     try {
       if (!useSavedRoundPlayback && !mixFinalized) {
         addLog('Finalizing mix before start...', 'info');
-        const ok = await finalizeMix(opts?.playlistsOverride ? { playlists: playlistsForStart } : undefined);
+        // Pass ordered playlists explicitly — default mix concat can scramble column order.
+        const ok = await finalizeMix({ playlists: playlistsForStart });
         if (!ok) {
           alert(
             'Could not finalize the mix in time. Try Show Playlists, wait for the confirmation, then Start Game.'
