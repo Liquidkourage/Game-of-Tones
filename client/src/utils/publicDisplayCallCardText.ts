@@ -27,15 +27,14 @@ export const CALL_CARD_ARTIST_LETTER_SPACING_EM = 0.02;
  * Kept for emergency typography fallback only.
  */
 export const CALL_CARD_TITLE_ARTIST_GAP_PX = 4;
-/** Tiny canvas↔DOM slack only — gap between title/artist is a full title line. */
-export const CALL_CARD_STACK_PAD_PX = 4;
+/** Tiny canvas↔DOM slack (subpixels only — stack height model must carry the rest). */
+export const CALL_CARD_STACK_PAD_PX = 6;
 /**
- * Canvas↔DOM slack — keep title/artist from being clipped mid-glyph when paint runs
- * slightly taller than the measure (common on 1×75 short rows + host font zoom).
+ * Residual pad after honest stack height — keep small so max-fill stays aggressive.
+ * Masked multi-line gets a bit more for tile baseline struts.
  */
-export const CALL_CARD_FIT_HEIGHT_SAFETY_PX = 22;
-/** Extra slack when letter-reveal titles wrap to 2+ lines (tiles taller than plain text). */
-export const CALL_CARD_FIT_HEIGHT_SAFETY_MASKED_WRAP_PX = 34;
+export const CALL_CARD_FIT_HEIGHT_SAFETY_PX = 8;
+export const CALL_CARD_FIT_HEIGHT_SAFETY_MASKED_WRAP_PX = 14;
 
 /** Box is the only lid — high enough that short titles can fill a tall card. */
 const FIT_MAX_SCALE = 12;
@@ -43,6 +42,8 @@ const FIT_MAX_SCALE = 12;
 const FIT_MIN_SCALE = 0.22;
 /** Smallest line-height multiplier the fitter may apply (~10% tighter). */
 const FIT_LINE_HEIGHT_SCALE_MIN = 0.9;
+/** Masked-only: densify letter tiles before accepting an overflowing min scale. */
+const FIT_TILE_SCALE_FLOOR = 0.85;
 
 /** Artist px used by fitter + render (hierarchy baked in — no post-fit bump). */
 export function callCardArtistPxForScale(titlePx: number, textScale: number): number {
@@ -131,7 +132,7 @@ export function typographyFromCallCardFit(
     textScale: fit.textScale,
     titleMaxLines: Math.max(1, fit.titleLines),
     artistMaxLines: opts.hasArtist ? Math.max(1, fit.artistLines) : 0,
-    letterBoxScale: 1,
+    letterBoxScale: fit.tileScale && fit.tileScale > 0 ? fit.tileScale : 1,
     clampContentHeight: true,
     plainFullTitle: opts.plainFullTitle,
     lineHeightScale: fit.lineHeightScale,
@@ -328,7 +329,8 @@ export function callLetterSlotStyle(
 
 /**
  * Line-height em used for fit + paint.
- * Masked: match DOM letter-slot height (cap height × tileScale).
+ * Masked: budget at least the painted letter-slot height (cap × tileScale) plus a
+ * small strut so multi-line tile rows are not underestimated vs DOM.
  */
 export function callCardLineHeightEm(
   kind: 'title' | 'artist',
@@ -343,7 +345,9 @@ export function callCardLineHeightEm(
   const lh = base * lineHeightScale;
   if (!masked) return lh;
   const ts = Number.isFinite(tileScale) && tileScale > 0 ? tileScale : 1;
-  return Math.max(lh, getCallTitleCapMetrics().heightEm * ts * 1.08);
+  // Slot height is cap×ts; 1.18× covers baseline alignment + blank-tile border strut.
+  const tileLineEm = getCallTitleCapMetrics().heightEm * ts * 1.18;
+  return Math.max(lh, tileLineEm);
 }
 
 /** Title+artist stack height — shared by fitter and paint clamp. */
@@ -570,6 +574,8 @@ export type CallCardFitResult = {
   lineHeightScale: number;
   /** Tile densify used for this fit (1 = full). */
   tileScale?: number;
+  /** False when the chosen scale still overflows the box — DOM backoff should shrink further. */
+  fits: boolean;
 };
 
 /**
@@ -610,9 +616,11 @@ export function fitCallCardText(
     lineHeightScale: number,
     ts: number,
   ): { fits: boolean; titleLines: number; artistLines: number; heightPx: number } => {
-    // Evaluate at the same zoomed px that resolveCallCardFontSizes will paint.
-    const titlePx = PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * s * hostZoom;
-    const artistPx = callCardArtistPxForScale(PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * s, s) * hostZoom;
+    // Same rounded px resolveCallCardFontSizes will paint (avoid float→round blowouts).
+    const { titlePx, artistPx } = resolveCallCardFontSizes({
+      textScale: s,
+      hostZoom,
+    });
 
     const t = measuredWrapLines(
       titleText,
@@ -641,8 +649,9 @@ export function fitCallCardText(
 
     // Artist is mandatory when present — always budget ≥1 line so it cannot be omitted.
     const artistLines = hasArtist ? Math.max(1, a.lines) : 0;
+    const titleLines = Math.max(1, t.lines);
     const heightPx = callCardStackHeightPx({
-      titleLines: Math.max(1, t.lines),
+      titleLines,
       artistLines,
       titlePx,
       artistPx,
@@ -651,7 +660,6 @@ export function fitCallCardText(
       hasArtist,
       tileScale: ts,
     });
-    const titleLines = Math.max(1, t.lines);
     const safetyPx =
       opts.masked && titleLines >= 2
         ? CALL_CARD_FIT_HEIGHT_SAFETY_MASKED_WRAP_PX
@@ -678,10 +686,11 @@ export function fitCallCardText(
         artistLines: atMax.artistLines,
         lineHeightScale,
         tileScale: ts,
+        fits: true,
       };
     }
     let best: CallCardFitResult | null = null;
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 16; i++) {
       const mid = (lo + hi) / 2;
       const r = evaluate(mid, lineHeightScale, ts);
       if (r.fits) {
@@ -691,6 +700,7 @@ export function fitCallCardText(
           artistLines: r.artistLines,
           lineHeightScale,
           tileScale: ts,
+          fits: true,
         };
         lo = mid;
       } else {
@@ -698,7 +708,7 @@ export function fitCallCardText(
       }
     }
     if (best) return best;
-    // Nothing fitted — return true min (may still clip); never invent a higher floor.
+    // Nothing fitted — return min with fits:false so DOM backoff can shrink further.
     const atMin = evaluate(minScale, lineHeightScale, ts);
     return {
       textScale: minScale,
@@ -706,31 +716,61 @@ export function fitCallCardText(
       artistLines: atMin.artistLines,
       lineHeightScale,
       tileScale: ts,
+      fits: false,
     };
   };
 
   const bestAtTile = (ts: number): CallCardFitResult => {
     const atDefault = bestScaleAt(1, ts);
     const atTight = bestScaleAt(FIT_LINE_HEIGHT_SCALE_MIN, ts);
-    const defaultFits = evaluate(atDefault.textScale, 1, ts).fits;
-    const tightHelpsSize = atTight.textScale > atDefault.textScale * 1.04;
-    if (!defaultFits || tightHelpsSize) return atTight;
-    return atDefault;
+    if (atDefault.fits && atTight.fits) {
+      const tightHelpsSize = atTight.textScale > atDefault.textScale * 1.04;
+      return tightHelpsSize ? atTight : atDefault;
+    }
+    if (atTight.fits) return atTight;
+    if (atDefault.fits) return atDefault;
+    // Prefer whichever overflows less (higher scale at min still flagged fits:false).
+    return atTight.textScale >= atDefault.textScale ? atTight : atDefault;
   };
 
   return bestAtTile(tileScale);
 }
 
 /**
- * Per-card max-fill fit at full letter advances (no densify).
- * Soft wraps on spaces/hyphens/dashes/slashes only — never mid-letter.
+ * Per-card max-fill fit. Soft wraps on spaces/hyphens/dashes/slashes only — never mid-letter.
+ * Masked multi-line: try full tiles first, then slight densify so long titles still fit without clip.
  */
 export function fitCallCardTextBest(
   title: string,
   artist: string,
   opts: Omit<CallCardFitOpts, 'tileScale'>,
 ): CallCardFitResult | null {
-  return fitCallCardText(title, artist, { ...opts, tileScale: 1 });
+  if (!opts.masked) {
+    return fitCallCardText(title, artist, { ...opts, tileScale: 1 });
+  }
+
+  const hostZoom = Math.max(
+    0.5,
+    Math.min(3, Number.isFinite(opts.hostZoom) ? (opts.hostZoom as number) : 1),
+  );
+  const tileCandidates = [1, 0.92, FIT_TILE_SCALE_FLOOR];
+  let best: CallCardFitResult | null = null;
+  let bestScore = -1;
+
+  for (const ts of tileCandidates) {
+    const fit = fitCallCardText(title, artist, { ...opts, tileScale: ts });
+    if (!fit) continue;
+    const titlePx = PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * fit.textScale * hostZoom;
+    // Prefer fits; among fits prefer larger title; among non-fits prefer larger title too.
+    const score = (fit.fits ? 1e9 : 0) + titlePx * (fit.tileScale ?? ts);
+    if (score > bestScore) {
+      bestScore = score;
+      best = fit;
+    }
+    if (fit.fits && ts === 1) break; // Full tiles that fit — done.
+  }
+
+  return best;
 }
 
 /** Bingo pattern / winner grid cells (vmin-based sizes get a scale multiplier). */

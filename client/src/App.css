@@ -809,7 +809,8 @@ body {
   overflow: visible;
   display: block;
   line-height: 1.28;
-  margin-top: clamp(2px, 0.35vmin, 4px);
+  /* Gap comes from inline callCardTitleArtistGapPx — do not double-count with CSS margin. */
+  margin-top: 0;
 }
 
 .App .public-display .bingo-square-text {

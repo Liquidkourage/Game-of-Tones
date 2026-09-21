@@ -1020,6 +1020,42 @@ function callItemRecency(
   };
 }
 
+/** Watches call-song-info for residual overflow after canvas fit; steps down per-card scale. */
+const CallSongInfoFitBox: React.FC<{
+  songId: string;
+  onOverflow: (songId: string) => void;
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+}> = ({ songId, onOverflow, style, children }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let raf = 0;
+    const check = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (!el.isConnected) return;
+        if (el.scrollHeight > el.clientHeight + 1) {
+          onOverflow(songId);
+        }
+      });
+    };
+    check();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(check) : null;
+    ro?.observe(el);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro?.disconnect();
+    };
+  });
+  return (
+    <div ref={ref} className="call-song-info" style={style}>
+      {children}
+    </div>
+  );
+};
+
 const PublicDisplay: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(1.0);
@@ -1039,6 +1075,23 @@ const PublicDisplay: React.FC = () => {
     0.5,
     Math.min(3, Number.isFinite(fontSizeMultiplier) ? fontSizeMultiplier : 1),
   );
+  /**
+   * Per-song scale multiplier when canvas fit still slightly overflows the DOM
+   * (letter-reveal multi-line tiles). Starts at 1; steps down until scrollHeight fits.
+   */
+  const [callCardScaleBackoff, setCallCardScaleBackoff] = useState<Record<string, number>>({});
+  const callCardScaleBackoffRef = useRef(callCardScaleBackoff);
+  callCardScaleBackoffRef.current = callCardScaleBackoff;
+  const reportCallCardOverflow = useCallback((songId: string) => {
+    const id = String(songId || '').trim();
+    if (!id) return;
+    setCallCardScaleBackoff((prev) => {
+      const cur = prev[id] ?? 1;
+      const next = Math.max(0.45, Math.round(cur * 0.9 * 1000) / 1000);
+      if (next >= cur - 0.0005) return prev;
+      return { ...prev, [id]: next };
+    });
+  }, []);
   useLayoutEffect(() => {
     let raf = 0;
     const measure = () => {
@@ -1414,6 +1467,10 @@ const PublicDisplay: React.FC = () => {
     if (carouselViewportHeightPx <= 0) return 0;
     return carouselViewportHeightPx / 5;
   }, [carouselViewportHeightPx]);
+  /** Geometry / reveal mode change — clear per-card overflow backoff so fit can max-fill again. */
+  useEffect(() => {
+    setCallCardScaleBackoff({});
+  }, [hostZoom, titleRevealMode, carouselCardRowPx, fiveBy15CardRowPx]);
   /** One play-order column width; prefer measured column, fall back to viewport / cols. */
   const carouselColWidthPx = useMemo(() => {
     if (carouselColWidthMeasuredPx > 0) return carouselColWidthMeasuredPx;
@@ -3756,6 +3813,7 @@ const PublicDisplay: React.FC = () => {
     layout: '5x15' | 'carousel' = '5x15',
   ): CallCardTypography => {
     void fontsReadyNonce; // re-fit after webfonts load
+    void callCardScaleBackoff; // re-paint when DOM overflow backoff steps down
     const ui = getCallSongRevealUi(songId);
     const masked = ui.kind === 'masked';
     const plainFullTitle = ui.kind === 'plain';
@@ -3765,6 +3823,8 @@ const PublicDisplay: React.FC = () => {
     if (layoutFullCard) {
       return uncappedFullCardTypography();
     }
+
+    const backoff = callCardScaleBackoffRef.current[songId] ?? 1;
 
     // One path: measure box → fit title+artist at hostZoom → paint.
     const titleForFit = formatCallCardTitle(meta.name);
@@ -3776,16 +3836,21 @@ const PublicDisplay: React.FC = () => {
         hostZoom,
       });
       if (fit) {
-        return typographyFromCallCardFit(fit, { masked, plainFullTitle, hasArtist });
+        const base = typographyFromCallCardFit(fit, { masked, plainFullTitle, hasArtist });
+        return {
+          ...base,
+          textScale: base.textScale * backoff,
+        };
       }
     }
 
     const rowPx = layout === '5x15' ? fiveBy15CardRowPx : carouselCardRowPx;
     if (rowPx > 0) {
-      return emergencyCallCardTypography(rowPx, { plainFullTitle, hasArtist });
+      const emergency = emergencyCallCardTypography(rowPx, { plainFullTitle, hasArtist });
+      return { ...emergency, textScale: emergency.textScale * backoff };
     }
     return {
-      textScale: 1,
+      textScale: 1 * backoff,
       titleMaxLines: 3,
       artistMaxLines: hasArtist ? 2 : 0,
       letterBoxScale: 1,
@@ -3837,7 +3902,7 @@ const PublicDisplay: React.FC = () => {
       wordBreak: 'normal',
       overflowWrap: 'normal',
       display: 'block',
-      overflow: kind === 'title' ? 'hidden' : 'visible',
+      overflow: 'visible',
       textOverflow: 'clip',
       marginTop: kind === 'artist' ? (fullCard ? Math.max(6, artistGapPx * 0.5) : artistGapPx) : 0,
       paddingBottom: 0,
@@ -3848,7 +3913,7 @@ const PublicDisplay: React.FC = () => {
     return common;
   };
 
-  /** Title-only region — may clip. Artist is rendered as a sibling so it cannot be guillotined. */
+  /** Title stack — do not guillotine letter rows; card + DOM backoff own overflow. */
   const callSongTitleRegionStyles = (
     typo: CallCardTypography,
     fullCard: boolean,
@@ -3861,7 +3926,7 @@ const PublicDisplay: React.FC = () => {
       flex: '1 1 auto',
       minHeight: 0,
       display: 'block',
-      overflow: 'hidden',
+      overflow: 'visible',
       textAlign: 'center',
       position: 'relative',
       zIndex: 1,
@@ -3980,8 +4045,9 @@ const PublicDisplay: React.FC = () => {
         }}
       >
         {renderCallNumberOverlay(callNum, isFullCardPattern)}
-        <div
-          className="call-song-info"
+        <CallSongInfoFitBox
+          songId={songId}
+          onOverflow={reportCallCardOverflow}
           style={{
             display: 'flex',
             flexDirection: 'column',
@@ -3996,7 +4062,7 @@ const PublicDisplay: React.FC = () => {
             zIndex: 1,
           }}
         >
-          {/* Title may clip; artist is a sibling below so it cannot be cut off. */}
+          {/* Title + artist stack; overflow backoff shrinks type — no mid-title guillotine. */}
           <div
             className="call-song-title-region"
             style={callSongTitleRegionStyles(typo, isFullCardPattern)}
@@ -4031,7 +4097,7 @@ const PublicDisplay: React.FC = () => {
               </motion.div>
             </AnimatePresence>
           ) : null}
-        </div>
+        </CallSongInfoFitBox>
       </motion.div>
     );
   };
