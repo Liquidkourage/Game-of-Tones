@@ -1478,22 +1478,67 @@ class SpotifyService {
     return this.getPlaylistTracks(playlistId, { name: 'Playlist' });
   }
 
-  // Start playback — single play call with Early/Random in position_ms (show-night path).
-  // No wake playlists: creating/replacing playlists mid-round burns Web API quota and can 429 Connect.
+  // Start playback — URI play with Early/Random in position_ms.
+  // Spotify often returns 2xx while Windows Connect stays silent; require is_playing before success.
+  // One recovery: transfer(play=true) then replay. No wake playlists (those burn API quota).
   async startPlayback(deviceId, uris, position = 0) {
     await this._ensureCanCallWebApi('startPlayback');
     const positionMs = Math.max(0, Math.floor(Number(position) || 0));
     const trackUris = Array.isArray(uris) ? uris : [uris];
+    const trackId =
+      typeof trackUris[0] === 'string' ? String(trackUris[0]).replace(/^spotify:track:/i, '') : '';
 
-    try {
+    const playOnce = async () => {
       await this.spotifyApi.play({
         device_id: deviceId,
         uris: trackUris,
         position_ms: positionMs,
       });
+    };
+
+    const snap = async (label) => {
+      await new Promise((r) => setTimeout(r, 300));
+      let state = null;
+      try {
+        state = await this.getCurrentPlaybackState();
+      } catch (_) {
+        state = null;
+      }
+      const playing = !!state?.is_playing;
+      const itemId = state?.item?.id || null;
+      const correct = !trackId || itemId === trackId;
+      routineSpotifyLog(
+        `🔎 startPlayback ${label}: is_playing=${playing} item=${itemId || 'none'} correct=${correct}`,
+      );
+      return playing && (!trackId || correct);
+    };
+
+    try {
+      await playOnce();
+      if (await snap('after-play')) return;
+
+      routineSpotifyLog('🔧 Play accepted but not audible — transfer(play=true) then replay');
+      try {
+        await this.transferPlayback(deviceId, true);
+      } catch (xferErr) {
+        routineSpotifyLog(`⚠️ transfer recovery: ${xferErr?.message || xferErr}`);
+      }
+      await new Promise((r) => setTimeout(r, 200));
+      await playOnce();
+      if (await snap('after-transfer-replay')) return;
+
+      const err = new Error(
+        'Spotify accepted play but is_playing stayed false on the locked PC. ' +
+          'In the Spotify desktop app, press play once so you hear sound, leave it open, then Start Game again.',
+      );
+      err.code = 'spotify_not_playing';
+      err.body = { error: { message: err.message, status: 409 } };
+      throw err;
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlayback');
-      showLog.logSpotifyApiError('startPlayback', error);
+      if (error?.code !== 'spotify_not_playing') {
+        showLog.logSpotifyApiError('startPlayback', error);
+      }
       throw error;
     }
   }

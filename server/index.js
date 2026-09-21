@@ -4506,6 +4506,19 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
   } catch (error) {
     showLog.logSpotifyApiError('simple song advance', error);
     const spErr = spotifyFor(roomId);
+
+    // Hard stop on silent Connect — do not soft-retry into more fake advances.
+    if (error?.code === 'spotify_not_playing') {
+      clearRoomTimer(roomId);
+      io.to(roomId).emit('playback-error', {
+        message:
+          error?.message ||
+          'Spotify is not actually playing on the locked PC. Press play once in the Spotify app, then Start Game again.',
+        type: 'spotify_not_playing',
+      });
+      return;
+    }
+
     if (isSpotifyRateLimitOrQuarantineError(error, spErr)) {
       lockRoomSpotifyPlayback(roomId, room, 'advance_429', spErr);
       routineServerLog('🛑 No auto-retry — Spotify 429/quarantine host lock engaged');
@@ -4529,6 +4542,14 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
         }
       } catch (resumeError) {
         console.warn('⚠️ Failed to recover playback:', showLog.spotifyErrorSummary(resumeError));
+        if (resumeError?.code === 'spotify_not_playing') {
+          clearRoomTimer(roomId);
+          io.to(roomId).emit('playback-error', {
+            message: resumeError.message,
+            type: 'spotify_not_playing',
+          });
+          return;
+        }
         if (isSpotifyRateLimitOrQuarantineError(resumeError, spErr)) {
           lockRoomSpotifyPlayback(roomId, room, 'resume_after_advance_429', spErr);
           return;
