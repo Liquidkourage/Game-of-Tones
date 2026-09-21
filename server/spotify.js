@@ -76,6 +76,7 @@ const SPOTIFY_SOURCE_ROUTE_HINT = {
   getCurrentUserProfileBrief: 'GET /v1/me',
   getCurrentPlaybackState: 'GET /v1/me/player',
   startPlayback: 'PUT /v1/me/player/play',
+  createWakePlaylist: 'POST /v1/me/playlists + …/items (wake)',
   pausePlayback: 'PUT /v1/me/player/pause',
   transferPlayback: 'PUT /v1/me/player',
   resumePlayback: 'PUT /v1/me/player/play',
@@ -361,6 +362,9 @@ class SpotifyService {
     this._onQuarantineApplied = null;
     /** Coalesce parallel ensureValidToken → refreshAccessToken. */
     this._refreshInflight = null;
+    /** Reused once per org when Windows URI play leaves item=none (not mid-round spam). */
+    this._connectWakePlaylistId = null;
+    this._connectWakeLastUris = null;
   }
 
   setOnQuarantineApplied(fn) {
@@ -1479,9 +1483,8 @@ class SpotifyService {
   }
 
   // Start playback — URI play with Early/Random in position_ms.
-  // Spotify often returns 2xx while Windows Connect stays silent / empties Now Playing (item=none).
-  // Require is_playing. Recover by binding the track at 0 then seek — never transfer(play=false),
-  // never create wake playlists (those burn API quota). transfer(play=true) only after a bound item.
+  // Windows Connect often returns 2xx with item=none (empties Now Playing). Require is_playing.
+  // Recover: bind@0+seek → transfer(play=true)+replay → one reused context_uri wake (no per-song creates).
   async startPlayback(deviceId, uris, position = 0) {
     await this._ensureCanCallWebApi('startPlayback');
     const positionMs = Math.max(0, Math.floor(Number(position) || 0));
@@ -1489,16 +1492,17 @@ class SpotifyService {
     const trackId =
       typeof trackUris[0] === 'string' ? String(trackUris[0]).replace(/^spotify:track:/i, '') : '';
 
-    const playAt = async (ms) => {
-      await this.spotifyApi.play({
-        device_id: deviceId,
+    const playAt = async (ms, { omitDeviceId = false } = {}) => {
+      const opts = {
         uris: trackUris,
         position_ms: Math.max(0, Math.floor(Number(ms) || 0)),
-      });
+      };
+      if (!omitDeviceId && deviceId) opts.device_id = deviceId;
+      await this.spotifyApi.play(opts);
     };
 
     const snap = async (label) => {
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 450));
       let state = null;
       try {
         state = await this.getCurrentPlaybackState();
@@ -1514,26 +1518,59 @@ class SpotifyService {
       return { ok: playing && (!trackId || correct), playing, itemId };
     };
 
-    /** Empty desktop often ignores URI+Early offset; play@0 fills Now Playing, then seek. */
-    const bindTrackThenSeek = async (labelPrefix) => {
-      routineSpotifyLog(
-        `🔧 ${labelPrefix}: bind track at 0 then seek to ${positionMs}ms (fills Now Playing)`,
-      );
-      await playAt(0);
-      let s = await snap(`${labelPrefix}-bind-0`);
+    const seekIfNeeded = async (s, label) => {
       if (!s.itemId || (trackId && s.itemId !== trackId)) return s;
-      if (positionMs > 0) {
+      if (positionMs <= 0) return s;
+      try {
+        await this.seekToPosition(positionMs, deviceId);
+      } catch (seekErr) {
+        routineSpotifyLog(`⚠️ seek ${label}: ${seekErr?.message || seekErr}`);
+      }
+      if (!s.playing) {
         try {
-          await this.seekToPosition(positionMs, deviceId);
-        } catch (seekErr) {
-          routineSpotifyLog(`⚠️ seek after bind: ${seekErr?.message || seekErr}`);
-        }
-        if (!s.playing) {
-          try {
-            await this.resumePlayback(deviceId);
-          } catch (_) {}
-        }
-        s = await snap(`${labelPrefix}-bind-seek`);
+          await this.resumePlayback(deviceId);
+        } catch (_) {}
+      }
+      return snap(`${label}-after-seek`);
+    };
+
+    /** Empty desktop often ignores URI+Early; play@0 then seek. */
+    const bindTrackThenSeek = async (labelPrefix, omitDeviceId = false) => {
+      routineSpotifyLog(
+        `🔧 ${labelPrefix}: bind track at 0 then seek to ${positionMs}ms${omitDeviceId ? ' (no device_id)' : ''}`,
+      );
+      await playAt(0, { omitDeviceId });
+      let s = await snap(`${labelPrefix}-bind-0`);
+      return seekIfNeeded(s, labelPrefix);
+    };
+
+    /**
+     * Proven Windows bind when URI leaves item=none: context_uri on a tiny reused playlist.
+     * Essential mid-show — not in NON_ESSENTIAL. Created at most once per SpotifyService instance.
+     */
+    const playViaContextWake = async () => {
+      routineSpotifyLog('🔧 URI left item=none — context_uri wake playlist (reused)');
+      const wakeId = await this.createWakePlaylist(
+        `Wake ${new Date().toISOString().slice(0, 16)}`,
+        trackUris,
+      );
+      const playCtx = async (omitDeviceId) => {
+        const opts = {
+          context_uri: `spotify:playlist:${wakeId}`,
+          offset: trackId ? { uri: `spotify:track:${trackId}` } : { position: 0 },
+          position_ms: 0,
+        };
+        if (!omitDeviceId && deviceId) opts.device_id = deviceId;
+        await this.spotifyApi.play(opts);
+      };
+      await playCtx(false);
+      let s = await snap('after-context');
+      if (!s.ok) {
+        await playCtx(true);
+        s = await snap('after-context-active');
+      }
+      if (s.ok || s.itemId) {
+        s = await seekIfNeeded(s, 'context');
       }
       return s;
     };
@@ -1543,33 +1580,37 @@ class SpotifyService {
       let s = await snap('after-play');
       if (s.ok) return;
 
-      // item=none = Now Playing emptied / never bound. Do NOT transfer(play=true) on empty —
-      // that resumes nothing. Bind the intended URI first.
       if (!s.itemId) {
-        s = await bindTrackThenSeek('empty-after-play');
+        s = await bindTrackThenSeek('empty-after-play', false);
         if (s.ok) return;
       }
 
-      // Session may be on another device or paused with a track — transfer(play=true) then replay.
       routineSpotifyLog('🔧 Play not audible — transfer(play=true) then replay');
       try {
         await this.transferPlayback(deviceId, true);
       } catch (xferErr) {
         routineSpotifyLog(`⚠️ transfer recovery: ${xferErr?.message || xferErr}`);
       }
-      await new Promise((r) => setTimeout(r, 200));
-      await playAt(positionMs);
-      s = await snap('after-transfer-replay');
-      if (s.ok) return;
-
+      await new Promise((r) => setTimeout(r, 250));
+      await playAt(0, { omitDeviceId: true });
+      s = await snap('after-transfer-active');
+      if (s.ok) {
+        s = await seekIfNeeded(s, 'transfer-active');
+        if (s.ok) return;
+      }
       if (!s.itemId) {
-        s = await bindTrackThenSeek('empty-after-transfer');
+        s = await bindTrackThenSeek('empty-after-transfer', true);
         if (s.ok) return;
       }
 
+      // Last resort that actually binds dormant Windows Connect (show-proven).
+      s = await playViaContextWake();
+      if (s.ok) return;
+
       const err = new Error(
         'Spotify accepted play but is_playing stayed false on the locked PC. ' +
-          'In the Spotify desktop app, press play once so you hear sound, leave it open, then Start Game again.',
+          'Open the Spotify desktop app, click any song once so you hear sound, leave it open, ' +
+          'then Connection → Activate device → Start Game again.',
       );
       err.code = 'spotify_not_playing';
       err.body = { error: { message: err.message, status: 409 } };
@@ -1581,6 +1622,57 @@ class SpotifyService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Tiny playlist so context_uri can bind Windows when URI play leaves item=none.
+   * Reused — not created per song. Essential mid-show (not NON_ESSENTIAL).
+   */
+  async createWakePlaylist(name, trackUris) {
+    await this._ensureCanCallWebApi('createWakePlaylist');
+    const uris = this._asSpotifyTrackUris(trackUris).slice(0, 5);
+    if (!uris.length) throw new Error('createWakePlaylist: no track uris');
+
+    if (this._connectWakePlaylistId) {
+      const same =
+        Array.isArray(this._connectWakeLastUris) &&
+        this._connectWakeLastUris.length === uris.length &&
+        this._connectWakeLastUris.every((u, i) => u === uris[i]);
+      if (same) return this._connectWakePlaylistId;
+      try {
+        await this._webApiRequest(
+          'PUT',
+          `/v1/playlists/${encodeURIComponent(this._connectWakePlaylistId)}/items`,
+          { uris },
+          'createWakePlaylist',
+        );
+        this._connectWakeLastUris = uris;
+        return this._connectWakePlaylistId;
+      } catch (_) {
+        this._connectWakePlaylistId = null;
+        this._connectWakeLastUris = null;
+      }
+    }
+
+    const organizedName = `${GOT_OUTPUT_PLAYLIST_NAME_PREFIX}${String(name || 'Wake').slice(0, 80)}`;
+    const { body: createBody } = await this._webApiRequest(
+      'POST',
+      '/v1/me/playlists',
+      { name: organizedName, description: 'TEMPO Connect wake (reused)', public: false },
+      'createWakePlaylist',
+    );
+    const playlistId = createBody && createBody.id;
+    if (!playlistId) throw new Error('createWakePlaylist: missing id');
+    await this._webApiRequest(
+      'POST',
+      `/v1/playlists/${encodeURIComponent(playlistId)}/items`,
+      { uris },
+      'createWakePlaylist',
+    );
+    this._connectWakePlaylistId = playlistId;
+    this._connectWakeLastUris = uris;
+    routineSpotifyLog(`✅ Wake playlist ${playlistId}`);
+    return playlistId;
   }
 
   // Pause playback

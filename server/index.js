@@ -3954,11 +3954,11 @@ async function pauseSpotifyForRoom(roomId, room) {
       return;
     }
     try {
-      await sp.transferPlayback(deviceId, false);
-    } catch {
-      /* ignore */
+      // Do not transfer(play=false) before pause — that empties Windows Now Playing.
+      await sp.pausePlayback(deviceId);
+    } catch (e) {
+      console.warn('⚠️ pauseSpotifyForRoom failed:', e?.message || e);
     }
-    await sp.pausePlayback(deviceId);
   } catch (e) {
     console.warn('⚠️ pauseSpotifyForRoom failed:', e?.message || e);
   }
