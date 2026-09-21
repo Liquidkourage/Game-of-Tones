@@ -4483,9 +4483,6 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
       return;
     }
 
-    // After the first successful start, Connect is warm — skip post-play confirm waits (~0.3–0.6s gap).
-    const confirmStart = room._spotifyConnectWarm !== true;
-
     if (room.temporaryPlaylistId) {
       routineServerLog(`🎼 Using playlist context: ${room.temporaryPlaylistId}, track ${room.currentSongIndex}`);
       await spPlay.startPlaybackFromPlaylist(resolvedDeviceId, room.temporaryPlaylistId, room.currentSongIndex, room.currentSongStartMs);
@@ -4495,39 +4492,16 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
         resolvedDeviceId,
         [`spotify:track:${nextSong.id}`],
         room.currentSongStartMs,
-        { confirm: confirmStart },
       );
     }
 
     routineServerLog(`✅ Playback started successfully for: ${nextSong.name}`);
     routineServerLog(`✅ Simple advance: ${nextSong.name} by ${nextSong.artist}`);
     room._spotifyAdvanceSoftRetries = 0;
-    room._spotifyConnectWarm = true;
 
-    // Start the snippet timer immediately — don't wait on duration/verify (that was ~300ms of dead air).
     if (roomStillPlaying(roomId)) {
       startSimpleProgression(roomId, resolvedDeviceId, room.snippetLength);
     }
-
-    // Best-effort duration learn in the background (does not delay the next track).
-    void (async () => {
-      try {
-        const state = await spPlay.getCurrentPlaybackState();
-        const liveDur = normalizeTrackDurationMs(state?.item?.duration_ms);
-        if (liveDur != null && pickSongDurationMs(nextSong) == null) {
-          nextSong.duration = liveDur;
-          if (room.playlistSongs?.[room.currentSongIndex]?.id === nextSong.id) {
-            room.playlistSongs[room.currentSongIndex].duration = liveDur;
-          }
-          if (room.fiveByFifteenMeta && typeof room.fiveByFifteenMeta === 'object' && nextSong.id) {
-            const prev = room.fiveByFifteenMeta[nextSong.id] || {};
-            room.fiveByFifteenMeta[nextSong.id] = { ...prev, duration: liveDur };
-          }
-        }
-      } catch (_) {
-        /* ignore */
-      }
-    })();
 
   } catch (error) {
     showLog.logSpotifyApiError('simple song advance', error);

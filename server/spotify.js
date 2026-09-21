@@ -76,7 +76,6 @@ const SPOTIFY_SOURCE_ROUTE_HINT = {
   getCurrentUserProfileBrief: 'GET /v1/me',
   getCurrentPlaybackState: 'GET /v1/me/player',
   startPlayback: 'PUT /v1/me/player/play',
-  createWakePlaylist: 'POST /v1/me/playlists + …/items (wake)',
   pausePlayback: 'PUT /v1/me/player/pause',
   transferPlayback: 'PUT /v1/me/player',
   resumePlayback: 'PUT /v1/me/player/play',
@@ -362,9 +361,6 @@ class SpotifyService {
     this._onQuarantineApplied = null;
     /** Coalesce parallel ensureValidToken → refreshAccessToken. */
     this._refreshInflight = null;
-    /** Reused when URI play leaves Windows Connect with item=none. */
-    this._connectWakePlaylistId = null;
-    this._connectWakeLastUris = null;
   }
 
   setOnQuarantineApplied(fn) {
@@ -1482,89 +1478,12 @@ class SpotifyService {
     return this.getPlaylistTracks(playlistId, { name: 'Playlist' });
   }
 
-  /**
-   * Tiny playlist for context_uri when Windows desktop ignores URI-only play (item=none).
-   * Essential mid-show — not in NON_ESSENTIAL list.
-   */
-  async createWakePlaylist(name, trackUris) {
-    await this._ensureCanCallWebApi('createWakePlaylist');
-    const uris = this._asSpotifyTrackUris(trackUris).slice(0, 5);
-    if (!uris.length) throw new Error('createWakePlaylist: no track uris');
-
-    if (this._connectWakePlaylistId) {
-      const same =
-        Array.isArray(this._connectWakeLastUris) &&
-        this._connectWakeLastUris.length === uris.length &&
-        this._connectWakeLastUris.every((u, i) => u === uris[i]);
-      if (same) return this._connectWakePlaylistId;
-      try {
-        await this._webApiRequest(
-          'PUT',
-          `/v1/playlists/${encodeURIComponent(this._connectWakePlaylistId)}/items`,
-          { uris },
-          'createWakePlaylist',
-        );
-        this._connectWakeLastUris = uris;
-        return this._connectWakePlaylistId;
-      } catch (_) {
-        this._connectWakePlaylistId = null;
-        this._connectWakeLastUris = null;
-      }
-    }
-
-    const organizedName = `${GOT_OUTPUT_PLAYLIST_NAME_PREFIX}${String(name || 'Wake').slice(0, 80)}`;
-    const { body: createBody } = await this._webApiRequest(
-      'POST',
-      '/v1/me/playlists',
-      { name: organizedName, description: 'TEMPO Connect wake playlist', public: false },
-      'createWakePlaylist',
-    );
-    const playlistId = createBody && createBody.id;
-    if (!playlistId) throw new Error('createWakePlaylist: missing id');
-    await this._webApiRequest(
-      'POST',
-      `/v1/playlists/${encodeURIComponent(playlistId)}/items`,
-      { uris },
-      'createWakePlaylist',
-    );
-    this._connectWakePlaylistId = playlistId;
-    this._connectWakeLastUris = uris;
-    routineSpotifyLog(`✅ Wake playlist ${playlistId}`);
-    return playlistId;
-  }
-
-  /**
-   * Start playback. Prefer one URI play with Early/Random in position_ms (warm Connect / show-night).
-   * If Windows desktop leaves item=none / not playing, one context_uri wake with the same offset
-   * (no play@0→seek jump).
-   *
-   * @param {{ confirm?: boolean }} [options] confirm=false skips the post-play state wait (mid-round
-   *   advances — Connect is already warm; saves ~300–600ms of inter-track silence).
-   */
-  async startPlayback(deviceId, uris, position = 0, options = {}) {
+  // Start playback — single play call with Early/Random in position_ms (show-night path).
+  // No wake playlists: creating/replacing playlists mid-round burns Web API quota and can 429 Connect.
+  async startPlayback(deviceId, uris, position = 0) {
     await this._ensureCanCallWebApi('startPlayback');
     const positionMs = Math.max(0, Math.floor(Number(position) || 0));
     const trackUris = Array.isArray(uris) ? uris : [uris];
-    const trackId =
-      typeof trackUris[0] === 'string' ? String(trackUris[0]).replace(/^spotify:track:/i, '') : '';
-    const confirm = options?.confirm !== false;
-
-    const snap = async (label) => {
-      await new Promise((r) => setTimeout(r, 150));
-      let state = null;
-      try {
-        state = await this.getCurrentPlaybackState();
-      } catch (_) {
-        state = null;
-      }
-      const playing = !!state?.is_playing;
-      const itemId = state?.item?.id || null;
-      const correct = !trackId || itemId === trackId;
-      routineSpotifyLog(
-        `🔎 startPlayback ${label}: is_playing=${playing} item=${itemId || 'none'} correct=${correct}`,
-      );
-      return { playing, itemId, ok: playing && (!trackId || correct) };
-    };
 
     try {
       await this.spotifyApi.play({
@@ -1572,45 +1491,9 @@ class SpotifyService {
         uris: trackUris,
         position_ms: positionMs,
       });
-      if (!confirm) return;
-
-      let s = await snap('after-uris');
-      if (s.ok) return;
-
-      routineSpotifyLog('🔧 URI play did not bind desktop Connect — context_uri wake');
-      const wakeId = await this.createWakePlaylist(
-        `Wake ${new Date().toISOString().slice(0, 16)}`,
-        trackUris,
-      );
-      await this.spotifyApi.play({
-        device_id: deviceId,
-        context_uri: `spotify:playlist:${wakeId}`,
-        offset: trackId ? { uri: `spotify:track:${trackId}` } : { position: 0 },
-        position_ms: positionMs,
-      });
-      s = await snap('after-context');
-      if (s.ok) return;
-
-      await this.spotifyApi.play({
-        context_uri: `spotify:playlist:${wakeId}`,
-        offset: trackId ? { uri: `spotify:track:${trackId}` } : { position: 0 },
-        position_ms: positionMs,
-      });
-      s = await snap('after-context-active');
-      if (s.ok) return;
-
-      const err = new Error(
-        'Spotify PC app did not start audio (URI and playlist wake both failed). ' +
-          'Open Spotify, play any song once so you hear sound, leave it open, then Start Game again.',
-      );
-      err.code = 'spotify_not_playing';
-      err.body = { error: { message: err.message, status: 409 } };
-      throw err;
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlayback');
-      if (error?.code !== 'spotify_not_playing') {
-        showLog.logSpotifyApiError('startPlayback', error);
-      }
+      showLog.logSpotifyApiError('startPlayback', error);
       throw error;
     }
   }
