@@ -1020,7 +1020,7 @@ function callItemRecency(
   };
 }
 
-/** Watches call-song-info for residual overflow after canvas fit; steps down per-card scale. */
+/** Watches call-song-info for residual content overflow; steps down per-card scale. */
 const CallSongInfoFitBox: React.FC<{
   songId: string;
   onOverflow: (songId: string) => void;
@@ -1036,7 +1036,14 @@ const CallSongInfoFitBox: React.FC<{
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         if (!el.isConnected) return;
-        if (el.scrollHeight > el.clientHeight + 1) {
+        // Measure title+artist content stack only — ignore flex empty space
+        // (scrollHeight > clientHeight false-positives were shrinking short titles).
+        const name = el.querySelector('.call-song-name') as HTMLElement | null;
+        const artist = el.querySelector('.call-song-artist') as HTMLElement | null;
+        let contentBottom = 0;
+        if (name) contentBottom = Math.max(contentBottom, name.offsetTop + name.offsetHeight);
+        if (artist) contentBottom = Math.max(contentBottom, artist.offsetTop + artist.offsetHeight);
+        if (contentBottom > el.clientHeight + 2) {
           onOverflow(songId);
         }
       });
@@ -3871,6 +3878,7 @@ const PublicDisplay: React.FC = () => {
     const lh = callCardLineHeightEm(kind, lhScale, masked, tileScale);
     const { titlePx, artistPx } = resolveCallCardFontSizes({
       textScale: typo.textScale,
+      artistTextScale: typo.artistTextScale,
       hostZoom,
     });
     const fontSize = kind === 'title' ? titlePx : artistPx;
@@ -3913,17 +3921,18 @@ const PublicDisplay: React.FC = () => {
     return common;
   };
 
-  /** Title stack — do not guillotine letter rows; card + DOM backoff own overflow. */
+  /** Tight title stack — do not flex-grow (that left a void between title and artist). */
   const callSongTitleRegionStyles = (
     typo: CallCardTypography,
     fullCard: boolean,
   ): React.CSSProperties => {
-    const layoutFullCard = fullCard && uncapFullCardCallLayout;
-    const base: React.CSSProperties = {
+    void typo;
+    void fullCard;
+    return {
       minWidth: 0,
       maxWidth: '100%',
       width: '100%',
-      flex: '1 1 auto',
+      flex: '0 0 auto',
       minHeight: 0,
       display: 'block',
       overflow: 'visible',
@@ -3932,10 +3941,6 @@ const PublicDisplay: React.FC = () => {
       zIndex: 1,
       boxSizing: 'border-box' as const,
     };
-    if (layoutFullCard || !typo.clampContentHeight) {
-      return base;
-    }
-    return base;
   };
 
   /** Call-# corner chip removed from public display. */
