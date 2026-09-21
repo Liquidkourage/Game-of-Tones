@@ -365,6 +365,8 @@ class SpotifyService {
     /** Reused once per org when Windows URI play leaves item=none (not mid-round spam). */
     this._connectWakePlaylistId = null;
     this._connectWakeLastUris = null;
+    /** After URI play proves broken on this Connect session, skip URI retries (saves ~8s/song). */
+    this._preferContextWake = false;
   }
 
   setOnQuarantineApplied(fn) {
@@ -1482,9 +1484,10 @@ class SpotifyService {
     return this.getPlaylistTracks(playlistId, { name: 'Playlist' });
   }
 
-  // Start playback — URI play with Early/Random in position_ms.
-  // Windows Connect often returns 2xx with item=none (empties Now Playing). Require is_playing.
-  // Recover: bind@0+seek → transfer(play=true)+replay → one reused context_uri wake (no per-song creates).
+  // Start playback.
+  // On this host's Windows Connect, URI play consistently leaves item=none (logs). Only
+  // context_uri on a tiny reused wake playlist binds audio. After the first cold fail we
+  // skip the URI thrash (~6×450ms ≈ 8s) and go straight to context with Early in position_ms.
   async startPlayback(deviceId, uris, position = 0) {
     await this._ensureCanCallWebApi('startPlayback');
     const positionMs = Math.max(0, Math.floor(Number(position) || 0));
@@ -1492,7 +1495,7 @@ class SpotifyService {
     const trackId =
       typeof trackUris[0] === 'string' ? String(trackUris[0]).replace(/^spotify:track:/i, '') : '';
 
-    const playAt = async (ms, { omitDeviceId = false } = {}) => {
+    const playUris = async (ms, { omitDeviceId = false } = {}) => {
       const opts = {
         uris: trackUris,
         position_ms: Math.max(0, Math.floor(Number(ms) || 0)),
@@ -1501,8 +1504,8 @@ class SpotifyService {
       await this.spotifyApi.play(opts);
     };
 
-    const snap = async (label) => {
-      await new Promise((r) => setTimeout(r, 450));
+    const snap = async (label, waitMs = 280) => {
+      await new Promise((r) => setTimeout(r, waitMs));
       let state = null;
       try {
         state = await this.getCurrentPlaybackState();
@@ -1518,38 +1521,13 @@ class SpotifyService {
       return { ok: playing && (!trackId || correct), playing, itemId };
     };
 
-    const seekIfNeeded = async (s, label) => {
-      if (!s.itemId || (trackId && s.itemId !== trackId)) return s;
-      if (positionMs <= 0) return s;
-      try {
-        await this.seekToPosition(positionMs, deviceId);
-      } catch (seekErr) {
-        routineSpotifyLog(`⚠️ seek ${label}: ${seekErr?.message || seekErr}`);
-      }
-      if (!s.playing) {
-        try {
-          await this.resumePlayback(deviceId);
-        } catch (_) {}
-      }
-      return snap(`${label}-after-seek`);
-    };
-
-    /** Empty desktop often ignores URI+Early; play@0 then seek. */
-    const bindTrackThenSeek = async (labelPrefix, omitDeviceId = false) => {
-      routineSpotifyLog(
-        `🔧 ${labelPrefix}: bind track at 0 then seek to ${positionMs}ms${omitDeviceId ? ' (no device_id)' : ''}`,
-      );
-      await playAt(0, { omitDeviceId });
-      let s = await snap(`${labelPrefix}-bind-0`);
-      return seekIfNeeded(s, labelPrefix);
-    };
-
-    /**
-     * Proven Windows bind when URI leaves item=none: context_uri on a tiny reused playlist.
-     * Essential mid-show — not in NON_ESSENTIAL. Created at most once per SpotifyService instance.
-     */
+    /** Fast path: context_uri + Early already in position_ms (no play@0→seek dance). */
     const playViaContextWake = async () => {
-      routineSpotifyLog('🔧 URI left item=none — context_uri wake playlist (reused)');
+      routineSpotifyLog(
+        this._preferContextWake
+          ? '🔧 context_uri wake (URI known-broken on this Connect session)'
+          : '🔧 URI left item=none — context_uri wake playlist (reused)',
+      );
       const wakeId = await this.createWakePlaylist(
         `Wake ${new Date().toISOString().slice(0, 16)}`,
         trackUris,
@@ -1558,52 +1536,53 @@ class SpotifyService {
         const opts = {
           context_uri: `spotify:playlist:${wakeId}`,
           offset: trackId ? { uri: `spotify:track:${trackId}` } : { position: 0 },
-          position_ms: 0,
+          position_ms: positionMs,
         };
         if (!omitDeviceId && deviceId) opts.device_id = deviceId;
         await this.spotifyApi.play(opts);
       };
       await playCtx(false);
-      let s = await snap('after-context');
+      let s = await snap('after-context', 300);
       if (!s.ok) {
         await playCtx(true);
-        s = await snap('after-context-active');
-      }
-      if (s.ok || s.itemId) {
-        s = await seekIfNeeded(s, 'context');
+        s = await snap('after-context-active', 300);
       }
       return s;
     };
 
     try {
-      await playAt(positionMs);
-      let s = await snap('after-play');
+      // After first song proved URI never binds, don't burn ~8s on failed URI retries.
+      if (this._preferContextWake) {
+        const s = await playViaContextWake();
+        if (s.ok) return;
+        const errFast = new Error(
+          'Spotify context wake did not start audio on the locked PC. ' +
+            'Open Spotify, click any song once, Activate device, then Start Game again.',
+        );
+        errFast.code = 'spotify_not_playing';
+        errFast.body = { error: { message: errFast.message, status: 409 } };
+        throw errFast;
+      }
+
+      await playUris(positionMs);
+      let s = await snap('after-play', 300);
       if (s.ok) return;
 
+      // One quick bind@0 attempt, then context — skip transfer thrash (never helped in logs).
       if (!s.itemId) {
-        s = await bindTrackThenSeek('empty-after-play', false);
-        if (s.ok) return;
+        await playUris(0);
+        s = await snap('empty-after-play-bind-0', 280);
+        if (s.ok) {
+          if (positionMs > 0) {
+            try {
+              await this.seekToPosition(positionMs, deviceId);
+            } catch (_) {}
+          }
+          return;
+        }
       }
 
-      routineSpotifyLog('🔧 Play not audible — transfer(play=true) then replay');
-      try {
-        await this.transferPlayback(deviceId, true);
-      } catch (xferErr) {
-        routineSpotifyLog(`⚠️ transfer recovery: ${xferErr?.message || xferErr}`);
-      }
-      await new Promise((r) => setTimeout(r, 250));
-      await playAt(0, { omitDeviceId: true });
-      s = await snap('after-transfer-active');
-      if (s.ok) {
-        s = await seekIfNeeded(s, 'transfer-active');
-        if (s.ok) return;
-      }
-      if (!s.itemId) {
-        s = await bindTrackThenSeek('empty-after-transfer', true);
-        if (s.ok) return;
-      }
-
-      // Last resort that actually binds dormant Windows Connect (show-proven).
+      this._preferContextWake = true;
       s = await playViaContextWake();
       if (s.ok) return;
 
