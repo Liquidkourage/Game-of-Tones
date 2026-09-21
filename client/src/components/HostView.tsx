@@ -8747,10 +8747,15 @@ const HostView: React.FC = () => {
       return;
     }
     try {
+      const pool = finalizedOrderRef.current?.length
+        ? finalizedOrderRef.current
+        : songListRef.current;
+      const wakeTrackId =
+        pool?.find((s) => s?.id && /^[A-Za-z0-9]{22}$/.test(String(s.id)))?.id || undefined;
       const response = await hostFetch(`${API_BASE || ''}/api/spotify/transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId: selectedDevice.id, play: false })
+        body: JSON.stringify({ deviceId: selectedDevice.id, play: true, wakeTrackId }),
       });
       if (response.ok) {
         console.log('? Transferred playback to selected device');
