@@ -2462,7 +2462,6 @@ const PlayerView: React.FC = () => {
                     type="button"
                     className="player-card-carousel__arrow player-card-carousel__arrow--prev"
                     aria-label="Previous card"
-                    disabled={activeCardIndex <= 0}
                     onClick={() => goToCardIndex(activeCardIndex - 1)}
                   >
                     ‹
@@ -2486,7 +2485,6 @@ const PlayerView: React.FC = () => {
                     type="button"
                     className="player-card-carousel__arrow player-card-carousel__arrow--next"
                     aria-label="Next card"
-                    disabled={activeCardIndex >= bingoCards.length - 1}
                     onClick={() => goToCardIndex(activeCardIndex + 1)}
                   >
                     ›

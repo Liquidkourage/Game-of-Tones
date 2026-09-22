@@ -43,6 +43,10 @@ function sanitizeSongRequestEntry(raw) {
   if (!id || !title || !Number.isFinite(submittedAt)) return null;
   const resolvedSong = sanitizeResolvedSong(raw.resolvedSong);
   const moderatedAt = Number(raw.moderatedAt);
+  const clientId =
+    typeof raw.clientId === 'string' && raw.clientId.trim()
+      ? raw.clientId.trim().slice(0, 128)
+      : undefined;
   return {
     id,
     playerName:
@@ -54,9 +58,25 @@ function sanitizeSongRequestEntry(raw) {
       typeof raw.artist === 'string' ? raw.artist.replace(/\s+/g, ' ').trim().slice(0, 120) : '',
     submittedAt,
     status,
+    ...(clientId ? { clientId } : {}),
     ...(Number.isFinite(moderatedAt) ? { moderatedAt } : {}),
     ...(resolvedSong ? { resolvedSong } : {}),
   };
+}
+
+/** Player-facing subset: match stable clientId; legacy rows without clientId use exact playerName. */
+function filterMySongRequests(requests, { clientId, playerName } = {}) {
+  const list = Array.isArray(requests) ? requests : [];
+  const cid = typeof clientId === 'string' ? clientId.trim() : '';
+  const name = typeof playerName === 'string' ? playerName.trim() : '';
+  if (!cid && !name) return [];
+  return list.filter((entry) => {
+    if (!entry || typeof entry !== 'object') return false;
+    const entryCid = typeof entry.clientId === 'string' ? entry.clientId.trim() : '';
+    if (cid && entryCid) return entryCid === cid;
+    if (!entryCid && name && entry.playerName === name) return true;
+    return false;
+  });
 }
 
 function normalizeRequestsList(raw) {
@@ -102,6 +122,7 @@ module.exports = {
   MAX_ROOM_SONG_REQUESTS,
   ensureRoomSongRequestsTable,
   normalizeRequestsList,
+  filterMySongRequests,
   loadRequests,
   saveRequests,
   clearRequests,

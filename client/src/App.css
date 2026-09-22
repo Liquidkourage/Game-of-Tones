@@ -2761,7 +2761,7 @@ body {
     0 0 18px rgba(0, 255, 136, 0.22);
 }
 
-.player-card-carousel__arrow:hover:not(:disabled) {
+.player-card-carousel__arrow:hover {
   background: rgba(0, 40, 28, 0.92);
   border-color: #00ff88;
   box-shadow:
@@ -2770,19 +2770,23 @@ body {
     0 0 22px rgba(0, 255, 136, 0.4);
 }
 
-.player-card-carousel__arrow:disabled {
-  opacity: 0.32;
-  cursor: default;
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
 .player-card-carousel__arrow--prev {
   left: max(4px, env(safe-area-inset-left, 0px));
 }
 
 .player-card-carousel__arrow--next {
   right: max(4px, env(safe-area-inset-right, 0px));
+}
+
+/*
+ * Multi-card: bingo card must fit the carousel viewport, not 95vw.
+ * Otherwise overflow-x:hidden on the main column clips the B/O columns,
+ * and absolute arrows cover what's left (worst on desktop).
+ */
+.player-card-carousel__viewport .bingo-card,
+.player-card-carousel__viewport .bingo-card--empty {
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 .player-card-carousel__dots {
@@ -7024,6 +7028,58 @@ button.conn-chip.conn-chip-compact {
 .player-container--v2 .player-v2-feedback-submit:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.player-container--v2 .player-v2-my-requests {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.player-container--v2 .player-v2-my-requests-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--player-v2-text-muted);
+  margin-bottom: 6px;
+}
+
+.player-container--v2 .player-v2-my-requests-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.player-container--v2 .player-v2-my-request {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.player-container--v2 .player-v2-my-request-song {
+  color: var(--player-v2-text-primary);
+  min-width: 0;
+}
+
+.player-container--v2 .player-v2-my-request-status {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--player-v2-text-muted);
+}
+
+.player-container--v2 .player-v2-my-request--approved .player-v2-my-request-status {
+  color: var(--player-v2-pill-connected-text);
+}
+
+.player-container--v2 .player-v2-my-request--rejected .player-v2-my-request-status {
+  color: #ff8888;
 }
 
 .player-container--v2 .player-v2-inline-button--connected {

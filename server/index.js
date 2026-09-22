@@ -5751,9 +5751,14 @@ io.on('connection', (socket) => {
         return;
       }
       socket.lastSongRequestAt = now;
+      const clientId =
+        typeof player.clientId === 'string' && player.clientId.trim()
+          ? player.clientId.trim().slice(0, 128)
+          : undefined;
       const request = {
         id: `${now}-${socket.id}`,
         playerName: player.name || 'Player',
+        ...(clientId ? { clientId } : {}),
         title,
         artist,
         submittedAt: now,
@@ -5769,7 +5774,11 @@ io.on('connection', (socket) => {
           io.to(playerId).emit('song-request-updated', request);
         }
       }
-      reply({ ok: true });
+      const mySongRequests = roomSongRequestsStore.filterMySongRequests(room.songRequests, {
+        clientId: clientId || undefined,
+        playerName: player.name || '',
+      });
+      reply({ ok: true, request, mySongRequests });
     } catch (error) {
       console.error('song-request failed:', error?.message || error);
       reply({ ok: false });
@@ -5825,8 +5834,23 @@ io.on('connection', (socket) => {
       };
       room.songRequests = requests.map((entry, i) => (i === index ? updated : entry));
       persistRoomSongRequests(room);
+      const submitterClientId =
+        typeof updated.clientId === 'string' && updated.clientId.trim()
+          ? updated.clientId.trim()
+          : '';
+      const submitterName =
+        typeof updated.playerName === 'string' ? updated.playerName.trim() : '';
       for (const [playerId, roomPlayer] of room.players) {
         if (playerId === room.host || roomPlayer?.isHost) {
+          io.to(playerId).emit('song-request-updated', updated);
+          continue;
+        }
+        if (isDisplayConnectionPlayer(roomPlayer)) continue;
+        const playerClientId =
+          typeof roomPlayer?.clientId === 'string' ? roomPlayer.clientId.trim() : '';
+        if (submitterClientId && playerClientId && playerClientId === submitterClientId) {
+          io.to(playerId).emit('song-request-updated', updated);
+        } else if (!submitterClientId && submitterName && roomPlayer?.name === submitterName) {
           io.to(playerId).emit('song-request-updated', updated);
         }
       }
@@ -5846,6 +5870,8 @@ io.on('connection', (socket) => {
     clearPersistedRoomSongRequests(roomId);
     for (const [playerId, roomPlayer] of room.players) {
       if (playerId === room.host || roomPlayer?.isHost) {
+        io.to(playerId).emit('song-requests-cleared');
+      } else if (!isDisplayConnectionPlayer(roomPlayer)) {
         io.to(playerId).emit('song-requests-cleared');
       }
     }
@@ -7991,7 +8017,19 @@ io.on('connection', (socket) => {
             socket.emit('oneby75-pool', { names: oneBy75Names });
           }
         }
-        io.to(socket.id).emit('room-state', roomStateSafeForPlayers(payload));
+        const safePayload = roomStateSafeForPlayers(payload);
+        const syncClientIdForRequests =
+          (typeof data.clientId === 'string' && data.clientId.trim()) ||
+          (typeof syncingPlayer?.clientId === 'string' && syncingPlayer.clientId.trim()) ||
+          '';
+        safePayload.mySongRequests = roomSongRequestsStore.filterMySongRequests(
+          room.songRequests,
+          {
+            clientId: syncClientIdForRequests || undefined,
+            playerName: syncingPlayer?.name || '',
+          },
+        );
+        io.to(socket.id).emit('room-state', safePayload);
       }
 
       const syncClientId = data.clientId || room.players.get(socket.id)?.clientId;
