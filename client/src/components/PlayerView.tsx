@@ -178,11 +178,13 @@ const PlayerView: React.FC = () => {
   const goToCardIndex = (next: number) => {
     const len = bingoCards.length;
     if (len <= 1) return;
-    const clamped = Math.max(0, Math.min(len - 1, next));
+    // Wrap last→first / first→last (arrows, swipe, and overshoot all use modulo).
+    const wrapped = ((next % len) + len) % len;
     setActiveCardIndex((i) => {
-      if (clamped === i) return i;
-      setCarouselDir(clamped > i ? 1 : -1);
-      return clamped;
+      if (wrapped === i) return i;
+      // Direction from the requested step (not wrapped index) so wrap animates correctly.
+      setCarouselDir(next >= i ? 1 : -1);
+      return wrapped;
     });
   };
   const [focusedSquare, setFocusedSquare] = useState<BingoSquare | null>(null);
@@ -855,8 +857,20 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('game-started', (data: any) => {
-      setBingoColumnPlaylistNames([]);
-      setOneBy75PlaylistNames([]);
+      // Keep / seed column category labels during play. Server emits fiveby15-pool /
+      // oneby75-pool before game-started; clearing here left only T/O/N/E/S letters.
+      // Prefer currentRoundPlaylistNames (same seed PublicDisplay uses) when present.
+      const roundNames: string[] = Array.isArray(data?.currentRoundPlaylistNames)
+        ? data.currentRoundPlaylistNames.map((n: unknown) => String(n ?? ''))
+        : [];
+      const trimmedCount = roundNames.filter((n: string) => n.trim()).length;
+      if (trimmedCount === 5) {
+        setBingoColumnPlaylistNames(roundNames.slice(0, 5));
+        setOneBy75PlaylistNames([]);
+      } else if (trimmedCount > 0) {
+        setOneBy75PlaylistNames(roundNames.filter((n: string) => n.trim()));
+        setBingoColumnPlaylistNames([]);
+      }
       const lr =
         data?.pattern === 'line' && data?.linesRequired != null ? normalizeLinesRequired(data.linesRequired) : undefined;
       const cre =
