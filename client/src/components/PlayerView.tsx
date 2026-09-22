@@ -100,6 +100,40 @@ interface VenueBranding {
   volumeCap?: number;
 }
 
+type MySongRequest = {
+  id: string;
+  title: string;
+  artist: string;
+  submittedAt: number;
+  status: 'pending' | 'approved' | 'rejected';
+};
+
+function normalizeMySongRequest(raw: any): MySongRequest | null {
+  const id = typeof raw?.id === 'string' ? raw.id : '';
+  const title = typeof raw?.title === 'string' ? raw.title.trim() : '';
+  const submittedAt = Number(raw?.submittedAt);
+  const status =
+    raw?.status === 'approved' || raw?.status === 'rejected' ? raw.status : 'pending';
+  if (!id || !title || !Number.isFinite(submittedAt)) return null;
+  return {
+    id,
+    title,
+    artist: typeof raw?.artist === 'string' ? raw.artist.trim() : '',
+    submittedAt,
+    status,
+  };
+}
+
+function mergeMySongRequests(current: MySongRequest[], incoming: unknown): MySongRequest[] {
+  const next = new Map(current.map((entry) => [entry.id, entry]));
+  const rows = Array.isArray(incoming) ? incoming : [incoming];
+  rows.forEach((raw) => {
+    const entry = normalizeMySongRequest(raw);
+    if (entry) next.set(entry.id, entry);
+  });
+  return Array.from(next.values()).sort((a, b) => a.submittedAt - b.submittedAt);
+}
+
 /** Match public display: trim optional "GoT" playlist prefix for column headers (case-sensitive). */
 function stripGotPlaylistPrefix(raw: string): string {
   return raw.replace(/^\s*GoT(?=$|[\s\-–—:])\s*[-–—:]*\s*/, '').trim();
@@ -220,6 +254,7 @@ const PlayerView: React.FC = () => {
   const [requestTitle, setRequestTitle] = useState('');
   const [requestArtist, setRequestArtist] = useState('');
   const [requestStatus, setRequestStatus] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle');
+  const [mySongRequests, setMySongRequests] = useState<MySongRequest[]>([]);
   const [hybridPrizeInPersonOnly, setHybridPrizeInPersonOnly] = useState(false);
   const wasReconnectingRef = useRef<boolean>(false);
   const [gameState, setGameState] = useState<GameState>({
@@ -716,7 +751,7 @@ const PlayerView: React.FC = () => {
     socket.emit(
       'song-request',
       { roomId, title, artist },
-      (result: { ok?: boolean } | undefined) => {
+      (result: { ok?: boolean; request?: unknown; mySongRequests?: unknown } | undefined) => {
         if (settled) return;
         settled = true;
         window.clearTimeout(timeoutId);
@@ -724,6 +759,11 @@ const PlayerView: React.FC = () => {
           setRequestTitle('');
           setRequestArtist('');
           setRequestStatus('sent');
+          if (Array.isArray(result.mySongRequests)) {
+            setMySongRequests(mergeMySongRequests([], result.mySongRequests));
+          } else if (result.request) {
+            setMySongRequests((prev) => mergeMySongRequests(prev, result.request));
+          }
         } else {
           setRequestStatus('error');
         }
@@ -832,6 +872,15 @@ const PlayerView: React.FC = () => {
       }
     });
 
+    newSocket.on('song-request-updated', (data: any) => {
+      const entry = normalizeMySongRequest(data);
+      if (entry) setMySongRequests((prev) => mergeMySongRequests(prev, entry));
+    });
+
+    newSocket.on('song-requests-cleared', () => {
+      setMySongRequests([]);
+    });
+
     // Roster updates are host/display-only — do not subscribe on player phones.
 
     newSocket.on('bingo-column-letters-updated', (data: any) => {
@@ -929,6 +978,9 @@ const PlayerView: React.FC = () => {
         }
         if (typeof payload?.bingoColumnLetters === 'string' && payload.bingoColumnLetters.length === 5) {
           setBingoColumnLetters(payload.bingoColumnLetters.toUpperCase());
+        }
+        if (Array.isArray(payload?.mySongRequests)) {
+          setMySongRequests(mergeMySongRequests([], payload.mySongRequests));
         }
         // Intentionally ignore playedSongIds / currentSong — call identity stays off player phones.
         
@@ -2831,6 +2883,31 @@ const PlayerView: React.FC = () => {
                           {requestStatus === 'submitting' ? 'Sending…' : 'Submit'}
                         </button>
                       </div>
+                      {mySongRequests.length > 0 ? (
+                        <div className="player-v2-my-requests">
+                          <div className="player-v2-my-requests-label">Your requests</div>
+                          <ul className="player-v2-my-requests-list">
+                            {[...mySongRequests].reverse().map((request) => (
+                              <li
+                                key={request.id}
+                                className={`player-v2-my-request player-v2-my-request--${request.status}`}
+                              >
+                                <span className="player-v2-my-request-song">
+                                  {request.title}
+                                  {request.artist ? ` · ${request.artist}` : ''}
+                                </span>
+                                <span className="player-v2-my-request-status">
+                                  {request.status === 'approved'
+                                    ? 'Approved'
+                                    : request.status === 'rejected'
+                                      ? 'Rejected'
+                                      : 'Pending'}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </div>
