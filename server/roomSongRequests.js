@@ -24,12 +24,26 @@ function sanitizeResolvedSong(raw) {
   const artist = typeof raw.artist === 'string' ? raw.artist.trim().slice(0, 200) : '';
   if (!id || !name || !artist) return undefined;
   const duration = Number(raw.duration);
+  const albumIdRaw =
+    raw.albumId != null
+      ? String(raw.albumId).trim()
+      : raw.spotifyContextAlbumId != null
+        ? String(raw.spotifyContextAlbumId).trim()
+        : '';
+  const albumId = /^[A-Za-z0-9]{22}$/.test(albumIdRaw) ? albumIdRaw : '';
+  const contextPlaylistRaw =
+    raw.spotifyContextPlaylistId != null ? String(raw.spotifyContextPlaylistId).trim() : '';
+  const spotifyContextPlaylistId = /^[A-Za-z0-9]{22}$/.test(contextPlaylistRaw)
+    ? contextPlaylistRaw
+    : '';
   return {
     id,
     name,
     artist,
     ...(Number.isFinite(duration) && duration > 0 ? { duration } : {}),
     ...(raw.explicit === true ? { explicit: true } : {}),
+    ...(albumId ? { albumId, spotifyContextAlbumId: albumId } : {}),
+    ...(spotifyContextPlaylistId ? { spotifyContextPlaylistId } : {}),
   };
 }
 

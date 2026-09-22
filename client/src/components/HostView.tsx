@@ -222,6 +222,13 @@ function normalizeSongRequestEntry(raw: any): SongRequestEntry | null {
     raw?.status === 'approved' || raw?.status === 'rejected' ? raw.status : 'pending';
   if (!id || !title || !Number.isFinite(submittedAt)) return null;
   const resolved = raw?.resolvedSong;
+  const albumIdRaw =
+    resolved?.albumId != null
+      ? String(resolved.albumId).trim()
+      : resolved?.spotifyContextAlbumId != null
+        ? String(resolved.spotifyContextAlbumId).trim()
+        : '';
+  const albumId = /^[A-Za-z0-9]{22}$/.test(albumIdRaw) ? albumIdRaw : '';
   const resolvedSong =
     typeof resolved?.id === 'string' &&
     typeof resolved?.name === 'string' &&
@@ -232,6 +239,7 @@ function normalizeSongRequestEntry(raw: any): SongRequestEntry | null {
           artist: resolved.artist,
           duration: Number.isFinite(Number(resolved.duration)) ? Number(resolved.duration) : undefined,
           explicit: resolved.explicit === true,
+          ...(albumId ? { albumId, spotifyContextAlbumId: albumId } : {}),
         }
       : undefined;
   return {
@@ -360,6 +368,22 @@ function songsFromServerPlaybackPayload(order: unknown): Song[] {
           typeof o?.originPlaylistName === 'string' && o.originPlaylistName.trim() !== ''
             ? o.originPlaylistName.trim()
             : undefined,
+        ...((() => {
+          const albumIdRaw =
+            o?.spotifyContextAlbumId != null
+              ? String(o.spotifyContextAlbumId).trim()
+              : o?.albumId != null
+                ? String(o.albumId).trim()
+                : '';
+          const albumId = /^[A-Za-z0-9]{22}$/.test(albumIdRaw) ? albumIdRaw : '';
+          const ctxPlRaw =
+            o?.spotifyContextPlaylistId != null ? String(o.spotifyContextPlaylistId).trim() : '';
+          const spotifyContextPlaylistId = /^[A-Za-z0-9]{22}$/.test(ctxPlRaw) ? ctxPlRaw : '';
+          return {
+            ...(albumId ? { albumId, spotifyContextAlbumId: albumId } : {}),
+            ...(spotifyContextPlaylistId ? { spotifyContextPlaylistId } : {}),
+          };
+        })()),
       } as Song;
     })
     .filter((s): s is Song => s != null);
@@ -590,6 +614,17 @@ interface Song {
   sourcePlaylistName?: string;
   /** Original playlist before remapping into the night-wide Leftovers virtual playlist. */
   originPlaylistName?: string;
+  /**
+   * Real Spotify playlist id for Connect context_uri when sourcePlaylistId is virtual
+   * (__requests__ / __leftovers__). Leftovers preserve the prior round’s playlist here.
+   */
+  spotifyContextPlaylistId?: string;
+  /**
+   * Spotify album id for Connect context_uri when no real playlist context exists
+   * (Requests meta-round tracks approved from search).
+   */
+  albumId?: string;
+  spotifyContextAlbumId?: string;
   /** Full YouTube `snippet.title` when loaded from Data API; finalize reconciliation uses this. */
   youtubeRawTitle?: string;
   /** Canonical title/artist from optional iTunes pass + disk cache at finalize. */
@@ -737,6 +772,9 @@ function cloneSongForSnapshot(s: Song): Song {
     sourcePlaylistId: s.sourcePlaylistId,
     sourcePlaylistName: s.sourcePlaylistName,
     originPlaylistName: s.originPlaylistName,
+    spotifyContextPlaylistId: s.spotifyContextPlaylistId,
+    albumId: s.albumId,
+    spotifyContextAlbumId: s.spotifyContextAlbumId,
     youtubeRawTitle: s.youtubeRawTitle,
     catalogDisplayVerified: s.catalogDisplayVerified,
   };
@@ -1925,6 +1963,7 @@ const HostView: React.FC = () => {
       artist: string;
       duration_ms?: number;
       explicit?: boolean;
+      albumId?: string;
     }>;
   } | null>(null);
   const [youtubeMusicConnected, setYoutubeMusicConnected] = useState(false);
@@ -8070,9 +8109,18 @@ const HostView: React.FC = () => {
         const originPlaylistName =
           existingOrigin ||
           (fromSource && fromSource !== LEFTOVERS_PLAYLIST_NAME ? fromSource : undefined);
+        const priorPid = s.sourcePlaylistId != null ? String(s.sourcePlaylistId).trim() : '';
+        const existingCtx =
+          s.spotifyContextPlaylistId != null ? String(s.spotifyContextPlaylistId).trim() : '';
+        const spotifyContextPlaylistId = /^[A-Za-z0-9]{22}$/.test(existingCtx)
+          ? existingCtx
+          : /^[A-Za-z0-9]{22}$/.test(priorPid) && !isMetaPlaylistId(priorPid)
+            ? priorPid
+            : undefined;
         out.push({
           ...s,
           ...(originPlaylistName ? { originPlaylistName } : {}),
+          ...(spotifyContextPlaylistId ? { spotifyContextPlaylistId } : {}),
           sourcePlaylistId: LEFTOVERS_PLAYLIST_ID,
           sourcePlaylistName: LEFTOVERS_PLAYLIST_NAME,
         });
@@ -8216,15 +8264,21 @@ const HostView: React.FC = () => {
     artist: string;
     duration_ms?: number;
     explicit?: boolean;
-  }): Song => ({
-    id: match.id,
-    name: match.name,
-    artist: match.artist,
-    duration: Number.isFinite(Number(match.duration_ms))
-      ? Math.round(Number(match.duration_ms) / 1000)
-      : undefined,
-    explicit: match.explicit === true,
-  });
+    albumId?: string;
+  }): Song => {
+    const albumIdRaw = match.albumId != null ? String(match.albumId).trim() : '';
+    const albumId = /^[A-Za-z0-9]{22}$/.test(albumIdRaw) ? albumIdRaw : undefined;
+    return {
+      id: match.id,
+      name: match.name,
+      artist: match.artist,
+      duration: Number.isFinite(Number(match.duration_ms))
+        ? Math.round(Number(match.duration_ms) / 1000)
+        : undefined,
+      explicit: match.explicit === true,
+      ...(albumId ? { albumId, spotifyContextAlbumId: albumId } : {}),
+    };
+  };
 
   const explainSongRequestSearchFailure = (response: Response, data: any): string => {
     const code = String(data?.code || data?.error || '');

@@ -1136,7 +1136,7 @@ async function replayCurrentSnippet(roomId, deviceId) {
     } else if (sp) {
       // Lean restart: no transfer retries, no 800ms volume settle.
       await sp.startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs, {
-        contextPlaylistId: songSpotifyContextPlaylistId(song),
+        ...songSpotifyPlaybackContextOptions(song),
       });
       routineServerLog(`✅ Bump startPlayback completed in ${Date.now() - t0}ms`);
     } else {
@@ -1620,7 +1620,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
         routineServerLog(`🔁 Bump snippet start → ${startMs}ms (${Math.floor(startMs / 1000)}s) for ${song.name}`);
       }
       await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs, {
-        contextPlaylistId: songSpotifyContextPlaylistId(song),
+        ...songSpotifyPlaybackContextOptions(song),
       });
       const endTime = Date.now();
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId} (took ${endTime - startTime}ms)`);
@@ -4496,7 +4496,7 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
         resolvedDeviceId,
         [`spotify:track:${nextSong.id}`],
         room.currentSongStartMs,
-        { contextPlaylistId: songSpotifyContextPlaylistId(nextSong) },
+        { ...songSpotifyPlaybackContextOptions(nextSong) },
       );
     }
 
@@ -4538,7 +4538,7 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
               resolvedDeviceId,
               [`spotify:track:${nextSong.id}`],
               room.currentSongStartMs || 0,
-              { contextPlaylistId: songSpotifyContextPlaylistId(nextSong) },
+              { ...songSpotifyPlaybackContextOptions(nextSong) },
             );
           } catch {
             await spErr.resumePlayback(resolvedDeviceId);
@@ -5815,6 +5815,13 @@ io.on('connection', (socket) => {
           reply({ ok: false });
           return;
         }
+        const albumIdRaw =
+          raw.albumId != null
+            ? String(raw.albumId).trim()
+            : raw.spotifyContextAlbumId != null
+              ? String(raw.spotifyContextAlbumId).trim()
+              : '';
+        const albumId = /^[A-Za-z0-9]{22}$/.test(albumIdRaw) ? albumIdRaw : '';
         resolvedSong = {
           id,
           name,
@@ -5824,6 +5831,7 @@ io.on('connection', (socket) => {
               ? Number(raw.duration)
               : undefined,
           explicit: raw.explicit === true,
+          ...(albumId ? { albumId, spotifyContextAlbumId: albumId } : {}),
         };
       }
       const updated = {
@@ -8531,6 +8539,22 @@ io.on('connection', (socket) => {
           ...(typeof s.originPlaylistName === 'string' && s.originPlaylistName.trim() !== ''
             ? { originPlaylistName: s.originPlaylistName.trim() }
             : {}),
+          ...((() => {
+            const albumIdRaw =
+              s.spotifyContextAlbumId != null
+                ? String(s.spotifyContextAlbumId).trim()
+                : s.albumId != null
+                  ? String(s.albumId).trim()
+                  : '';
+            const albumId = /^[A-Za-z0-9]{22}$/.test(albumIdRaw) ? albumIdRaw : '';
+            const ctxPlRaw =
+              s.spotifyContextPlaylistId != null ? String(s.spotifyContextPlaylistId).trim() : '';
+            const spotifyContextPlaylistId = /^[A-Za-z0-9]{22}$/.test(ctxPlRaw) ? ctxPlRaw : '';
+            return {
+              ...(albumId ? { albumId, spotifyContextAlbumId: albumId } : {}),
+              ...(spotifyContextPlaylistId ? { spotifyContextPlaylistId } : {}),
+            };
+          })()),
         }));
 
         io.to(roomId).emit('game-started', {
@@ -9628,10 +9652,31 @@ function isInternalPlaylistId(id) {
 /** Real Spotify playlist id on a deck song — used as context_uri so Windows Connect binds (URI-only often clears Now Playing). */
 function songSpotifyContextPlaylistId(song) {
   if (!song || song.youtubeMusic === true || song.appleMusic === true) return null;
-  const id = song.sourcePlaylistId != null ? String(song.sourcePlaylistId).trim() : '';
-  if (!id || isInternalPlaylistId(id)) return null;
-  if (!/^[A-Za-z0-9]{22}$/.test(id)) return null;
-  return id;
+  // Prefer explicit context (meta-rounds keep sourcePlaylistId as __requests__/__leftovers__).
+  for (const key of ['spotifyContextPlaylistId', 'sourcePlaylistId']) {
+    const id = song[key] != null ? String(song[key]).trim() : '';
+    if (!id || isInternalPlaylistId(id)) continue;
+    if (/^[A-Za-z0-9]{22}$/.test(id)) return id;
+  }
+  return null;
+}
+
+/** Album id fallback for Requests (and any track without a real playlist context). */
+function songSpotifyContextAlbumId(song) {
+  if (!song || song.youtubeMusic === true || song.appleMusic === true) return null;
+  for (const key of ['spotifyContextAlbumId', 'albumId']) {
+    const id = song[key] != null ? String(song[key]).trim() : '';
+    if (!id || isInternalPlaylistId(id)) continue;
+    if (/^[A-Za-z0-9]{22}$/.test(id)) return id;
+  }
+  return null;
+}
+
+function songSpotifyPlaybackContextOptions(song) {
+  return {
+    contextPlaylistId: songSpotifyContextPlaylistId(song),
+    contextAlbumId: songSpotifyContextAlbumId(song),
+  };
 }
 
 function makeFreeSpaceSquare() {
@@ -9974,6 +10019,16 @@ function syncRoomPlaybackOrderAfterStartGame(room, roomId, playbackOrderSongs) {
 function finalizedOrderRowPayload(s, idOverride) {
   const id = idOverride != null ? idOverride : s?.id;
   if (id == null || String(id).trim() === '') return null;
+  const albumIdRaw =
+    s?.spotifyContextAlbumId != null
+      ? String(s.spotifyContextAlbumId).trim()
+      : s?.albumId != null
+        ? String(s.albumId).trim()
+        : '';
+  const albumId = /^[A-Za-z0-9]{22}$/.test(albumIdRaw) ? albumIdRaw : '';
+  const ctxPlRaw =
+    s?.spotifyContextPlaylistId != null ? String(s.spotifyContextPlaylistId).trim() : '';
+  const spotifyContextPlaylistId = /^[A-Za-z0-9]{22}$/.test(ctxPlRaw) ? ctxPlRaw : '';
   return {
     id,
     name: s?.name || '',
@@ -9983,6 +10038,8 @@ function finalizedOrderRowPayload(s, idOverride) {
     appleMusic: s?.appleMusic === true,
     sourcePlaylistId: s?.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
     sourcePlaylistName: typeof s?.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
+    ...(albumId ? { albumId, spotifyContextAlbumId: albumId } : {}),
+    ...(spotifyContextPlaylistId ? { spotifyContextPlaylistId } : {}),
     ...durationFieldsFromSong(s),
   };
 }
@@ -10918,6 +10975,7 @@ function normalizeRoundExportSongs(songs) {
       ...(typeof s.originPlaylistName === 'string' && s.originPlaylistName.trim() !== ''
         ? { originPlaylistName: s.originPlaylistName.trim() }
         : {}),
+      ...spotifyConnectContextFieldsFromSong(s),
     });
   }
   return out;
@@ -11152,6 +11210,25 @@ function songsForPlaylistFromRoomCache(room, playlistId) {
   return out;
 }
 
+/** Copy Spotify Connect context fields through song snapshot mappers (Requests/Leftovers). */
+function spotifyConnectContextFieldsFromSong(s) {
+  if (!s || typeof s !== 'object') return {};
+  const albumIdRaw =
+    s.spotifyContextAlbumId != null
+      ? String(s.spotifyContextAlbumId).trim()
+      : s.albumId != null
+        ? String(s.albumId).trim()
+        : '';
+  const albumId = /^[A-Za-z0-9]{22}$/.test(albumIdRaw) ? albumIdRaw : '';
+  const ctxPlRaw =
+    s.spotifyContextPlaylistId != null ? String(s.spotifyContextPlaylistId).trim() : '';
+  const spotifyContextPlaylistId = /^[A-Za-z0-9]{22}$/.test(ctxPlRaw) ? ctxPlRaw : '';
+  return {
+    ...(albumId ? { albumId, spotifyContextAlbumId: albumId } : {}),
+    ...(spotifyContextPlaylistId ? { spotifyContextPlaylistId } : {}),
+  };
+}
+
 /** Host-provided frozen pool for saved-round playback / start-game snapshot — deduped, capped. */
 function normalizeSongSnapshotForPrint(raw) {
   if (!Array.isArray(raw) || raw.length === 0) return null;
@@ -11175,6 +11252,7 @@ function normalizeSongSnapshotForPrint(raw) {
         typeof item.originPlaylistName === 'string' && item.originPlaylistName.trim() !== ''
           ? item.originPlaylistName.trim()
           : undefined,
+      ...spotifyConnectContextFieldsFromSong(item),
       ...durationFieldsFromSong(item),
       youtubeRawTitle: typeof item.youtubeRawTitle === 'string' ? item.youtubeRawTitle : undefined,
       catalogDisplayVerified: item.catalogDisplayVerified === true,
@@ -12133,7 +12211,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         targetDeviceId,
         [`spotify:track:${firstSong.id}`],
         startMs,
-        { contextPlaylistId: songSpotifyContextPlaylistId(firstSong) },
+        { ...songSpotifyPlaybackContextOptions(firstSong) },
       );
       try {
         await spotifyFor(roomId).setShuffleState(false, targetDeviceId);
@@ -12324,7 +12402,7 @@ async function playNextSong(roomId, deviceId) {
           targetDeviceId,
           [`spotify:track:${nextSong.id}`],
           startMs,
-          { contextPlaylistId: songSpotifyContextPlaylistId(nextSong) },
+          { ...songSpotifyPlaybackContextOptions(nextSong) },
         );
       }
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId}`);

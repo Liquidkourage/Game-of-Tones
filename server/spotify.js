@@ -1492,12 +1492,22 @@ class SpotifyService {
       options && options.contextPlaylistId != null ? String(options.contextPlaylistId).trim() : '';
     // Spotify playlist ids are 22-char base62; skip internal / non-Spotify ids.
     const contextPlaylistId = /^[A-Za-z0-9]{22}$/.test(rawCtx) ? rawCtx : null;
+    const rawAlbum =
+      options && options.contextAlbumId != null ? String(options.contextAlbumId).trim() : '';
+    // Album context is the Requests meta-round fallback when there is no real playlist id.
+    const contextAlbumId =
+      !contextPlaylistId && /^[A-Za-z0-9]{22}$/.test(rawAlbum) ? rawAlbum : null;
+    const contextUri = contextPlaylistId
+      ? `spotify:playlist:${contextPlaylistId}`
+      : contextAlbumId
+        ? `spotify:album:${contextAlbumId}`
+        : null;
     const confirm = options.confirm !== false;
 
     const playViaContext = async (ms) => {
       await this.spotifyApi.play({
         device_id: deviceId,
-        context_uri: `spotify:playlist:${contextPlaylistId}`,
+        context_uri: contextUri,
         offset: trackId ? { uri: `spotify:track:${trackId}` } : { position: 0 },
         position_ms: Math.max(0, Math.floor(Number(ms) || 0)),
       });
@@ -1554,10 +1564,9 @@ class SpotifyService {
     };
 
     try {
-      if (contextPlaylistId && trackId) {
-        routineSpotifyLog(
-          `🎵 startPlayback context_uri playlist=${contextPlaylistId} @${positionMs}ms`,
-        );
+      if (contextUri && trackId) {
+        const ctxKind = contextPlaylistId ? `playlist=${contextPlaylistId}` : `album=${contextAlbumId}`;
+        routineSpotifyLog(`🎵 startPlayback context_uri ${ctxKind} @${positionMs}ms`);
         await playViaContext(positionMs);
         if (!confirm) return;
         if (await confirmPlaying('after-context')) return;
@@ -1888,7 +1897,12 @@ class SpotifyService {
         id: track.id,
         name: track.name,
         artist: track.artists.map(a => a.name).join(', '),
-        album: track.album.name,
+        album: track.album?.name,
+        // Album id lets Requests/Leftovers meta-rounds play via context_uri when sourcePlaylistId is virtual (__requests__).
+        albumId:
+          typeof track.album?.id === 'string' && /^[A-Za-z0-9]{22}$/.test(track.album.id)
+            ? track.album.id
+            : undefined,
         duration_ms: track.duration_ms,
         popularity: track.popularity,
         preview_url: track.preview_url,
