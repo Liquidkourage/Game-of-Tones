@@ -2844,7 +2844,7 @@ body {
     0 4px 14px rgba(0, 0, 0, 0.16);
 }
 
-.player-container--light .player-card-carousel__arrow:hover:not(:disabled) {
+.player-container--light .player-card-carousel__arrow:hover {
   border-color: #0a7a45;
   background: #fff;
 }
@@ -2877,13 +2877,34 @@ body {
 }
 
 @media (min-width: 900px) {
-  /* Desktop (Jeff): bigger hit targets — no swipe on PC */
+  /* Desktop: bigger hit targets; arrows in-flow so they never cover B/O columns */
+  .player-card-carousel__stage {
+    gap: 0.65rem;
+  }
+
   .player-card-carousel__arrow {
+    position: relative;
+    top: auto;
+    left: auto;
+    right: auto;
+    transform: none;
+    flex: 0 0 auto;
     width: 3.15rem;
     height: 3.15rem;
     min-width: 50px;
     min-height: 50px;
     font-size: 2.25rem;
+  }
+
+  .player-card-carousel__arrow--prev,
+  .player-card-carousel__arrow--next {
+    left: auto;
+    right: auto;
+  }
+
+  .player-card-carousel__viewport {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 }
 
