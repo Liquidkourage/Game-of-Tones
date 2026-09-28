@@ -4,9 +4,42 @@
  * Complements per-user host_room_prep so co-hosts can reuse each other's library.
  */
 
+const crypto = require('crypto');
+
 const MAX_CUSTOM_PATTERNS = 200;
 const MAX_COMPOSITE_PATTERNS = 100;
 const MAX_PLAYLIST_REFS = 300;
+
+function contentHash(value) {
+  return crypto.createHash('sha1').update(JSON.stringify(value)).digest('hex').slice(0, 16);
+}
+
+function sanitizeMaskPositions(raw) {
+  if (!Array.isArray(raw)) return [];
+  return [
+    ...new Set(raw.filter((p) => typeof p === 'string' && /^[0-4]-[0-4]$/.test(p))),
+  ]
+    .sort()
+    .slice(0, 25);
+}
+
+/** Stable fingerprint so harvest does not duplicate a library row that already has a human name. */
+function customPatternFingerprint(row) {
+  const s = sanitizeCustomPatternRow(row);
+  if (!s) return '';
+  return contentHash({
+    positions: [...s.positions].sort(),
+    matchReverse: !!s.matchReverse,
+    matchAllowRotation: !!s.matchAllowRotation,
+    matchAllowMirror: !!s.matchAllowMirror,
+  });
+}
+
+function compositePatternFingerprint(row) {
+  const s = sanitizeCompositePatternRow(row);
+  if (!s) return '';
+  return contentHash(s.spec);
+}
 
 function sanitizeCustomPatternRow(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -239,6 +272,136 @@ function playlistRefsFromPrepRounds(rounds) {
 }
 
 /**
+ * Rebuild named library rows from round prep when a sub-host applied a custom/combined
+ * pattern. Prep stores full cells / composite recipes (not localStorage-only ids).
+ */
+function patternsFromPrepRounds(rounds) {
+  if (!Array.isArray(rounds)) return { customPatterns: [], compositePatterns: [] };
+  const customByFp = new Map();
+  const compositeByFp = new Map();
+
+  const pushCustom = (partial, createdAt) => {
+    const row = sanitizeCustomPatternRow({
+      ...partial,
+      createdAt: typeof createdAt === 'number' && Number.isFinite(createdAt) ? createdAt : 0,
+    });
+    if (!row) return;
+    const fp = customPatternFingerprint(row);
+    if (!fp) return;
+    const prev = customByFp.get(fp);
+    if (!prev || (row.createdAt || 0) >= (prev.createdAt || 0)) customByFp.set(fp, row);
+  };
+
+  const pushComposite = (partial, createdAt) => {
+    const row = sanitizeCompositePatternRow({
+      ...partial,
+      createdAt: typeof createdAt === 'number' && Number.isFinite(createdAt) ? createdAt : 0,
+    });
+    if (!row) return;
+    const fp = compositePatternFingerprint(row);
+    if (!fp) return;
+    const prev = compositeByFp.get(fp);
+    if (!prev || (row.createdAt || 0) >= (prev.createdAt || 0)) compositeByFp.set(fp, row);
+  };
+
+  for (const round of rounds) {
+    if (!round || typeof round !== 'object') continue;
+    const roundName =
+      typeof round.name === 'string' && round.name.trim()
+        ? round.name.trim().slice(0, 60)
+        : 'Team round';
+    const createdAt =
+      typeof round.savedMixSnapshot?.savedAt === 'number' && Number.isFinite(round.savedMixSnapshot.savedAt)
+        ? round.savedMixSnapshot.savedAt
+        : typeof round.startedAt === 'number' && Number.isFinite(round.startedAt)
+          ? round.startedAt
+          : 0;
+
+    const mask = sanitizeMaskPositions(round.customPatternMask);
+    if (mask.length > 0) {
+      pushCustom(
+        {
+          id: `prep_custom_${contentHash({
+            positions: mask,
+            matchReverse: round.customMatchReverse === true,
+            matchAllowRotation: round.customMatchAllowRotation === true,
+            matchAllowMirror: round.customMatchAllowMirror === true,
+          })}`,
+          name: `${roundName} (custom)`.slice(0, 80),
+          positions: mask,
+          matchReverse: round.customMatchReverse === true,
+          matchAllowRotation: round.customMatchAllowRotation === true,
+          matchAllowMirror: round.customMatchAllowMirror === true,
+        },
+        createdAt,
+      );
+    }
+
+    const specRaw = round.patternComposite;
+    if (specRaw && typeof specRaw === 'object') {
+      const op = specRaw.op === 'and' || specRaw.op === 'or' ? specRaw.op : null;
+      const clauses = Array.isArray(specRaw.clauses) ? specRaw.clauses : [];
+      if (op && clauses.length > 0) {
+        const normalizedClauses = [];
+        for (const c of clauses) {
+          if (!c || typeof c !== 'object') continue;
+          if (c.kind === 'preset' && typeof c.preset === 'string') {
+            normalizedClauses.push({
+              kind: 'preset',
+              preset: c.preset === 'blackout' ? 'full_card' : c.preset,
+              ...(typeof c.linesRequired === 'number' ? { linesRequired: c.linesRequired } : {}),
+              ...(c.matchAllowRotation === true ? { matchAllowRotation: true } : {}),
+              ...(c.matchAllowMirror === true ? { matchAllowMirror: true } : {}),
+            });
+          } else if (c.kind === 'mask') {
+            const positions = sanitizeMaskPositions(c.positions);
+            if (positions.length === 0) continue;
+            normalizedClauses.push({
+              kind: 'mask',
+              positions,
+              ...(c.matchAllowRotation === true ? { matchAllowRotation: true } : {}),
+              ...(c.matchAllowMirror === true ? { matchAllowMirror: true } : {}),
+            });
+            // Painted sub-shapes also become Saved shape entries.
+            pushCustom(
+              {
+                id: `prep_custom_${contentHash({
+                  positions,
+                  matchReverse: false,
+                  matchAllowRotation: c.matchAllowRotation === true,
+                  matchAllowMirror: c.matchAllowMirror === true,
+                })}`,
+                name: `${roundName} (shape)`.slice(0, 80),
+                positions,
+                matchAllowRotation: c.matchAllowRotation === true,
+                matchAllowMirror: c.matchAllowMirror === true,
+              },
+              createdAt,
+            );
+          }
+        }
+        if (normalizedClauses.length > 0) {
+          const spec = { op, clauses: normalizedClauses };
+          pushComposite(
+            {
+              id: `prep_composite_${contentHash(spec)}`,
+              name: `${roundName} (combined)`.slice(0, 80),
+              spec,
+            },
+            createdAt,
+          );
+        }
+      }
+    }
+  }
+
+  return {
+    customPatterns: Array.from(customByFp.values()),
+    compositePatterns: Array.from(compositeByFp.values()),
+  };
+}
+
+/**
  * Collect playlist refs from every org member's (and owner's) cloud prep.
  * Used to backfill the org shelf when hosts saved rounds before shared-assets existed.
  */
@@ -262,14 +425,113 @@ async function collectPlaylistRefsFromOrgMemberPrep(db, organizationId) {
 }
 
 /**
+ * Collect custom + combined pattern defs embedded in org teammate room prep.
+ */
+async function collectPatternsFromOrgMemberPrep(db, organizationId) {
+  if (!db || organizationId == null) {
+    return { customPatterns: [], compositePatterns: [] };
+  }
+  const r = await db.query(
+    `SELECT p.payload
+     FROM host_room_prep p
+     INNER JOIN users u ON u.id = p.user_id
+     WHERE u.organization_id = $1
+        OR u.id = (SELECT owner_user_id FROM organizations WHERE id = $1)`,
+    [organizationId],
+  );
+  const customByFp = new Map();
+  const compositeByFp = new Map();
+  for (const row of r.rows) {
+    const payload = row.payload && typeof row.payload === 'object' ? row.payload : {};
+    const rounds = Array.isArray(payload.rounds) ? payload.rounds : [];
+    const harvested = patternsFromPrepRounds(rounds);
+    for (const p of harvested.customPatterns) {
+      const fp = customPatternFingerprint(p);
+      if (!fp) continue;
+      const prev = customByFp.get(fp);
+      if (!prev || (p.createdAt || 0) >= (prev.createdAt || 0)) customByFp.set(fp, p);
+    }
+    for (const p of harvested.compositePatterns) {
+      const fp = compositePatternFingerprint(p);
+      if (!fp) continue;
+      const prev = compositeByFp.get(fp);
+      if (!prev || (p.createdAt || 0) >= (prev.createdAt || 0)) compositeByFp.set(fp, p);
+    }
+  }
+  return {
+    customPatterns: Array.from(customByFp.values()),
+    compositePatterns: Array.from(compositeByFp.values()),
+  };
+}
+
+/**
+ * Drop harvested rows whose shape/recipe already exists on the shelf (any id / human name).
+ */
+function filterNovelPrepPatterns(existingAssets, harvested) {
+  const existingCustomFp = new Set(
+    (existingAssets?.customPatterns || []).map(customPatternFingerprint).filter(Boolean),
+  );
+  const existingCompositeFp = new Set(
+    (existingAssets?.compositePatterns || []).map(compositePatternFingerprint).filter(Boolean),
+  );
+  return {
+    customPatterns: (harvested.customPatterns || []).filter((p) => {
+      const fp = customPatternFingerprint(p);
+      return fp && !existingCustomFp.has(fp);
+    }),
+    compositePatterns: (harvested.compositePatterns || []).filter((p) => {
+      const fp = compositePatternFingerprint(p);
+      return fp && !existingCompositeFp.has(fp);
+    }),
+  };
+}
+
+/**
  * Ensure org shelf playlist refs include anything already saved in teammate room prep.
  * Persists a merge when new refs are found so subsequent GETs stay cheap.
  */
 async function ensureOrgPlaylistRefsFromPrep(db, organizationId) {
   if (!db || organizationId == null) return null;
-  const fromPrep = await collectPlaylistRefsFromOrgMemberPrep(db, organizationId);
-  if (fromPrep.length === 0) return getOrgHostSharedAssets(db, organizationId);
-  return mergeOrgHostSharedAssets(db, organizationId, { playlistRefs: fromPrep });
+  return ensureOrgAssetsFromPrep(db, organizationId);
+}
+
+/**
+ * Merge playlist refs + novel pattern defs from one prep payload into the org shelf
+ * (used when a host saves room prep — no need to wait for a later shared-assets GET).
+ */
+async function shareAssetsFromPrepRounds(db, organizationId, rounds) {
+  if (!db || organizationId == null || !Array.isArray(rounds)) return null;
+  const current = await getOrgHostSharedAssets(db, organizationId);
+  const refs = playlistRefsFromPrepRounds(rounds);
+  const novel = filterNovelPrepPatterns(current, patternsFromPrepRounds(rounds));
+  const patch = {};
+  if (refs.length > 0) patch.playlistRefs = refs;
+  if (novel.customPatterns.length > 0) patch.customPatterns = novel.customPatterns;
+  if (novel.compositePatterns.length > 0) patch.compositePatterns = novel.compositePatterns;
+  if (Object.keys(patch).length === 0) return current;
+  return mergeOrgHostSharedAssets(db, organizationId, patch);
+}
+
+/**
+ * Backfill org shelf from teammate cloud prep: playlist refs + embedded custom/combined patterns.
+ * Jay (or any org host) gets Saved shape / recipe entries without the sub-host reopening Host.
+ */
+async function ensureOrgAssetsFromPrep(db, organizationId) {
+  if (!db || organizationId == null) return null;
+  const [playlistRefs, harvestedPatterns, current] = await Promise.all([
+    collectPlaylistRefsFromOrgMemberPrep(db, organizationId),
+    collectPatternsFromOrgMemberPrep(db, organizationId),
+    getOrgHostSharedAssets(db, organizationId),
+  ]);
+  const novel = filterNovelPrepPatterns(current, harvestedPatterns);
+  const hasPlaylists = playlistRefs.length > 0;
+  const hasPatterns = novel.customPatterns.length > 0 || novel.compositePatterns.length > 0;
+  if (!hasPlaylists && !hasPatterns) return current;
+  return mergeOrgHostSharedAssets(db, organizationId, {
+    ...(hasPlaylists ? { playlistRefs } : {}),
+    ...(novel.customPatterns.length > 0 ? { customPatterns: novel.customPatterns } : {}),
+    ...(novel.compositePatterns.length > 0 ? { compositePatterns: novel.compositePatterns } : {}),
+  });
 }
 
 module.exports = {
@@ -278,8 +540,12 @@ module.exports = {
   mergeOrgHostSharedAssets,
   replaceOrgHostSharedAssets,
   playlistRefsFromPrepRounds,
+  patternsFromPrepRounds,
   collectPlaylistRefsFromOrgMemberPrep,
+  collectPatternsFromOrgMemberPrep,
   ensureOrgPlaylistRefsFromPrep,
+  ensureOrgAssetsFromPrep,
+  shareAssetsFromPrepRounds,
   sanitizeCustomPatternRow,
   sanitizeCompositePatternRow,
   sanitizePlaylistRefRow,

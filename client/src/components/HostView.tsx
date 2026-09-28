@@ -11087,7 +11087,7 @@ const HostView: React.FC = () => {
     };
   }, [roomId, hostAccount?.id, addLog]);
 
-  /** Org co-hosts: pull shared custom patterns + playlist refs; push this browser's library up. */
+  /** Org co-hosts: pull shared patterns/playlists (server also harvests defs from teammate room prep). */
   useEffect(() => {
     if (!hostAccount?.id || !getHostJwt()) {
       orgSharedAssetsHydratedRef.current = false;

@@ -15079,7 +15079,7 @@ app.get('/api/host/rooms/:roomId/prep', async (req, res) => {
   }
 });
 
-/** Save prep rounds for this host + room (debounced client uploads). Also shares playlist refs with the org. */
+/** Save prep rounds for this host + room (debounced client uploads). Also shares playlist refs + embedded patterns with the org. */
 app.put('/api/host/rooms/:roomId/prep', async (req, res) => {
   try {
     const uid = await requireApprovedHostUid(req, res);
@@ -15103,15 +15103,10 @@ app.put('/api/host/rooms/:roomId/prep', async (req, res) => {
     try {
       const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
       if (ctx.organization?.id != null) {
-        const refs = orgHostSharedAssetsStore.playlistRefsFromPrepRounds(body.rounds);
-        if (refs.length > 0) {
-          await orgHostSharedAssetsStore.mergeOrgHostSharedAssets(db, ctx.organization.id, {
-            playlistRefs: refs,
-          });
-        }
+        await orgHostSharedAssetsStore.shareAssetsFromPrepRounds(db, ctx.organization.id, body.rounds);
       }
     } catch (shareErr) {
-      console.warn('PUT prep org playlist-ref share failed:', shareErr?.message || shareErr);
+      console.warn('PUT prep org shared-assets share failed:', shareErr?.message || shareErr);
     }
 
     res.json({ ok: true, updatedAt: iso });
@@ -15153,8 +15148,8 @@ app.get('/api/org/shared-host-assets', async (req, res) => {
         message: 'Join an organization to share patterns and playlists with co-hosts.',
       });
     }
-    // Backfill playlist refs from existing org teammate room prep (pre-feature saves).
-    const assets = await orgHostSharedAssetsStore.ensureOrgPlaylistRefsFromPrep(db, ctx.organization.id);
+    // Backfill playlist refs + custom/combined patterns embedded in teammate room prep.
+    const assets = await orgHostSharedAssetsStore.ensureOrgAssetsFromPrep(db, ctx.organization.id);
     const updatedAt =
       assets.updatedAt instanceof Date
         ? assets.updatedAt.toISOString()
