@@ -23,25 +23,35 @@ export type OrgSharedHostAssets = {
   updatedAt?: string | null;
 };
 
-/** Pull org team patterns + playlist refs; merge patterns into localStorage. Returns null if no org / offline. */
-export async function pullOrgSharedHostAssets(): Promise<OrgSharedHostAssets | null> {
+export type PullOrgSharedHostAssetsResult =
+  | { ok: true; assets: OrgSharedHostAssets }
+  | { ok: false; reason: 'no_org' | 'unauthorized' | 'unavailable' | 'error' };
+
+/** Pull org team patterns + playlist refs; merge patterns into localStorage. */
+export async function pullOrgSharedHostAssets(): Promise<PullOrgSharedHostAssetsResult> {
   try {
     const r = await hostFetch(`${API_BASE || ''}/api/org/shared-host-assets`, { cache: 'no-store' });
-    if (r.status === 404 || r.status === 503 || !r.ok) return null;
+    if (r.status === 401 || r.status === 403) return { ok: false, reason: 'unauthorized' };
+    if (r.status === 404) return { ok: false, reason: 'no_org' };
+    if (r.status === 503) return { ok: false, reason: 'unavailable' };
+    if (!r.ok) return { ok: false, reason: 'error' };
     const data = (await r.json()) as OrgSharedHostAssets;
     const custom = Array.isArray(data.customPatterns) ? data.customPatterns : [];
     const composite = Array.isArray(data.compositePatterns) ? data.compositePatterns : [];
     mergeSavedCustomPatterns(custom);
     mergeSavedCompositePatterns(composite);
     return {
-      organizationId: data.organizationId,
-      customPatterns: getSavedCustomPatterns(),
-      compositePatterns: getSavedCompositePatterns(),
-      playlistRefs: Array.isArray(data.playlistRefs) ? data.playlistRefs : [],
-      updatedAt: data.updatedAt ?? null,
+      ok: true,
+      assets: {
+        organizationId: data.organizationId,
+        customPatterns: getSavedCustomPatterns(),
+        compositePatterns: getSavedCompositePatterns(),
+        playlistRefs: Array.isArray(data.playlistRefs) ? data.playlistRefs : [],
+        updatedAt: data.updatedAt ?? null,
+      },
     };
   } catch {
-    return null;
+    return { ok: false, reason: 'error' };
   }
 }
 

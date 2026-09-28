@@ -485,6 +485,8 @@ interface Playlist {
   youtubeMusic?: boolean;
   /** User library via Apple Music / MusicKit (catalog song ids). */
   appleMusic?: boolean;
+  /** Injected from org co-host shelf (always visible in Picks, not title-flag filtered). */
+  orgShared?: boolean;
 }
 
 /** Playlists per page in the playlist-round modal (fits viewport without scrolling). */
@@ -1447,7 +1449,10 @@ function filterBasePlaylistsForMix(
   const rest = playlists.filter((p: Playlist) => !p.youtubeMusic && !p.appleMusic);
   const spotifyPart = showAllPlaylists
     ? rest
-    : rest.filter((p: Playlist) => playlistMatchesTitleFlags(p.name, titleFlags));
+    : rest.filter(
+        (p: Playlist) =>
+          p.orgShared === true || playlistMatchesTitleFlags(p.name, titleFlags),
+      );
   return [...spotifyPart, ...ytm, ...apple];
 }
 
@@ -1845,6 +1850,8 @@ const HostView: React.FC = () => {
   /** Spotify playlist id/name shelf shared with org co-hosts (merged into library list). */
   const [orgSharedPlaylistRefs, setOrgSharedPlaylistRefs] = useState<OrgSharedPlaylistRef[]>([]);
   const orgSharedAssetsHydratedRef = useRef(false);
+  /** State twin of the ref so effects (e.g. playlist-ref upload) re-run after first org sync. */
+  const [orgSharedAssetsReady, setOrgSharedAssetsReady] = useState(false);
   const orgSharedPushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showCustomPatternModal, setShowCustomPatternModal] = useState<boolean>(false);
   const [combinedPatternModalOpen, setCombinedPatternModalOpen] = useState(false);
@@ -2955,6 +2962,7 @@ const HostView: React.FC = () => {
               name: ref.name || 'Team playlist',
               tracks: typeof ref.tracks === 'number' ? ref.tracks : 0,
               description: 'Shared by a co-host in your organization',
+              orgShared: true,
             });
           }
           return Array.from(byId.values());
@@ -11083,22 +11091,48 @@ const HostView: React.FC = () => {
   useEffect(() => {
     if (!hostAccount?.id || !getHostJwt()) {
       orgSharedAssetsHydratedRef.current = false;
+      setOrgSharedAssetsReady(false);
       return;
     }
     let cancelled = false;
     orgSharedAssetsHydratedRef.current = false;
+    setOrgSharedAssetsReady(false);
     void (async () => {
-      const assets = await pullOrgSharedHostAssets();
+      // Ensure localStorage libraries are in React state before merge/push.
+      setSavedCustomPatterns(getSavedCustomPatterns());
+      setSavedCompositePatterns(getSavedCompositePatterns());
+
+      const pulled = await pullOrgSharedHostAssets();
       if (cancelled) return;
-      if (assets) {
-        setSavedCustomPatterns(assets.customPatterns);
-        setSavedCompositePatterns(assets.compositePatterns);
-        setOrgSharedPlaylistRefs(assets.playlistRefs);
-        addLog('Synced pattern & playlist shelf with your organization co-hosts.', 'info');
+      if (pulled.ok) {
+        setSavedCustomPatterns(pulled.assets.customPatterns);
+        setSavedCompositePatterns(pulled.assets.compositePatterns);
+        setOrgSharedPlaylistRefs(pulled.assets.playlistRefs);
+        const nCustom = pulled.assets.customPatterns.length;
+        const nComposite = pulled.assets.compositePatterns.length;
+        const nPl = pulled.assets.playlistRefs.length;
+        addLog(
+          `Synced org shelf: ${nCustom} custom pattern(s), ${nComposite} combined recipe(s), ${nPl} team playlist(s).`,
+          'info',
+        );
+      } else if (pulled.reason === 'no_org') {
+        addLog(
+          'Org pattern/playlist sharing needs a Tempo organization — create or join one under Admin, then hard-refresh.',
+          'warn',
+        );
+      } else if (pulled.reason === 'unauthorized') {
+        addLog('Sign in with Google (host account) to sync patterns and playlists with co-hosts.', 'warn');
       }
-      // Publish this device's library so teammates pick it up (merge; no deletes).
-      await pushOrgSharedHostAssets({ mode: 'merge' });
-      if (!cancelled) orgSharedAssetsHydratedRef.current = true;
+
+      // Publish this device's localStorage library so teammates pick it up (merge; no deletes).
+      const pushed = await pushOrgSharedHostAssets({ mode: 'merge' });
+      if (!cancelled && pulled.ok && !pushed) {
+        addLog('Could not upload this browser’s patterns to the org shelf (will retry on next save).', 'warn');
+      }
+      if (!cancelled) {
+        orgSharedAssetsHydratedRef.current = true;
+        setOrgSharedAssetsReady(true);
+      }
     })();
     return () => {
       cancelled = true;
@@ -11117,6 +11151,30 @@ const HostView: React.FC = () => {
     };
   }, [savedCustomPatterns, savedCompositePatterns, hostAccount?.id]);
 
+  /** Push round-assigned playlist ids to the org shelf once prep is ready (merge). */
+  useEffect(() => {
+    if (!hostAccount?.id || !getHostJwt() || !prepCloudHydrated || !orgSharedAssetsReady) {
+      return;
+    }
+    const refs: OrgSharedPlaylistRef[] = [];
+    for (const round of eventRounds) {
+      const ids = round.playlistIds || [];
+      const names = round.playlistNames || [];
+      for (let i = 0; i < ids.length; i++) {
+        const id = String(ids[i] || '').trim();
+        if (!id || id.startsWith('__')) continue;
+        refs.push({
+          id,
+          name: typeof names[i] === 'string' && names[i].trim() ? names[i].trim() : 'Team playlist',
+          tracks: 0,
+          updatedAt: Date.now(),
+        });
+      }
+    }
+    if (refs.length === 0) return;
+    void pushOrgSharedHostAssets({ mode: 'merge', playlistRefs: refs, includePatterns: false });
+  }, [eventRounds, prepCloudHydrated, orgSharedAssetsReady, hostAccount?.id]);
+
   /** Inject org playlist refs into the visible library without waiting for another Spotify list fetch. */
   useEffect(() => {
     if (orgSharedPlaylistRefs.length === 0) return;
@@ -11127,12 +11185,20 @@ const HostView: React.FC = () => {
         const id = String(ref.id || '').trim();
         if (!id || id.startsWith('__')) continue;
         const canon = canonicalPlaylistIdForMatch(id);
-        if (byId.has(canon)) continue;
+        const existing = byId.get(canon);
+        if (existing) {
+          if (!existing.orgShared) {
+            byId.set(canon, { ...existing, orgShared: true });
+            changed = true;
+          }
+          continue;
+        }
         byId.set(canon, {
           id,
           name: ref.name || 'Team playlist',
           tracks: typeof ref.tracks === 'number' ? ref.tracks : 0,
           description: 'Shared by a co-host in your organization',
+          orgShared: true,
         });
         changed = true;
       }

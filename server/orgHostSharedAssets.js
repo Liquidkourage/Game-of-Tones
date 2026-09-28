@@ -238,12 +238,48 @@ function playlistRefsFromPrepRounds(rounds) {
   return out;
 }
 
+/**
+ * Collect playlist refs from every org member's (and owner's) cloud prep.
+ * Used to backfill the org shelf when hosts saved rounds before shared-assets existed.
+ */
+async function collectPlaylistRefsFromOrgMemberPrep(db, organizationId) {
+  if (!db || organizationId == null) return [];
+  const r = await db.query(
+    `SELECT p.payload
+     FROM host_room_prep p
+     INNER JOIN users u ON u.id = p.user_id
+     WHERE u.organization_id = $1
+        OR u.id = (SELECT owner_user_id FROM organizations WHERE id = $1)`,
+    [organizationId],
+  );
+  const out = [];
+  for (const row of r.rows) {
+    const payload = row.payload && typeof row.payload === 'object' ? row.payload : {};
+    const rounds = Array.isArray(payload.rounds) ? payload.rounds : [];
+    out.push(...playlistRefsFromPrepRounds(rounds));
+  }
+  return out;
+}
+
+/**
+ * Ensure org shelf playlist refs include anything already saved in teammate room prep.
+ * Persists a merge when new refs are found so subsequent GETs stay cheap.
+ */
+async function ensureOrgPlaylistRefsFromPrep(db, organizationId) {
+  if (!db || organizationId == null) return null;
+  const fromPrep = await collectPlaylistRefsFromOrgMemberPrep(db, organizationId);
+  if (fromPrep.length === 0) return getOrgHostSharedAssets(db, organizationId);
+  return mergeOrgHostSharedAssets(db, organizationId, { playlistRefs: fromPrep });
+}
+
 module.exports = {
   ensureOrgHostSharedAssetsTable,
   getOrgHostSharedAssets,
   mergeOrgHostSharedAssets,
   replaceOrgHostSharedAssets,
   playlistRefsFromPrepRounds,
+  collectPlaylistRefsFromOrgMemberPrep,
+  ensureOrgPlaylistRefsFromPrep,
   sanitizeCustomPatternRow,
   sanitizeCompositePatternRow,
   sanitizePlaylistRefRow,

@@ -91,13 +91,18 @@ async function deleteHostRoomPrep(db, userId, roomId) {
  */
 async function getOrgMemberPrepByRoomId(db, organizationId, roomId) {
   if (!db || organizationId == null || !roomId) return null;
+  // Include org members (users.organization_id) and the org owner even if
+  // organization_id was never backfilled on the owner row.
   const r = await db.query(
     `SELECT p.user_id AS user_id, p.payload, p.updated_at,
             u.email AS host_email, u.display_name AS host_display_name
      FROM host_room_prep p
      INNER JOIN users u ON u.id = p.user_id
      WHERE p.room_id = $1
-       AND u.organization_id = $2
+       AND (
+         u.organization_id = $2
+         OR u.id = (SELECT owner_user_id FROM organizations WHERE id = $2)
+       )
      ORDER BY p.updated_at DESC
      LIMIT 1`,
     [String(roomId), organizationId],
@@ -127,6 +132,7 @@ async function listOrgHostRoomPrep(db, organizationId, { limit = 40 } = {}) {
      FROM host_room_prep p
      INNER JOIN users u ON u.id = p.user_id
      WHERE u.organization_id = $1
+        OR u.id = (SELECT owner_user_id FROM organizations WHERE id = $1)
      ORDER BY p.room_id, p.updated_at DESC`,
     [organizationId],
   );

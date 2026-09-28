@@ -15153,13 +15153,17 @@ app.get('/api/org/shared-host-assets', async (req, res) => {
         message: 'Join an organization to share patterns and playlists with co-hosts.',
       });
     }
-    const assets = await orgHostSharedAssetsStore.getOrgHostSharedAssets(db, ctx.organization.id);
+    // Backfill playlist refs from existing org teammate room prep (pre-feature saves).
+    const assets = await orgHostSharedAssetsStore.ensureOrgPlaylistRefsFromPrep(db, ctx.organization.id);
     const updatedAt =
       assets.updatedAt instanceof Date
         ? assets.updatedAt.toISOString()
         : assets.updatedAt != null
           ? String(assets.updatedAt)
           : null;
+    console.log(
+      `[org shared-host-assets] GET user=${uid} org=${ctx.organization.id} custom=${assets.customPatterns.length} composite=${assets.compositePatterns.length} playlists=${assets.playlistRefs.length}`,
+    );
     res.json({
       organizationId: ctx.organization.id,
       customPatterns: assets.customPatterns,
@@ -15215,6 +15219,9 @@ app.put('/api/org/shared-host-assets', async (req, res) => {
         : assets.updatedAt != null
           ? String(assets.updatedAt)
           : new Date().toISOString();
+    console.log(
+      `[org shared-host-assets] PUT user=${uid} org=${ctx.organization.id} mode=${mode} custom=${assets.customPatterns.length} composite=${assets.compositePatterns.length} playlists=${assets.playlistRefs.length}`,
+    );
     res.json({
       ok: true,
       organizationId: ctx.organization.id,

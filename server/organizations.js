@@ -496,6 +496,19 @@ async function getUserOrganizationContext(db, userId) {
       [uid]
     );
     if (owned.rows.length > 0) {
+      // Backfill users.organization_id so org-scoped prep / shared-asset queries
+      // that join on organization_id include the owner (not only invitees).
+      try {
+        await db.query('UPDATE users SET organization_id = $2 WHERE id = $1 AND organization_id IS NULL', [
+          uid,
+          owned.rows[0].id,
+        ]);
+      } catch (e) {
+        console.warn(
+          '[org] failed to backfill owner organization_id:',
+          e?.message || e,
+        );
+      }
       return {
         organization: orgRowToSummary(owned.rows[0]),
         role: 'owner',
