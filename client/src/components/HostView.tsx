@@ -71,6 +71,11 @@ import {
   saveCompositePattern,
   deleteSavedCompositePattern,
 } from '../patternDefinitions';
+import {
+  pullOrgSharedHostAssets,
+  pushOrgSharedHostAssets,
+  type OrgSharedPlaylistRef,
+} from '../utils/orgSharedHostAssets';
 import CustomPatternModal, { type CustomPatternSavePayload } from './CustomPatternModal';
 import CombinedPatternModal from './CombinedPatternModal';
 import SongAliasModal from './SongAliasModal';
@@ -1837,6 +1842,10 @@ const HostView: React.FC = () => {
   }, [bingoColumnLetters]);
   const [selectedCustomPattern, setSelectedCustomPattern] = useState<SavedCustomPattern | null>(null);
   const [savedCustomPatterns, setSavedCustomPatterns] = useState<SavedCustomPattern[]>([]);
+  /** Spotify playlist id/name shelf shared with org co-hosts (merged into library list). */
+  const [orgSharedPlaylistRefs, setOrgSharedPlaylistRefs] = useState<OrgSharedPlaylistRef[]>([]);
+  const orgSharedAssetsHydratedRef = useRef(false);
+  const orgSharedPushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showCustomPatternModal, setShowCustomPatternModal] = useState<boolean>(false);
   const [combinedPatternModalOpen, setCombinedPatternModalOpen] = useState(false);
   
@@ -2922,7 +2931,33 @@ const HostView: React.FC = () => {
               playlistIdsNeedingTrackRefreshRef.current.add(canon);
             }
           }
-          return allPlaylists;
+          // Merge org co-host playlist refs + round-assigned ids that aren't in this Spotify library.
+          const byId = new Map(allPlaylists.map((p) => [canonicalPlaylistIdForMatch(String(p.id)), p]));
+          const shelf: OrgSharedPlaylistRef[] = [
+            ...orgSharedPlaylistRefs,
+            ...eventRoundsRef.current.flatMap((round) => {
+              const ids = round.playlistIds || [];
+              const names = round.playlistNames || [];
+              return ids.map((id, i) => ({
+                id: String(id),
+                name: typeof names[i] === 'string' && names[i].trim() ? names[i].trim() : 'Team playlist',
+                tracks: 0,
+              }));
+            }),
+          ];
+          for (const ref of shelf) {
+            const id = String(ref.id || '').trim();
+            if (!id || id.startsWith('__')) continue;
+            const canon = canonicalPlaylistIdForMatch(id);
+            if (byId.has(canon)) continue;
+            byId.set(canon, {
+              id,
+              name: ref.name || 'Team playlist',
+              tracks: typeof ref.tracks === 'number' ? ref.tracks : 0,
+              description: 'Shared by a co-host in your organization',
+            });
+          }
+          return Array.from(byId.values());
         });
         if (forceRefresh) {
           // Explicit library refresh: always re-pull tracks for assigned mix playlists.
@@ -2975,7 +3010,7 @@ const HostView: React.FC = () => {
     } finally {
       if (forceRefresh) setSpotifyPlaylistsRefreshing(false);
     }
-  }, [showHostAckNotification, scheduleCatalogPacksLoad]);
+  }, [showHostAckNotification, scheduleCatalogPacksLoad, orgSharedPlaylistRefs]);
 
   const addPlaylistByLink = useCallback(async () => {
     setPlaylistByLinkError(null);
@@ -7455,6 +7490,7 @@ const HostView: React.FC = () => {
   const handleSaveCustomPattern = (patternData: CustomPatternSavePayload) => {
     const savedPattern = saveCustomPattern(patternData);
     setSavedCustomPatterns(getSavedCustomPatterns());
+    void pushOrgSharedHostAssets({ mode: 'merge' });
     const idx = compositeEditRoundIndexRef.current;
     const rev = savedPattern.matchReverse === true;
     const rot = savedPattern.matchAllowRotation === true;
@@ -10958,6 +10994,9 @@ const HostView: React.FC = () => {
           rounds?: unknown;
           currentRoundIndex?: number;
           updatedAt?: string;
+          shared?: boolean;
+          sourceHostEmail?: string | null;
+          sourceHostDisplayName?: string | null;
         };
 
         const serverTs = data.updatedAt ? Date.parse(data.updatedAt) : NaN;
@@ -11019,7 +11058,15 @@ const HostView: React.FC = () => {
         }
 
         writePrepCloudAckMs(roomId, serverTs);
-        addLog('Restored round prep from your Tempo account (cloud backup).', 'info');
+        if (data.shared) {
+          const who =
+            (typeof data.sourceHostDisplayName === 'string' && data.sourceHostDisplayName.trim()) ||
+            (typeof data.sourceHostEmail === 'string' && data.sourceHostEmail.trim()) ||
+            'a co-host';
+          addLog(`Restored round prep shared by ${who} (org team cloud backup).`, 'info');
+        } else {
+          addLog('Restored round prep from your Tempo account (cloud backup).', 'info');
+        }
       } catch {
         /* ignore */
       } finally {
@@ -11031,6 +11078,67 @@ const HostView: React.FC = () => {
       cancelled = true;
     };
   }, [roomId, hostAccount?.id, addLog]);
+
+  /** Org co-hosts: pull shared custom patterns + playlist refs; push this browser's library up. */
+  useEffect(() => {
+    if (!hostAccount?.id || !getHostJwt()) {
+      orgSharedAssetsHydratedRef.current = false;
+      return;
+    }
+    let cancelled = false;
+    orgSharedAssetsHydratedRef.current = false;
+    void (async () => {
+      const assets = await pullOrgSharedHostAssets();
+      if (cancelled) return;
+      if (assets) {
+        setSavedCustomPatterns(assets.customPatterns);
+        setSavedCompositePatterns(assets.compositePatterns);
+        setOrgSharedPlaylistRefs(assets.playlistRefs);
+        addLog('Synced pattern & playlist shelf with your organization co-hosts.', 'info');
+      }
+      // Publish this device's library so teammates pick it up (merge; no deletes).
+      await pushOrgSharedHostAssets({ mode: 'merge' });
+      if (!cancelled) orgSharedAssetsHydratedRef.current = true;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hostAccount?.id, addLog]);
+
+  /** After local pattern library changes, push full lists to the org shelf (deletes included). */
+  useEffect(() => {
+    if (!hostAccount?.id || !getHostJwt() || !orgSharedAssetsHydratedRef.current) return;
+    if (orgSharedPushTimerRef.current) clearTimeout(orgSharedPushTimerRef.current);
+    orgSharedPushTimerRef.current = setTimeout(() => {
+      void pushOrgSharedHostAssets({ mode: 'replace' });
+    }, 900);
+    return () => {
+      if (orgSharedPushTimerRef.current) clearTimeout(orgSharedPushTimerRef.current);
+    };
+  }, [savedCustomPatterns, savedCompositePatterns, hostAccount?.id]);
+
+  /** Inject org playlist refs into the visible library without waiting for another Spotify list fetch. */
+  useEffect(() => {
+    if (orgSharedPlaylistRefs.length === 0) return;
+    setPlaylists((prev) => {
+      const byId = new Map(prev.map((p) => [canonicalPlaylistIdForMatch(String(p.id)), { ...p }]));
+      let changed = false;
+      for (const ref of orgSharedPlaylistRefs) {
+        const id = String(ref.id || '').trim();
+        if (!id || id.startsWith('__')) continue;
+        const canon = canonicalPlaylistIdForMatch(id);
+        if (byId.has(canon)) continue;
+        byId.set(canon, {
+          id,
+          name: ref.name || 'Team playlist',
+          tracks: typeof ref.tracks === 'number' ? ref.tracks : 0,
+          description: 'Shared by a co-host in your organization',
+        });
+        changed = true;
+      }
+      return changed ? Array.from(byId.values()) : prev;
+    });
+  }, [orgSharedPlaylistRefs]);
 
   /** Load saved host defaults: localStorage immediately, then the DB copy (cross-device source of truth). */
   useEffect(() => {

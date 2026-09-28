@@ -17,6 +17,7 @@ const usersStore = require('./users');
 const organizationsStore = require('./organizations');
 const billingStore = require('./billing');
 const hostRoomPrepStore = require('./hostRoomPrep');
+const orgHostSharedAssetsStore = require('./orgHostSharedAssets');
 const roomSongRequestsStore = require('./roomSongRequests');
 const hostPreferencesStore = require('./hostPreferences');
 const playersStore = require('./players');
@@ -1966,6 +1967,7 @@ async function initializeDatabase() {
     await billingStore.ensureBillingTables(db);
     await songAliasesStore.ensureSongAliasesTable(db);
     await hostRoomPrepStore.ensureHostRoomPrepTable(db);
+    await orgHostSharedAssetsStore.ensureOrgHostSharedAssetsTable(db);
     await roomSongRequestsStore.ensureRoomSongRequestsTable(db);
     await hostPreferencesStore.ensureHostPreferencesTable(db);
     await playersStore.ensurePlayerTables(db);
@@ -15007,13 +15009,18 @@ function sanitizeHostPrepRoomId(raw) {
   }
 }
 
-/** List this host's cloud-saved events/rooms (newest first). */
+/** List this host's cloud-saved events/rooms (newest first). Org members also see teammates' rooms. */
 app.get('/api/host/rooms/prep', async (req, res) => {
   try {
     const uid = await requireApprovedHostUid(req, res);
     if (!uid) return;
     if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required for cloud prep.' });
-    const rows = await hostRoomPrepStore.listHostRoomPrep(db, uid, { limit: 40 });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    const orgId = ctx.organization?.id ?? null;
+    const rows =
+      orgId != null
+        ? await hostRoomPrepStore.listOrgHostRoomPrep(db, orgId, { limit: 40 })
+        : await hostRoomPrepStore.listHostRoomPrep(db, uid, { limit: 40 });
     const events = rows.map((row) => ({
       roomId: row.roomId,
       updatedAt:
@@ -15027,6 +15034,9 @@ app.get('/api/host/rooms/prep', async (req, res) => {
       roundNames: row.roundNames,
       currentRoundIndex: row.currentRoundIndex,
       live: rooms.has(row.roomId),
+      shared: row.sourceUserId != null ? Number(row.sourceUserId) !== Number(uid) : false,
+      sourceHostEmail: row.sourceHostEmail || null,
+      sourceHostDisplayName: row.sourceHostDisplayName || null,
     }));
     res.json({ events });
   } catch (e) {
@@ -15035,7 +15045,7 @@ app.get('/api/host/rooms/prep', async (req, res) => {
   }
 });
 
-/** Load persisted prep rounds for this host + room (survives browser clearing site data). */
+/** Load persisted prep rounds for this host + room (org teammates share newest prep for the room). */
 app.get('/api/host/rooms/:roomId/prep', async (req, res) => {
   try {
     const uid = await requireApprovedHostUid(req, res);
@@ -15043,7 +15053,9 @@ app.get('/api/host/rooms/:roomId/prep', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required for cloud prep.' });
     const roomId = sanitizeHostPrepRoomId(req.params.roomId);
     if (!roomId) return res.status(400).json({ error: 'invalid_room_id' });
-    const row = await hostRoomPrepStore.getHostRoomPrep(db, uid, roomId);
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    const orgId = ctx.organization?.id ?? null;
+    const row = await hostRoomPrepStore.resolveHostRoomPrepForUser(db, uid, roomId, orgId);
     if (!row) return res.status(404).json({ error: 'not_found' });
     const p = row.payload && typeof row.payload === 'object' ? row.payload : {};
     const updatedAt =
@@ -15056,6 +15068,10 @@ app.get('/api/host/rooms/:roomId/prep', async (req, res) => {
       rounds: Array.isArray(p.rounds) ? p.rounds : [],
       currentRoundIndex: typeof p.currentRoundIndex === 'number' ? p.currentRoundIndex : -1,
       updatedAt,
+      shared: row.shared === true,
+      sourceUserId: row.sourceUserId ?? null,
+      sourceHostEmail: row.sourceHostEmail || null,
+      sourceHostDisplayName: row.sourceHostDisplayName || null,
     });
   } catch (e) {
     console.error('GET /api/host/rooms/:roomId/prep:', e?.message || e);
@@ -15063,7 +15079,7 @@ app.get('/api/host/rooms/:roomId/prep', async (req, res) => {
   }
 });
 
-/** Save prep rounds for this host + room (debounced client uploads). */
+/** Save prep rounds for this host + room (debounced client uploads). Also shares playlist refs with the org. */
 app.put('/api/host/rooms/:roomId/prep', async (req, res) => {
   try {
     const uid = await requireApprovedHostUid(req, res);
@@ -15083,6 +15099,21 @@ app.put('/api/host/rooms/:roomId/prep', async (req, res) => {
     const updatedAt = await hostRoomPrepStore.upsertHostRoomPrep(db, uid, roomId, payload);
     const iso =
       updatedAt instanceof Date ? updatedAt.toISOString() : updatedAt != null ? String(updatedAt) : new Date().toISOString();
+
+    try {
+      const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+      if (ctx.organization?.id != null) {
+        const refs = orgHostSharedAssetsStore.playlistRefsFromPrepRounds(body.rounds);
+        if (refs.length > 0) {
+          await orgHostSharedAssetsStore.mergeOrgHostSharedAssets(db, ctx.organization.id, {
+            playlistRefs: refs,
+          });
+        }
+      }
+    } catch (shareErr) {
+      console.warn('PUT prep org playlist-ref share failed:', shareErr?.message || shareErr);
+    }
+
     res.json({ ok: true, updatedAt: iso });
   } catch (e) {
     console.error('PUT /api/host/rooms/:roomId/prep:', e?.message || e);
@@ -15103,6 +15134,98 @@ app.delete('/api/host/rooms/:roomId/prep', async (req, res) => {
   } catch (e) {
     console.error('DELETE /api/host/rooms/:roomId/prep:', e?.message || e);
     res.status(500).json({ error: 'failed', message: e?.message || 'Failed to delete event prep' });
+  }
+});
+
+/**
+ * Org team library: custom patterns, combined recipes, and Spotify playlist refs
+ * shared by every host in the caller's organization.
+ */
+app.get('/api/org/shared-host-assets', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required.' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization?.id) {
+      return res.status(404).json({
+        error: 'no_org',
+        message: 'Join an organization to share patterns and playlists with co-hosts.',
+      });
+    }
+    const assets = await orgHostSharedAssetsStore.getOrgHostSharedAssets(db, ctx.organization.id);
+    const updatedAt =
+      assets.updatedAt instanceof Date
+        ? assets.updatedAt.toISOString()
+        : assets.updatedAt != null
+          ? String(assets.updatedAt)
+          : null;
+    res.json({
+      organizationId: ctx.organization.id,
+      customPatterns: assets.customPatterns,
+      compositePatterns: assets.compositePatterns,
+      playlistRefs: assets.playlistRefs,
+      updatedAt,
+    });
+  } catch (e) {
+    console.error('GET /api/org/shared-host-assets:', e?.message || e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed to load shared assets' });
+  }
+});
+
+/**
+ * Push local pattern library / playlist refs to the org team shelf.
+ * Body: { mode?: 'merge'|'replace', customPatterns?, compositePatterns?, playlistRefs? }
+ * Default mode is merge (by id). Use replace when pushing a full post-delete library.
+ */
+app.put('/api/org/shared-host-assets', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required.' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization?.id) {
+      return res.status(404).json({
+        error: 'no_org',
+        message: 'Join an organization to share patterns and playlists with co-hosts.',
+      });
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const mode = body.mode === 'replace' ? 'replace' : 'merge';
+    const patch = {
+      customPatterns: Array.isArray(body.customPatterns) ? body.customPatterns : undefined,
+      compositePatterns: Array.isArray(body.compositePatterns) ? body.compositePatterns : undefined,
+      playlistRefs: Array.isArray(body.playlistRefs) ? body.playlistRefs : undefined,
+    };
+    const hasAny =
+      patch.customPatterns != null || patch.compositePatterns != null || patch.playlistRefs != null;
+    if (!hasAny) {
+      return res.status(400).json({
+        error: 'invalid_body',
+        message: 'Provide customPatterns, compositePatterns, and/or playlistRefs.',
+      });
+    }
+    const assets =
+      mode === 'replace'
+        ? await orgHostSharedAssetsStore.replaceOrgHostSharedAssets(db, ctx.organization.id, patch)
+        : await orgHostSharedAssetsStore.mergeOrgHostSharedAssets(db, ctx.organization.id, patch);
+    const updatedAt =
+      assets.updatedAt instanceof Date
+        ? assets.updatedAt.toISOString()
+        : assets.updatedAt != null
+          ? String(assets.updatedAt)
+          : new Date().toISOString();
+    res.json({
+      ok: true,
+      organizationId: ctx.organization.id,
+      customPatterns: assets.customPatterns,
+      compositePatterns: assets.compositePatterns,
+      playlistRefs: assets.playlistRefs,
+      updatedAt,
+    });
+  } catch (e) {
+    console.error('PUT /api/org/shared-host-assets:', e?.message || e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed to save shared assets' });
   }
 });
 

@@ -1083,6 +1083,34 @@ export function deleteCustomPattern(id: string): void {
   }
 }
 
+/** Merge remote custom patterns into localStorage by id (remote wins on same id). */
+export function mergeSavedCustomPatterns(remote: SavedCustomPattern[]): SavedCustomPattern[] {
+  const map = new Map<string, SavedCustomPattern>();
+  for (const p of getSavedCustomPatterns()) {
+    if (p?.id) map.set(p.id, p);
+  }
+  for (const raw of remote) {
+    if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string') continue;
+    if (!Array.isArray(raw.positions) || !validatePatternPositions(raw.positions)) continue;
+    map.set(raw.id, {
+      id: raw.id,
+      name: typeof raw.name === 'string' ? raw.name : 'Pattern',
+      positions: [...raw.positions],
+      matchReverse: raw.matchReverse === true,
+      matchAllowRotation: raw.matchAllowRotation === true,
+      matchAllowMirror: raw.matchAllowMirror === true,
+      createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0,
+    });
+  }
+  const merged = Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
+  try {
+    localStorage.setItem(CUSTOM_PATTERNS_KEY, JSON.stringify(merged));
+  } catch (error) {
+    console.error('Failed to merge custom patterns:', error);
+  }
+  return merged;
+}
+
 /** Browser-local named combined (AND/OR) recipes for the host. */
 export interface SavedCompositePattern {
   id: string;
@@ -1158,5 +1186,32 @@ export function deleteSavedCompositePattern(id: string): void {
   } catch (error) {
     console.error('Failed to delete composite pattern:', error);
   }
+}
+
+/** Merge remote combined recipes into localStorage by id (remote wins on same id). */
+export function mergeSavedCompositePatterns(remote: SavedCompositePattern[]): SavedCompositePattern[] {
+  const map = new Map<string, SavedCompositePattern>();
+  for (const p of getSavedCompositePatterns()) {
+    if (p?.id) map.set(p.id, p);
+  }
+  for (const raw of remote) {
+    if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string') continue;
+    if (typeof raw.name !== 'string') continue;
+    const spec = normalizePatternComposite((raw as { spec?: unknown }).spec);
+    if (!spec) continue;
+    map.set(raw.id, {
+      id: raw.id,
+      name: raw.name,
+      spec,
+      createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0,
+    });
+  }
+  const merged = Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
+  try {
+    localStorage.setItem(COMPOSITE_RECIPES_KEY, JSON.stringify(merged));
+  } catch (error) {
+    console.error('Failed to merge composite patterns:', error);
+  }
+  return merged;
 }
 
