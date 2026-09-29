@@ -1864,10 +1864,17 @@ const PublicDisplay: React.FC = () => {
       clearCallListSessionState();
     };
 
-    /** Once fiveby15-pool columns are live, headers follow that list only — not display-meta / mix order. */
-    const applyPlaylistNamesFromDisplayMeta = (names: unknown) => {
+    /** Once fiveby15-pool columns are live, room-state must not overwrite from mix order.
+     *  round-display-meta may force-apply (server already keeps live-play names locked to columns). */
+    const applyPlaylistNamesFromDisplayMeta = (names: unknown, opts?: { force?: boolean }) => {
       if (!Array.isArray(names)) return;
-      if (fiveBy15ColumnsRef.current && fiveBy15ColumnsRef.current.length === 5) return;
+      if (
+        !opts?.force &&
+        fiveBy15ColumnsRef.current &&
+        fiveBy15ColumnsRef.current.length === 5
+      ) {
+        return;
+      }
       const sliced = names.slice(0, 5).map((name) => String(name ?? ''));
       if (!sliced.some((name) => name.trim())) return;
       setPlaylistNames(sliced);
@@ -3014,7 +3021,9 @@ const PublicDisplay: React.FC = () => {
             : null,
         );
       }
-      applyPlaylistNamesFromDisplayMeta(data?.currentRoundPlaylistNames);
+      // Force: prep round switches must update headers even if prior fiveby15-pool columns linger
+      // until round-pool-cleared / re-finalize arrives.
+      applyPlaylistNamesFromDisplayMeta(data?.currentRoundPlaylistNames, { force: true });
     });
 
     newSocket.on('mix-finalized', (payload: any) => {
@@ -3136,6 +3145,8 @@ const PublicDisplay: React.FC = () => {
       });
       setTotalPlayedCount(0);
       resetPlayedTrackingRefs();
+      clearPoolLayoutState();
+      ensureGrid();
       setShowWinnerBanner(false);
       setWinnerName('');
       setIsVerificationPending(false);

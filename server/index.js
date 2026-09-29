@@ -3226,11 +3226,32 @@ function sanitizeRoundPlaylistNames(raw) {
   );
 }
 
-/** Once 5×15 columns exist, their names are authoritative for projector/headers (not mix UI order). */
+function playlistNamesEqualIgnoreOrder(a, b) {
+  const norm = (raw) =>
+    sanitizeRoundPlaylistNames(raw)
+      .map((name) => String(name || '').trim().toLowerCase())
+      .filter(Boolean)
+      .sort()
+      .join('\0');
+  return norm(a) === norm(b) && norm(a).length > 0;
+}
+
+function roomIsLivePlay(room) {
+  return room?.gameState === 'playing' || room?.gameState === 'paused_for_verification';
+}
+
+/**
+ * Live play: 5×15 column names win (stable vs mix UI order).
+ * Prep / waiting: host round-display-meta wins so headers can change with the selected round.
+ */
 function authoritativeRoundPlaylistNames(room) {
+  const current = sanitizeRoundPlaylistNames(room?.currentRoundPlaylistNames);
   const five = sanitizeRoundPlaylistNames(room?.fiveByFifteenPlaylistNames);
-  if (five.filter((name) => String(name || '').trim()).length === 5) return five;
-  return sanitizeRoundPlaylistNames(room?.currentRoundPlaylistNames);
+  const fiveOk = five.filter((name) => String(name || '').trim()).length === 5;
+  if (roomIsLivePlay(room) && fiveOk) return five;
+  if (current.some((name) => String(name || '').trim())) return current;
+  if (fiveOk) return five;
+  return current;
 }
 
 function syncCurrentRoundPlaylistNamesFromFiveByFifteen(room) {
@@ -3238,6 +3259,16 @@ function syncCurrentRoundPlaylistNamesFromFiveByFifteen(room) {
   const five = sanitizeRoundPlaylistNames(room.fiveByFifteenPlaylistNames);
   if (five.filter((name) => String(name || '').trim()).length !== 5) return;
   room.currentRoundPlaylistNames = five;
+}
+
+/** Drop stale 5×15 / 1×75 display pools when host switches prep rounds (headers must unlock). */
+function clearPublicDisplayPoolLayout(room) {
+  if (!room) return;
+  room.oneBySeventyFivePool = null;
+  room.fiveByFifteenColumnsIds = null;
+  room.fiveByFifteenColumns = null;
+  room.fiveByFifteenPlaylistNames = null;
+  room.fiveByFifteenMeta = null;
 }
 
 function sanitizeHttpUrl(raw, maxLen = 2000) {
@@ -6571,14 +6602,16 @@ io.on('connection', (socket) => {
       if (!isCurrentHost) return;
       room.currentRoundName = sanitizeRoundNameText(data.roundName);
       room.currentRoundPrize = sanitizeRoundPrizeText(data.prize);
-      // Do not let mix/display-meta overwrite 5×15 column headers once columns are locked.
-      const fiveLocked = sanitizeRoundPlaylistNames(room.fiveByFifteenPlaylistNames).filter((n) =>
-        String(n || '').trim(),
-      ).length === 5;
-      if (!fiveLocked) {
-        room.currentRoundPlaylistNames = sanitizeRoundPlaylistNames(data.playlistNames);
-      } else {
+      // Live play: keep 5×15 column headers locked. Prep/waiting: accept host round names
+      // so projector headers follow round changes (next / load / prep select).
+      const fiveLocked =
+        sanitizeRoundPlaylistNames(room.fiveByFifteenPlaylistNames).filter((n) =>
+          String(n || '').trim(),
+        ).length === 5;
+      if (roomIsLivePlay(room) && fiveLocked) {
         syncCurrentRoundPlaylistNamesFromFiveByFifteen(room);
+      } else {
+        room.currentRoundPlaylistNames = sanitizeRoundPlaylistNames(data.playlistNames);
       }
       const payload = {
         currentRoundName: room.currentRoundName || null,
@@ -8146,8 +8179,12 @@ io.on('connection', (socket) => {
     if (!isCurrentHost) return;
     try {
       if (!resetRoomCallHistoryForPrepSwitch(room)) return;
+      // Unlock projector headers: prior round's fiveByFifteenPlaylistNames must not
+      // keep authoritativeRoundPlaylistNames / set-round-display-meta stuck.
+      clearPublicDisplayPoolLayout(room);
+      io.to(roomId).emit('round-pool-cleared', { roomId });
       emitRoomCallLogReset(roomId, room);
-      routineServerLog(`🔄 Prep round selected — call log cleared for room ${roomId}`);
+      routineServerLog(`🔄 Prep round selected — call log + display pool cleared for room ${roomId}`);
     } catch (e) {
       console.error('❌ Error on prep-select-round:', e?.message || e);
     }
@@ -8204,14 +8241,19 @@ io.on('connection', (socket) => {
           const fromPlaylists = sanitizeRoundPlaylistNames(
             Array.isArray(playlists) ? playlists.map((playlist) => playlist?.name) : [],
           );
-          const fiveLocked = sanitizeRoundPlaylistNames(room.fiveByFifteenPlaylistNames).filter((n) =>
-            String(n || '').trim(),
-          ).length === 5;
-          // Prefer finalize column names when Start Game still has a live 5×15 pool
-          // (mixPlaylistSelection order can scramble personal vs catalog).
-          room.currentRoundPlaylistNames = fiveLocked
-            ? sanitizeRoundPlaylistNames(room.fiveByFifteenPlaylistNames)
-            : fromPlaylists;
+          const five = sanitizeRoundPlaylistNames(room.fiveByFifteenPlaylistNames);
+          const fiveLocked = five.filter((n) => String(n || '').trim()).length === 5;
+          const fromOk = fromPlaylists.filter((n) => String(n || '').trim()).length > 0;
+          // Same mix: prefer locked column order. New round (different names): use Start Game playlists.
+          if (fiveLocked && fromOk && playlistNamesEqualIgnoreOrder(five, fromPlaylists)) {
+            room.currentRoundPlaylistNames = five;
+          } else if (fromOk) {
+            room.currentRoundPlaylistNames = fromPlaylists;
+          } else if (fiveLocked) {
+            room.currentRoundPlaylistNames = five;
+          } else {
+            room.currentRoundPlaylistNames = [];
+          }
         }
         room.showNightBoard = false;
         clearNightBoardAutoHideTimer(room);
