@@ -171,12 +171,9 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
     <div className="host-round-hub-pattern__preview-row">
       <HostPatternMiniPreview
         pattern={pattern}
-        linesRequired={linesRequired}
-        customPattern={customMask}
-        customMatchReverse={customMatchReverse}
-        customMatchAllowRotation={customMatchAllowRotation}
-        customMatchAllowMirror={customMatchAllowMirror}
-        patternComposite={patternComposite}
+        linesRequired={pattern === 'line' ? linesRequired : undefined}
+        customPattern={pattern === 'custom' ? customMask : undefined}
+        patternComposite={pattern === 'composite' ? patternComposite : undefined}
         label={`Preview: ${previewLabel}`}
       />
       <span className="host-round-hub-pattern__preview-label">{previewLabel}</span>

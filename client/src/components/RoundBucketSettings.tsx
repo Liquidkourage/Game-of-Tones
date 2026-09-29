@@ -271,12 +271,9 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
       <div className="round-bucket-settings__preview-row">
         <HostPatternMiniPreview
           pattern={pattern}
-          linesRequired={round.linesRequired}
-          customPattern={round.customPatternMask}
-          customMatchReverse={round.customMatchReverse}
-          customMatchAllowRotation={round.customMatchAllowRotation}
-          customMatchAllowMirror={round.customMatchAllowMirror}
-          patternComposite={round.patternComposite}
+          linesRequired={pattern === 'line' ? round.linesRequired : undefined}
+          customPattern={pattern === 'custom' ? round.customPatternMask : undefined}
+          patternComposite={pattern === 'composite' ? round.patternComposite : undefined}
           label={`Preview: ${previewLabel}`}
         />
         <span className="round-bucket-settings__preview-label">{previewLabel}</span>

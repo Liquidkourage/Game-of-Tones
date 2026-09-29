@@ -1020,17 +1020,16 @@ export function patternHintCellPositions(opts: {
   }
 
   if (pattern === 'custom' && opts.customPattern?.length) {
-    return customMaskHighlightPositions([...opts.customPattern], {
-      matchReverse: opts.customMatchReverse,
-      matchAllowRotation: opts.customMatchAllowRotation,
-      matchAllowMirror: opts.customMatchAllowMirror,
-    });
+    // Preview/hint shows the painted shape only. Do not union reverse / rotation /
+    // mirror win variants — Reverse ∪ complement lights every cell (looks like full card).
+    return resolveCustomPatternMask([...opts.customPattern], false);
   }
 
   if (pattern === 'composite' && opts.patternComposite) {
     return unionCompositeHighlightPositions(opts.patternComposite);
   }
 
+  // Presets / cover-all: ignore any leftover custom mask or composite props.
   const def = BINGO_PATTERNS[pattern as BingoPattern];
   if (def?.positions?.length) return [...def.positions];
   return [];
