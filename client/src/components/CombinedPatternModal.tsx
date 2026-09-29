@@ -1,6 +1,7 @@
 import React from 'react';
-import { Save, Trash2 } from 'lucide-react';
+import { Pencil, Save, Trash2 } from 'lucide-react';
 import HostSubmodalPortal from './HostSubmodalPortal';
+import HostPatternMiniPreview from './HostPatternMiniPreview';
 import './CombinedPatternModal.css';
 import {
   BingoPattern,
@@ -19,6 +20,7 @@ import {
   LINE_PATTERN_MAX_LINES,
   normalizeLinesRequired,
   normalizePatternComposite,
+  renameSavedCompositePattern,
   saveCompositePattern,
 } from '../patternDefinitions';
 
@@ -123,11 +125,44 @@ const CombinedPatternModal: React.FC<CombinedPatternModalProps> = (props) => {
                   ))}
                 </select>
               </label>
+              {compositeRecipePickId ? (
+                <HostPatternMiniPreview
+                  pattern="composite"
+                  patternComposite={
+                    savedCompositePatterns.find((p) => p.id === compositeRecipePickId)?.spec ??
+                    patternComposite
+                  }
+                  label="Saved recipe preview"
+                />
+              ) : null}
+              <button
+                type="button"
+                className="btn-secondary host-btn--sm"
+                disabled={!compositeRecipePickId}
+                title="Rename this saved recipe"
+                onClick={() => {
+                  if (!compositeRecipePickId) return;
+                  const r = savedCompositePatterns.find((p) => p.id === compositeRecipePickId);
+                  const next = window.prompt('Rename saved recipe', r?.name ?? '');
+                  if (next == null) return;
+                  const updated = renameSavedCompositePattern(compositeRecipePickId, next);
+                  if (!updated) {
+                    showToast('Enter a non-empty name', 'warn');
+                    return;
+                  }
+                  setSavedCompositePatterns(getSavedCompositePatterns());
+                  addLog(`Renamed combined recipe to “${updated.name}”`, 'info');
+                  showToast(`Renamed to “${updated.name}”`, 'success');
+                }}
+              >
+                <Pencil className="w-3.5 h-3.5" aria-hidden />
+                Rename
+              </button>
               <button
                 type="button"
                 className="btn-danger-outline host-btn--sm"
                 disabled={!compositeRecipePickId}
-                title="Remove this recipe from this browser only"
+                title="Remove this recipe from this browser and org shelf"
                 onClick={() => {
                   if (!compositeRecipePickId) return;
                   const r = savedCompositePatterns.find((p) => p.id === compositeRecipePickId);
@@ -184,6 +219,15 @@ const CombinedPatternModal: React.FC<CombinedPatternModalProps> = (props) => {
                 <Save className="w-3.5 h-3.5" aria-hidden />
                 Save recipe
               </button>
+            </div>
+
+            <div className="host-combined-pattern__live-preview">
+              <span className="host-field-label">Current recipe</span>
+              <HostPatternMiniPreview
+                pattern="composite"
+                patternComposite={patternComposite}
+                label="Combined pattern preview"
+              />
             </div>
 
             <div className="host-combined-pattern__clauses">

@@ -1083,6 +1083,24 @@ export function deleteCustomPattern(id: string): void {
   }
 }
 
+/** Rename a saved custom shape in place (keeps id). Returns null if missing / empty name. */
+export function renameCustomPattern(id: string, name: string): SavedCustomPattern | null {
+  const trimmed = name.trim();
+  if (!trimmed || !id) return null;
+  const existing = getSavedCustomPatterns();
+  const idx = existing.findIndex((p) => p.id === id);
+  if (idx < 0) return null;
+  const updated: SavedCustomPattern = { ...existing[idx], name: trimmed };
+  existing[idx] = updated;
+  try {
+    localStorage.setItem(CUSTOM_PATTERNS_KEY, JSON.stringify(existing));
+  } catch (error) {
+    console.error('Failed to rename custom pattern:', error);
+    return null;
+  }
+  return updated;
+}
+
 /** Merge remote custom patterns into localStorage by id (remote wins on same id). */
 export function mergeSavedCustomPatterns(remote: SavedCustomPattern[]): SavedCustomPattern[] {
   const map = new Map<string, SavedCustomPattern>();
@@ -1186,6 +1204,24 @@ export function deleteSavedCompositePattern(id: string): void {
   } catch (error) {
     console.error('Failed to delete composite pattern:', error);
   }
+}
+
+/** Rename a saved combined recipe in place (keeps id). Returns null if missing / empty name. */
+export function renameSavedCompositePattern(id: string, name: string): SavedCompositePattern | null {
+  const trimmed = name.trim();
+  if (!trimmed || !id) return null;
+  const existing = getSavedCompositePatterns();
+  const idx = existing.findIndex((p) => p.id === id);
+  if (idx < 0) return null;
+  const updated: SavedCompositePattern = { ...existing[idx], name: trimmed };
+  existing[idx] = updated;
+  try {
+    localStorage.setItem(COMPOSITE_RECIPES_KEY, JSON.stringify(existing));
+  } catch (error) {
+    console.error('Failed to rename composite pattern:', error);
+    return null;
+  }
+  return updated;
 }
 
 /** Merge remote combined recipes into localStorage by id (remote wins on same id). */

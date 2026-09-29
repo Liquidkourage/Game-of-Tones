@@ -1,14 +1,19 @@
 import React from 'react';
-import { ListMusic, Printer, Save } from 'lucide-react';
+import { ListMusic, Pencil, Printer, Save, Trash2 } from 'lucide-react';
 import {
   BINGO_PATTERNS,
   PATTERN_OPTIONS,
   PRESET_SHAPE_PATTERNS,
   LINE_PATTERN_MAX_LINES,
   normalizeLinesRequired,
+  deleteCustomPattern,
+  getSavedCustomPatterns,
+  renameCustomPattern,
   type BingoPattern,
+  type PatternCompositeSpec,
   type SavedCustomPattern,
 } from '../patternDefinitions';
+import HostPatternMiniPreview from './HostPatternMiniPreview';
 
 export interface RoundBucketSettingsRound {
   id: string;
@@ -16,6 +21,7 @@ export interface RoundBucketSettingsRound {
   playlistIds: string[];
   bingoPattern?: BingoPattern;
   customPatternMask?: string[];
+  patternComposite?: PatternCompositeSpec;
   linesRequired?: number;
   freeSpaceEnabled?: boolean;
   customMatchReverse?: boolean;
@@ -44,6 +50,8 @@ interface RoundBucketSettingsProps {
   hostDefaultFreeSpace: boolean;
   savedCustomPatterns: SavedCustomPattern[];
   onUpdateBingo: (roundIndex: number, patch: RoundBucketBingoPatch) => void;
+  /** Refresh React state after localStorage rename/delete (also triggers org shelf replace). */
+  onSavedCustomPatternsChange?: (next: SavedCustomPattern[]) => void;
   onSaveRound?: () => void;
   saveRoundBusy?: boolean;
   snapshotReady: boolean;
@@ -63,12 +71,23 @@ interface RoundBucketSettingsProps {
   tracksLikelyLoading?: boolean;
 }
 
+function matchSavedCustomByMask(
+  mask: string[] | undefined,
+  saved: SavedCustomPattern[],
+): SavedCustomPattern | null {
+  if (!mask?.length) return null;
+  const norm = (arr: string[]) => [...arr].sort().join(',');
+  const key = norm(mask);
+  return saved.find((p) => norm(p.positions) === key) ?? null;
+}
+
 const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
   round,
   roundIndex,
   hostDefaultFreeSpace,
   savedCustomPatterns,
   onUpdateBingo,
+  onSavedCustomPatternsChange,
   onSaveRound,
   saveRoundBusy,
   snapshotReady,
@@ -89,6 +108,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
     round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : hostDefaultFreeSpace;
   /** Card-ready tracks required to save: dynamic 24/25 by Free Center unless geometry needs 75. */
   const requiredTracks = minRequired ?? (freeCenter ? 24 : 25);
+  const selectedSavedCustom = matchSavedCustomByMask(round.customPatternMask, savedCustomPatterns);
 
   /**
    * Readiness copy distinguishes Spotify-listed metadata from the actual loaded/deduped
@@ -128,6 +148,32 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
       window.setTimeout(() => openCombinedEditor(), 0);
     }
     if (v === 'custom') onNewCustomPattern?.(roundIndex);
+  };
+
+  const previewLabel =
+    pattern === 'custom' && selectedSavedCustom
+      ? selectedSavedCustom.name
+      : pattern === 'composite'
+        ? BINGO_PATTERNS.composite.label
+        : BINGO_PATTERNS[pattern]?.label ?? 'Pattern';
+
+  const handleRenameSavedCustom = () => {
+    if (!selectedSavedCustom) return;
+    const next = window.prompt('Rename saved shape', selectedSavedCustom.name);
+    if (next == null) return;
+    const updated = renameCustomPattern(selectedSavedCustom.id, next);
+    if (!updated) {
+      window.alert('Enter a non-empty name.');
+      return;
+    }
+    onSavedCustomPatternsChange?.(getSavedCustomPatterns());
+  };
+
+  const handleDeleteSavedCustom = () => {
+    if (!selectedSavedCustom) return;
+    if (!window.confirm(`Delete saved shape “${selectedSavedCustom.name}”?`)) return;
+    deleteCustomPattern(selectedSavedCustom.id);
+    onSavedCustomPatternsChange?.(getSavedCustomPatterns());
   };
 
   return (
@@ -212,6 +258,20 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
         })}
       </div>
 
+      <div className="round-bucket-settings__preview-row">
+        <HostPatternMiniPreview
+          pattern={pattern}
+          linesRequired={round.linesRequired}
+          customPattern={round.customPatternMask}
+          customMatchReverse={round.customMatchReverse}
+          customMatchAllowRotation={round.customMatchAllowRotation}
+          customMatchAllowMirror={round.customMatchAllowMirror}
+          patternComposite={round.patternComposite}
+          label={`Preview: ${previewLabel}`}
+        />
+        <span className="round-bucket-settings__preview-label">{previewLabel}</span>
+      </div>
+
       {(pattern === 'composite' || pattern === 'custom') && (onOpenComposite || onNewCustomPattern) ? (
         <div className="round-bucket-settings__pattern-editor">
           {pattern === 'composite' && onOpenComposite ? (
@@ -245,14 +305,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
             <span className="round-bucket-settings__label">Saved shape</span>
             <select
               className="round-bucket-settings__select"
-              value={(() => {
-                const mask = round.customPatternMask;
-                if (!mask?.length) return '';
-                const norm = (arr: string[]) => [...arr].sort().join(',');
-                const key = norm(mask);
-                const sp = savedCustomPatterns.find((p) => norm(p.positions) === key);
-                return sp?.id ?? '';
-              })()}
+              value={selectedSavedCustom?.id ?? ''}
               onChange={(e) => {
                 const id = e.target.value;
                 const sp = savedCustomPatterns.find((p) => p.id === id);
@@ -275,6 +328,34 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
               ))}
             </select>
           </label>
+          {selectedSavedCustom ? (
+            <div className="round-bucket-settings__library-actions">
+              <button
+                type="button"
+                className="round-bucket-settings__link-btn"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleRenameSavedCustom();
+                }}
+              >
+                <Pencil className="w-3 h-3" aria-hidden />
+                Rename
+              </button>
+              <button
+                type="button"
+                className="round-bucket-settings__link-btn round-bucket-settings__link-btn--danger"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleDeleteSavedCustom();
+                }}
+              >
+                <Trash2 className="w-3 h-3" aria-hidden />
+                Delete
+              </button>
+            </div>
+          ) : null}
           {onNewCustomPattern ? (
             <button
               type="button"

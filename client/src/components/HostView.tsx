@@ -12024,6 +12024,13 @@ const HostView: React.FC = () => {
         hostDefaultFreeSpace={freeSpaceEnabled}
         savedCustomPatterns={savedCustomPatterns}
         onUpdateRoundBingo={handleUpdateRoundBingoFields}
+        onSavedCustomPatternsChange={(next) => {
+          setSavedCustomPatterns(next);
+          setSelectedCustomPattern((cur) => {
+            if (!cur) return null;
+            return next.find((p) => p.id === cur.id) ?? null;
+          });
+        }}
         onSaveRound={(idx) => void handleSaveRoundAtIndex(idx)}
         saveRoundBusy={saveRoundBusy}
         snapshotMeetsSave={(r) => eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled)}

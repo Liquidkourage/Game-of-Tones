@@ -705,6 +705,27 @@
   align-items: center;
 }
 
+.round-bucket-settings__preview-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.round-bucket-settings__preview-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(200, 247, 228, 0.9);
+  line-height: 1.3;
+}
+
+.round-bucket-settings__library-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
 .round-bucket-settings__shape {
   padding: 5px 10px;
   border-radius: 8px;
@@ -780,6 +801,9 @@
 }
 
 .round-bucket-settings__link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 0;
   border: none;
   background: none;
@@ -789,6 +813,10 @@
   cursor: pointer;
   text-decoration: underline;
   text-align: left;
+}
+
+.round-bucket-settings__link-btn--danger {
+  color: #fca5a5;
 }
 
 /* Prep checklist + playback (round builder) */

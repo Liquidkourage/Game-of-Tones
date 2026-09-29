@@ -99,6 +99,8 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   hostDefaultFreeSpace: boolean;
   savedCustomPatterns: SavedCustomPattern[];
   onUpdateRoundBingo: (roundIndex: number, patch: RoundBucketBingoPatch) => void;
+  /** After rename/delete of a saved custom shape in Card setup. */
+  onSavedCustomPatternsChange?: (next: SavedCustomPattern[]) => void;
   onSaveRound?: (roundIndex: number) => void;
   saveRoundBusy?: boolean;
   snapshotMeetsSave: (round: TRound) => boolean;
@@ -173,6 +175,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   hostDefaultFreeSpace,
   savedCustomPatterns,
   onUpdateRoundBingo,
+  onSavedCustomPatternsChange,
   onSaveRound,
   saveRoundBusy,
   snapshotMeetsSave,
@@ -741,6 +744,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           hostDefaultFreeSpace={hostDefaultFreeSpace}
           savedCustomPatterns={savedCustomPatterns}
           onUpdateBingo={onUpdateRoundBingo}
+          onSavedCustomPatternsChange={onSavedCustomPatternsChange}
           onSaveRound={onSaveRound ? () => onSaveRound(index) : undefined}
           saveRoundBusy={saveRoundBusy}
           snapshotReady={snapshotMeetsSave(focused)}

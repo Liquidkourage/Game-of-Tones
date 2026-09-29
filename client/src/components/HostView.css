@@ -851,6 +851,45 @@
   margin-bottom: 12px;
 }
 
+.host-round-hub-pattern__preview-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.host-round-hub-pattern__preview-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(200, 247, 228, 0.9);
+}
+
+.host-round-hub-pattern__library-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.host-round-hub-pattern__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #7dd3fc;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.host-round-hub-pattern__link--danger {
+  color: #fca5a5;
+}
+
 .host-round-hub-pattern__shape {
   padding: 8px 12px;
   border-radius: 8px;

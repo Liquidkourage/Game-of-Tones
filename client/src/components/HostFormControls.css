@@ -362,6 +362,38 @@
   color: #001a0d;
 }
 
+/* Compact read-only pattern preview on Card setup */
+.host-ui .host-pattern-mini-preview,
+.host-view .host-pattern-mini-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.host-ui .host-pattern-mini-preview__grid,
+.host-view .host-pattern-mini-preview__grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 3px;
+  width: 72px;
+  flex-shrink: 0;
+}
+
+.host-ui .host-pattern-mini-preview__cell,
+.host-view .host-pattern-mini-preview__cell {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.host-ui .host-pattern-mini-preview__cell--on,
+.host-view .host-pattern-mini-preview__cell--on {
+  border-color: rgba(0, 255, 180, 0.65);
+  background: #00ff88;
+}
+
 .host-ui .host-muted,
 .host-view .host-muted {
   color: #9aa5b1;

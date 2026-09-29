@@ -1,15 +1,18 @@
 import React from 'react';
-import { Plus } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import {
   BINGO_PATTERNS,
   PRESET_SHAPE_PATTERNS,
   LINE_PATTERN_MAX_LINES,
   normalizeLinesRequired,
-  describeCompositePatternAudienceSentence,
+  deleteCustomPattern,
+  getSavedCustomPatterns,
+  renameCustomPattern,
   type BingoPattern,
   type PatternCompositeSpec,
   type SavedCustomPattern,
 } from '../patternDefinitions';
+import HostPatternMiniPreview from './HostPatternMiniPreview';
 
 export interface HostRoundHubPatternPanelProps {
   targetRoundLabel: string | null;
@@ -25,6 +28,7 @@ export interface HostRoundHubPatternPanelProps {
   selectedCustomPattern: SavedCustomPattern | null;
   onSelectSavedCustom: (p: SavedCustomPattern) => void;
   onNewCustomPattern: () => void;
+  onSavedCustomPatternsChange?: (next: SavedCustomPattern[]) => void;
   customMask: string[];
   customMatchReverse: boolean;
   customMatchAllowRotation: boolean;
@@ -49,6 +53,7 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
   selectedCustomPattern,
   onSelectSavedCustom,
   onNewCustomPattern,
+  onSavedCustomPatternsChange,
   customMask,
   customMatchReverse,
   customMatchAllowRotation,
@@ -57,8 +62,38 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
   onCustomMatchMirrorChange,
   onCustomMatchReverseChange,
   getPatternDisplayName,
-}) => (
-  <div className="host-round-hub-pattern">
+}) => {
+  const previewLabel =
+    pattern === 'custom' && selectedCustomPattern
+      ? selectedCustomPattern.name
+      : pattern === 'composite'
+        ? `${BINGO_PATTERNS.composite.label} (${patternComposite.op.toUpperCase()})`
+        : getPatternDisplayName(pattern);
+
+  const handleRename = () => {
+    if (!selectedCustomPattern) return;
+    const next = window.prompt('Rename saved shape', selectedCustomPattern.name);
+    if (next == null) return;
+    const updated = renameCustomPattern(selectedCustomPattern.id, next);
+    if (!updated) {
+      window.alert('Enter a non-empty name.');
+      return;
+    }
+    onSavedCustomPatternsChange?.(getSavedCustomPatterns());
+  };
+
+  const handleDelete = () => {
+    if (!selectedCustomPattern) return;
+    if (!window.confirm(`Delete saved shape “${selectedCustomPattern.name}”?`)) return;
+    deleteCustomPattern(selectedCustomPattern.id);
+    onSavedCustomPatternsChange?.(getSavedCustomPatterns());
+  };
+
+  return (
+  <div className="host-round-hub-pattern host-ui">
+    {targetRoundLabel ? (
+      <p className="host-round-hub-pattern__lead">Pattern for {targetRoundLabel}</p>
+    ) : null}
     <div className="host-round-hub-pattern__main">
       {(['line', 'full_card', 'composite'] as const).map((key) => {
         const def = BINGO_PATTERNS[key];
@@ -131,6 +166,20 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
       })}
     </div>
 
+    <div className="host-round-hub-pattern__preview-row">
+      <HostPatternMiniPreview
+        pattern={pattern}
+        linesRequired={linesRequired}
+        customPattern={customMask}
+        customMatchReverse={customMatchReverse}
+        customMatchAllowRotation={customMatchAllowRotation}
+        customMatchAllowMirror={customMatchAllowMirror}
+        patternComposite={patternComposite}
+        label={`Preview: ${previewLabel}`}
+      />
+      <span className="host-round-hub-pattern__preview-label">{previewLabel}</span>
+    </div>
+
     <label className="host-round-hub-pattern__free">
       <input type="checkbox" checked={freeSpaceEnabled} onChange={(e) => onFreeSpaceChange(e.target.checked)} />
       Free center (counts without that song playing)
@@ -156,6 +205,19 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
         New custom
       </button>
     </div>
+
+    {selectedCustomPattern ? (
+      <div className="host-round-hub-pattern__library-actions">
+        <button type="button" className="host-round-hub-pattern__link" onClick={handleRename}>
+          <Pencil className="w-3.5 h-3.5" aria-hidden />
+          Rename
+        </button>
+        <button type="button" className="host-round-hub-pattern__link host-round-hub-pattern__link--danger" onClick={handleDelete}>
+          <Trash2 className="w-3.5 h-3.5" aria-hidden />
+          Delete
+        </button>
+      </div>
+    ) : null}
 
     {pattern === 'custom' && customMask.length > 0 ? (
       <div className="host-round-hub-pattern__custom-rules">
@@ -188,20 +250,10 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
 
     <p className="host-round-hub-pattern__current">
       Current:{' '}
-      <strong>
-        {pattern === 'custom' && selectedCustomPattern
-          ? selectedCustomPattern.name
-          : pattern === 'composite'
-            ? `${BINGO_PATTERNS.composite.label} (${patternComposite.op.toUpperCase()})`
-            : getPatternDisplayName(pattern)}
-      </strong>
-      {pattern === 'composite' ? (
-        <span className="host-round-hub-pattern__composite-desc">
-          {describeCompositePatternAudienceSentence(patternComposite)}
-        </span>
-      ) : null}
+      <strong>{previewLabel}</strong>
     </p>
   </div>
-);
+  );
+};
 
 export default HostRoundHubPatternPanel;
