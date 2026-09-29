@@ -2780,8 +2780,9 @@ body {
 
 /*
  * Multi-card: bingo card must fit the carousel viewport, not 95vw.
- * Otherwise overflow-x:hidden on the main column clips the B/O columns,
- * and absolute arrows cover what's left (worst on desktop).
+ * Otherwise overflow-x:hidden clips T/S (only O/N/E visible) and absolute
+ * arrows sit in empty gutters. v2 also sets width with !important later —
+ * a matching --v2 override lives after .player-container--v2 .bingo-card.
  */
 .player-card-carousel__viewport .bingo-card,
 .player-card-carousel__viewport .bingo-card--empty {
@@ -2877,7 +2878,7 @@ body {
 }
 
 @media (min-width: 900px) {
-  /* Desktop: bigger hit targets; arrows in-flow so they never cover B/O columns */
+  /* Desktop: bigger hit targets; arrows in-flow so they never cover T/S columns */
   .player-card-carousel__stage {
     gap: 0.65rem;
   }
@@ -2905,6 +2906,19 @@ body {
   .player-card-carousel__viewport {
     flex: 1 1 auto;
     min-width: 0;
+    /* Grow with the card; do not shrink the grid to phone-narrow */
+    width: auto;
+    max-width: 100%;
+  }
+
+  /* Wider desktop card so all five TONES columns stay readable */
+  .player-container--v2 {
+    --player-card-col-max: min(900px, min(94vw, 82vmin));
+  }
+
+  /* Multi-card: stage wider than the card so in-flow arrows sit beside T/S */
+  .player-container--v2 .player-bingo-stage:has(.player-card-carousel) {
+    max-width: min(calc(var(--player-card-col-max) + 8rem), 98vw);
   }
 }
 
@@ -6252,8 +6266,10 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-container--v2 .bingo-card {
-  width: var(--player-v2-card-width) !important;
-  max-width: var(--player-v2-card-width) !important;
+  /* Prefer 95vw on phone; never exceed the parent (stage / carousel viewport).
+   * Fixed 95vw inside a narrower overflow:hidden viewport clipped T/S on desktop. */
+  width: min(100%, var(--player-v2-card-width)) !important;
+  max-width: min(100%, var(--player-v2-card-width)) !important;
   height: var(--player-v2-card-height) !important;
   max-height: var(--player-v2-card-height) !important;
   min-height: 0 !important;
@@ -6267,6 +6283,7 @@ button.conn-chip.conn-chip-compact {
   transition: opacity 160ms ease, transform 160ms ease;
   position: relative;
   z-index: 1;
+  box-sizing: border-box;
 }
 
 .player-container--v2 .bingo-card--fit-pending {
@@ -6287,13 +6304,24 @@ button.conn-chip.conn-chip-compact {
 .player-container--v2 .bingo-card--empty {
   display: flex;
   flex-direction: column;
-  width: var(--player-v2-card-width) !important;
-  max-width: var(--player-v2-card-width) !important;
+  width: min(100%, var(--player-v2-card-width)) !important;
+  max-width: min(100%, var(--player-v2-card-width)) !important;
   height: var(--player-v2-card-height) !important;
   max-height: var(--player-v2-card-height) !important;
   min-height: 0 !important;
   flex: none !important;
   position: relative;
+  box-sizing: border-box;
+}
+
+/*
+ * Multi-card: must beat the v2 width rule above (same !important, later + higher specificity).
+ * Keeps the grid inside the carousel viewport so T/S are not clipped.
+ */
+.player-container--v2 .player-card-carousel__viewport .bingo-card,
+.player-container--v2 .player-card-carousel__viewport .bingo-card--empty {
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 .player-container--v2 .bingo-column-headers {
