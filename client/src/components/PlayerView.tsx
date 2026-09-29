@@ -139,6 +139,86 @@ function stripGotPlaylistPrefix(raw: string): string {
   return raw.replace(/^\s*GoT(?=$|[\s\-–—:])\s*[-–—:]*\s*/, '').trim();
 }
 
+/**
+ * Authoritative win-pattern fields from server payloads (game-started, pattern-updated, room-state).
+ * Always prefer these over the client default so “WIN WITH …” matches win validation.
+ */
+function patternFieldsFromServerPayload(
+  data: any,
+  prev?: Pick<
+    GameState,
+    | 'pattern'
+    | 'customPattern'
+    | 'patternComposite'
+    | 'linesRequired'
+    | 'customMatchReverse'
+    | 'customMatchAllowRotation'
+    | 'customMatchAllowMirror'
+    | 'customPatternName'
+  >,
+): Pick<
+  GameState,
+  | 'pattern'
+  | 'customPattern'
+  | 'patternComposite'
+  | 'linesRequired'
+  | 'customMatchReverse'
+  | 'customMatchAllowRotation'
+  | 'customMatchAllowMirror'
+  | 'customPatternName'
+> {
+  const raw =
+    typeof data?.pattern === 'string' && data.pattern.length > 0
+      ? data.pattern
+      : prev?.pattern || 'line';
+  const pattern = raw === 'blackout' ? 'full_card' : raw;
+
+  const linesRequired =
+    pattern === 'line'
+      ? normalizeLinesRequired(
+          data?.linesRequired != null ? data.linesRequired : (prev?.linesRequired ?? 1),
+        )
+      : 1;
+
+  const customPattern =
+    pattern === 'custom' && Array.isArray(data?.customMask) && data.customMask.length > 0
+      ? (data.customMask as string[])
+      : pattern === 'custom'
+        ? prev?.customPattern
+        : undefined;
+
+  const patternComposite =
+    pattern === 'composite'
+      ? normalizePatternComposite(data?.patternComposite) ?? prev?.patternComposite ?? undefined
+      : undefined;
+
+  if (pattern === 'custom') {
+    const nameFromServer =
+      typeof data?.customPatternName === 'string' ? data.customPatternName.trim().slice(0, 80) : null;
+    return {
+      pattern,
+      customPattern,
+      patternComposite: undefined,
+      linesRequired,
+      customMatchReverse: !!data?.customMatchReverse,
+      customMatchAllowRotation: !!data?.customMatchAllowRotation,
+      customMatchAllowMirror: !!data?.customMatchAllowMirror,
+      customPatternName: nameFromServer != null ? nameFromServer : prev?.customPatternName || '',
+    };
+  }
+
+  return {
+    pattern,
+    customPattern: undefined,
+    patternComposite,
+    linesRequired,
+    customMatchReverse: false,
+    customMatchAllowRotation: false,
+    customMatchAllowMirror: false,
+    customPatternName: undefined,
+  };
+}
+
 function formatPlayerRoundDate(iso: string | null | undefined): string {
   if (!iso) return 'Unknown date';
   try {
@@ -261,7 +341,8 @@ const PlayerView: React.FC = () => {
     isPlaying: false,
     playerCount: 0,
     hasBingo: false,
-    pattern: 'full_card'
+    pattern: 'line',
+    linesRequired: 1,
   });
   /** 5×15 mode: playlist name per column (from server `fiveby15-pool`). */
   const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
@@ -920,43 +1001,11 @@ const PlayerView: React.FC = () => {
         setOneBy75PlaylistNames(roundNames.filter((n: string) => n.trim()));
         setBingoColumnPlaylistNames([]);
       }
-      const lr =
-        data?.pattern === 'line' && data?.linesRequired != null ? normalizeLinesRequired(data.linesRequired) : undefined;
-      const cre =
-        data?.pattern === 'custom'
-          ? { rev: !!data.customMatchReverse, rot: !!data.customMatchAllowRotation, mir: !!data.customMatchAllowMirror }
-          : { rev: false, rot: false, mir: false };
-      const customName =
-        data?.pattern === 'custom' && typeof data?.customPatternName === 'string'
-          ? data.customPatternName.trim().slice(0, 80)
-          : '';
       setGameState((prev) => ({
         ...prev,
         isPlaying: true,
         hasBingo: false,
-        pattern: data?.pattern || 'full_card',
-        customPattern:
-          data?.pattern === 'custom' && Array.isArray(data?.customMask) && data.customMask.length > 0
-            ? data.customMask
-            : undefined,
-        patternComposite:
-          data?.pattern === 'composite'
-            ? normalizePatternComposite(data.patternComposite) ?? undefined
-            : undefined,
-        ...(lr !== undefined ? { linesRequired: lr } : {}),
-        ...(data?.pattern === 'custom'
-          ? {
-              customMatchReverse: cre.rev,
-              customMatchAllowRotation: cre.rot,
-              customMatchAllowMirror: cre.mir,
-              customPatternName: customName,
-            }
-          : {
-              customMatchReverse: false,
-              customMatchAllowRotation: false,
-              customMatchAllowMirror: false,
-              customPatternName: undefined,
-            }),
+        ...patternFieldsFromServerPayload(data, prev),
       }));
       setBingoStatus('idle');
       setBingoMessage('');
@@ -983,72 +1032,48 @@ const PlayerView: React.FC = () => {
           setMySongRequests(mergeMySongRequests([], payload.mySongRequests));
         }
         // Intentionally ignore playedSongIds / currentSong — call identity stays off player phones.
-        
-        if (payload?.isPlaying) {
-          const pat = typeof payload?.pattern === 'string' && payload.pattern.length > 0 ? payload.pattern : undefined;
+
+        // Pattern meta always comes from the server (prep + live + late join / sync-state).
+        // Do not gate on isPlaying — that left phones stuck on the client default ("full_card").
+        const hasPatternMeta =
+          (typeof payload?.pattern === 'string' && payload.pattern.length > 0) ||
+          Array.isArray(payload?.customMask) ||
+          payload?.patternComposite != null ||
+          payload?.linesRequired != null;
+        const nextPlayerCount =
+          typeof payload?.playerCount === 'number' ? payload.playerCount : undefined;
+
+        if (hasPatternMeta || nextPlayerCount !== undefined || payload?.isPlaying !== undefined) {
           setGameState((prev) => {
-            const effectivePat = pat || prev.pattern;
-            const lr =
-              effectivePat === 'line' && payload?.linesRequired != null
-                ? normalizeLinesRequired(payload.linesRequired)
-                : undefined;
-            const nextPlayerCount =
-              typeof payload?.playerCount === 'number' ? payload.playerCount : prev.playerCount;
-            const nextCustom =
-              effectivePat === 'custom' &&
-              Array.isArray(payload?.customMask) &&
-              payload.customMask.length > 0
-                ? payload.customMask
-                : effectivePat === 'custom'
-                  ? prev.customPattern
-                  : undefined;
-            const nextComposite =
-              effectivePat === 'composite'
-                ? normalizePatternComposite(payload.patternComposite) ?? prev.patternComposite
-                : pat && pat !== 'composite'
-                  ? undefined
-                  : prev.patternComposite;
-            const nextRev = effectivePat === 'custom' ? !!payload.customMatchReverse : false;
-            const nextRot = effectivePat === 'custom' ? !!payload.customMatchAllowRotation : false;
-            const nextMir = effectivePat === 'custom' ? !!payload.customMatchAllowMirror : false;
-            const nextCustomName =
-              effectivePat === 'custom' && typeof payload?.customPatternName === 'string'
-                ? payload.customPatternName.trim().slice(0, 80)
-                : effectivePat === 'custom'
-                  ? prev.customPatternName || ''
-                  : undefined;
+            const patternFields = hasPatternMeta
+              ? patternFieldsFromServerPayload(payload, prev)
+              : null;
+            const nextPlaying =
+              payload?.isPlaying !== undefined ? !!payload.isPlaying : prev.isPlaying;
+            const mergedPlayerCount =
+              nextPlayerCount !== undefined ? nextPlayerCount : prev.playerCount;
             if (
-              prev.isPlaying &&
-              effectivePat === prev.pattern &&
-              nextPlayerCount === prev.playerCount &&
-              nextCustom === prev.customPattern &&
-              nextComposite === prev.patternComposite &&
-              (lr === undefined || lr === prev.linesRequired) &&
-              nextRev === !!prev.customMatchReverse &&
-              nextRot === !!prev.customMatchAllowRotation &&
-              nextMir === !!prev.customMatchAllowMirror &&
-              nextCustomName === prev.customPatternName
+              prev.isPlaying === nextPlaying &&
+              prev.playerCount === mergedPlayerCount &&
+              (!patternFields ||
+                (patternFields.pattern === prev.pattern &&
+                  patternFields.customPattern === prev.customPattern &&
+                  patternFields.patternComposite === prev.patternComposite &&
+                  patternFields.linesRequired === prev.linesRequired &&
+                  patternFields.customMatchReverse === !!prev.customMatchReverse &&
+                  patternFields.customMatchAllowRotation === !!prev.customMatchAllowRotation &&
+                  patternFields.customMatchAllowMirror === !!prev.customMatchAllowMirror &&
+                  patternFields.customPatternName === prev.customPatternName))
             ) {
               return prev;
             }
             return {
               ...prev,
-              isPlaying: true,
-              pattern: effectivePat,
-              playerCount: nextPlayerCount,
-              customPattern: nextCustom,
-              patternComposite: nextComposite,
-              ...(lr !== undefined ? { linesRequired: lr } : {}),
-              customMatchReverse: nextRev,
-              customMatchAllowRotation: nextRot,
-              customMatchAllowMirror: nextMir,
-              customPatternName: nextCustomName,
+              isPlaying: nextPlaying,
+              playerCount: mergedPlayerCount,
+              ...(patternFields || {}),
             };
           });
-        } else if (typeof payload?.playerCount === 'number') {
-          setGameState((prev) =>
-            prev.playerCount === payload.playerCount ? prev : { ...prev, playerCount: payload.playerCount },
-          );
         }
       } catch {}
     });
@@ -1177,48 +1202,10 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('pattern-updated', (data: any) => {
-      const p = typeof data?.pattern === 'string' && data.pattern.length > 0 ? data.pattern : undefined;
-      setGameState((prev) => {
-        const nextPat = p ?? prev.pattern;
-        const lr =
-          nextPat === 'line' && data?.linesRequired != null
-            ? normalizeLinesRequired(data.linesRequired)
-            : undefined;
-        return {
-          ...prev,
-          pattern: nextPat,
-          customPattern: Array.isArray(data?.customMask)
-            ? data.customMask.length > 0
-              ? data.customMask
-              : undefined
-            : p === 'custom'
-              ? prev.customPattern
-              : undefined,
-          patternComposite:
-            p === 'composite'
-              ? normalizePatternComposite(data.patternComposite) ?? prev.patternComposite
-              : p && p !== 'composite'
-                ? undefined
-                : prev.patternComposite,
-          ...(lr !== undefined ? { linesRequired: lr } : {}),
-          ...(nextPat === 'custom'
-            ? {
-                customMatchReverse: !!data.customMatchReverse,
-                customMatchAllowRotation: !!data.customMatchAllowRotation,
-                customMatchAllowMirror: !!data.customMatchAllowMirror,
-                customPatternName:
-                  typeof data?.customPatternName === 'string'
-                    ? data.customPatternName.trim().slice(0, 80)
-                    : prev.customPatternName || '',
-              }
-            : {
-                customMatchReverse: false,
-                customMatchAllowRotation: false,
-                customMatchAllowMirror: false,
-                customPatternName: undefined,
-              }),
-        };
-      });
+      setGameState((prev) => ({
+        ...prev,
+        ...patternFieldsFromServerPayload(data, prev),
+      }));
     });
 
     // Handle bingo validation result (for the caller)
@@ -1380,7 +1367,7 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('game-reset', () => {
-      setGameState({ isPlaying: false, playerCount: 0, hasBingo: false, pattern: 'full_card' });
+      setGameState({ isPlaying: false, playerCount: 0, hasBingo: false, pattern: 'line', linesRequired: 1 });
       setBingoCards([]);
       setActiveCardIndex(0);
       // Clear persisted marks

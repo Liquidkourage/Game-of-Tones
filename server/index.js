@@ -3167,10 +3167,7 @@ function resetRoomCallHistoryForPrepSwitch(room) {
 function emitRoomCallLogReset(roomId, room) {
   const payload = {
     isPlaying: room.gameState === 'playing',
-    pattern: room.pattern || 'line',
-    customMask: Array.from(room.customPattern || []),
-    patternComposite: patternCompositeForClient(room),
-    ...patternExtrasForClient(room),
+    ...patternMetaForClient(room),
     currentSong: null,
     snippetLength: room.snippetLength || 30,
     playerCount: getNonHostPlayerCount(room),
@@ -3815,10 +3812,7 @@ function syncRoomStateAfterSongStart(roomId, room) {
   const playedSongIds = syncCalledSongIdsFromPlaybackIndex(room);
   const syncPayload = {
     isPlaying: room.gameState === 'playing',
-    pattern: room.pattern || 'line',
-    customMask: Array.from(room.customPattern || []),
-    patternComposite: patternCompositeForClient(room),
-    ...patternExtrasForClient(room),
+    ...patternMetaForClient(room),
     currentSong: currentSongPayloadForRoomState(room.currentSong, room.dbOrganizationId ?? null),
     snippetLength: room.snippetLength || 30,
     randomStarts: room.randomStarts || 'none',
@@ -5628,10 +5622,7 @@ io.on('connection', (socket) => {
           
           socket.emit('room-state', {
             isPlaying: room.gameState === 'playing',
-            pattern: room.pattern || 'line',
-            customMask: Array.from(room.customPattern || []),
-            patternComposite: patternCompositeForClient(room),
-            ...patternExtrasForClient(room),
+            ...patternMetaForClient(room),
             currentSong: currentSongPayloadForRoomState(room.currentSong, room.dbOrganizationId ?? null),
             snippetLength: room.snippetLength || 30,
             randomStarts: room.randomStarts || 'none',
@@ -5685,7 +5676,8 @@ io.on('connection', (socket) => {
           routineServerLog(`✅ Host reconnection state sync complete for ${playerName}`);
         } else {
           // Non-host player: do NOT push currently-playing track (cheat vector).
-          // Cards + pattern arrive via room-joined / bingo-cards / safe room-state.
+          // Cards via bingo-cards; pattern via pattern-updated + sync-state room-state.
+          socket.emit('pattern-updated', patternMetaForClient(room));
         }
 
         await restoreOrDealBingoCardForJoiner(room, roomId, socket, clientId, { allowDeal: true });
@@ -6374,12 +6366,7 @@ io.on('connection', (socket) => {
       } else {
         room.linesRequired = 1;
       }
-      io.to(roomId).emit('pattern-updated', {
-        pattern: room.pattern,
-        customMask: Array.from(room.customPattern || []),
-        patternComposite: patternCompositeForClient(room),
-        ...patternExtrasForClient(room),
-      });
+      io.to(roomId).emit('pattern-updated', patternMetaForClient(room));
       routineServerLog(`🎯 Pattern set to ${room.pattern} for room ${roomId}`);
     } catch (e) {
       console.error('❌ Error setting pattern:', e?.message || e);
@@ -7973,10 +7960,7 @@ io.on('connection', (socket) => {
       // Enhanced payload with more comprehensive state data
       const payload = {
         isPlaying: room.gameState === 'playing',
-        pattern: room.pattern || 'line',
-        customMask: Array.from(room.customPattern || []),
-        patternComposite: patternCompositeForClient(room),
-        ...patternExtrasForClient(room),
+        ...patternMetaForClient(room),
         currentSong: currentSongPayloadForRoomState(room.currentSong, room.dbOrganizationId ?? null),
         snippetLength: room.snippetLength || 30,
         playerCount: getNonHostPlayerCount(room),
@@ -8554,12 +8538,9 @@ io.on('connection', (socket) => {
           room.fiveByFifteenMeta = null;
         }
 
-        // CRITICAL: Auto-set pattern to 'full_card' for 1x75 mode if pattern wasn't explicitly set
-        if (room.oneBySeventyFivePool && room.oneBySeventyFivePool.length === 75 && !incomingPattern) {
-          routineServerLog('🎯 1x75 mode detected: Auto-setting pattern to full_card');
-          room.pattern = 'full_card';
-          room.patternComposite = undefined;
-        }
+        // CRITICAL: Do not auto-force full_card on 1×75 — host round pattern (line / custom /
+        // combined / corners) is authoritative for win checks and player “WIN WITH” hints.
+        // Legacy behavior stomped set-pattern when start-game omitted `pattern`.
 
         routineServerLog(
           `🎲 Start-game playback order (${showDeck.length} tracks, ${useLockedPlayOrder ? 'locked at Save round' : 'shuffled now'}) — play 1→${showDeck.length}${useSavedRoundPlayback ? ' [saved round]' : ''}`,
@@ -8605,11 +8586,8 @@ io.on('connection', (socket) => {
           roomId,
           snippetLength,
           deviceId,
-          pattern: room.pattern,
-          customMask: Array.from(room.customPattern || []),
-          patternComposite: patternCompositeForClient(room),
+          ...patternMetaForClient(room),
           // playbackOrder omitted from room broadcast — host gets it via finalized-order
-          ...patternExtrasForClient(room),
           currentRoundName: room.currentRoundName || null,
           currentRoundPrize: room.currentRoundPrize || null,
           currentRoundPlaylistNames: authoritativeRoundPlaylistNames(room),
@@ -12642,6 +12620,16 @@ function patternExtrasForClient(room) {
     };
   }
   return {};
+}
+
+/** Single source of truth for player/host/display pattern payloads. */
+function patternMetaForClient(room) {
+  return {
+    pattern: room?.pattern || 'line',
+    customMask: Array.from(room?.customPattern || []),
+    patternComposite: patternCompositeForClient(room),
+    ...patternExtrasForClient(room),
+  };
 }
 
 function listCompletedLinesPlayedStrict(card, isMarkedSquareValid) {
