@@ -2779,10 +2779,11 @@ body {
 }
 
 /*
- * Multi-card: bingo card must fit the carousel viewport, not 95vw.
- * Otherwise overflow-x:hidden clips T/S (only O/N/E visible) and absolute
- * arrows sit in empty gutters. v2 also sets width with !important later —
- * a matching --v2 override lives after .player-container--v2 .bingo-card.
+ * Multi-card: bingo card must fit the carousel viewport, not a raw 95vw
+ * that can exceed an overflow:hidden parent (clips T/S). Keep this even
+ * when desktop arrows overlay again — fit-parent prevents the overflow;
+ * overlays avoid permanent side gutters. Matching --v2 override lives
+ * after .player-container--v2 .bingo-card.
  */
 .player-card-carousel__viewport .bingo-card,
 .player-card-carousel__viewport .bingo-card--empty {
@@ -2878,47 +2879,46 @@ body {
 }
 
 @media (min-width: 900px) {
-  /* Desktop: bigger hit targets; arrows in-flow so they never cover T/S columns */
-  .player-card-carousel__stage {
-    gap: 0.65rem;
-  }
-
+  /*
+   * Desktop happy medium:
+   * - Near full-bleed card (~95vw / large cap)
+   * - Multi-card arrows stay absolute overlays on card edges (no in-flow gutters)
+   * - Card still sized to its parent (rules above) so T/S never clip
+   */
   .player-card-carousel__arrow {
-    position: relative;
-    top: auto;
-    left: auto;
-    right: auto;
-    transform: none;
-    flex: 0 0 auto;
     width: 3.15rem;
     height: 3.15rem;
     min-width: 50px;
     min-height: 50px;
     font-size: 2.25rem;
+    /* Soft overlay — readable hit target without stealing B/O lanes */
+    background: rgba(8, 12, 24, 0.52);
+    border-color: rgba(0, 255, 136, 0.55);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.08),
+      0 4px 14px rgba(0, 0, 0, 0.35);
   }
 
-  .player-card-carousel__arrow--prev,
-  .player-card-carousel__arrow--next {
-    left: auto;
-    right: auto;
+  .player-card-carousel__arrow:hover {
+    background: rgba(0, 40, 28, 0.88);
+    border-color: #00ff88;
   }
 
-  .player-card-carousel__viewport {
-    flex: 1 1 auto;
-    min-width: 0;
-    /* Grow with the card; do not shrink the grid to phone-narrow */
-    width: auto;
-    max-width: 100%;
+  .player-container--light .player-card-carousel__arrow {
+    background: rgba(255, 255, 255, 0.72);
   }
 
-  /* Wider desktop card so all five TONES columns stay readable */
+  .player-container--light .player-card-carousel__arrow:hover {
+    background: #fff;
+  }
+
+  /* Near full-bleed; same stage width for single- and multi-card (no arrow lanes) */
   .player-container--v2 {
-    --player-card-col-max: min(900px, min(94vw, 82vmin));
+    --player-card-col-max: min(1100px, min(95vw, 90vmin));
   }
 
-  /* Multi-card: stage wider than the card so in-flow arrows sit beside T/S */
   .player-container--v2 .player-bingo-stage:has(.player-card-carousel) {
-    max-width: min(calc(var(--player-card-col-max) + 8rem), 98vw);
+    max-width: min(var(--player-card-col-max), 100%);
   }
 }
 
