@@ -10264,25 +10264,54 @@ const HostView: React.FC = () => {
           `Saving ${round0.name} locally only — live round in progress (room, player cards, and projector unchanged).`,
           'info',
         );
-        const listToSend = await generateSongList({
-          force: true,
-          reason: 'finalize',
-          playlists: mixRows,
-        });
-        if (listToSend.length === 0) {
-          window.alert(
-            'No songs could be loaded from this round\'s playlists. Check Spotify / YouTube under Connection, then try Save round again.',
+        /**
+         * Prefer the already-finalized live pool when this round's playlist ids are present on it.
+         * Re-fetching via generateSongList during a busy late-join / Start Game window often fails
+         * or hangs even though the server already has a valid 75-track pool (Round 5 Wizard of Oz case).
+         */
+        const livePoolCandidates = [
+          ...(finalizedOrderRef.current || []),
+          ...(songListRef.current || []),
+        ];
+        const fromLivePool = songsForRoundFromFinalizedPool(round0, livePoolCandidates);
+        const livePoolHasColumns =
+          mixRows.length !== 5 ||
+          mixRows.every((pl) => {
+            const canon = canonicalPlaylistIdForMatch(String(pl.id));
+            return (
+              fromLivePool.filter(
+                (s) => canonicalPlaylistIdForMatch(String(s.sourcePlaylistId || '')) === canon,
+              ).length >= 15
+            );
+          });
+        let listToSend: Song[] = [];
+        if (fromLivePool.length > 0 && livePoolHasColumns) {
+          listToSend = fromLivePool.map(cloneSongForSnapshot);
+          addLog(
+            `Save round: using live finalized pool (${listToSend.length} tracks) — skipped playlist re-fetch.`,
+            'info',
           );
-          addLog('Save round: no tracks loaded (live/local path).', 'warn');
-          return false;
-        }
-        if (!blockIfFivePlaylistsTooShort(listToSend)) return false;
-        if (
-          mixRows.length === 5 &&
-          !confirmTrackTitleArtistCollisions(listToSend, mixRows)
-        ) {
-          addLog('Save round cancelled after possible duplicate-track warning.', 'warn');
-          return false;
+        } else {
+          listToSend = await generateSongList({
+            force: true,
+            reason: 'finalize',
+            playlists: mixRows,
+          });
+          if (listToSend.length === 0) {
+            window.alert(
+              'No songs could be loaded from this round\'s playlists. Check Spotify / YouTube under Connection, then try Save round again.',
+            );
+            addLog('Save round: no tracks loaded (live/local path).', 'warn');
+            return false;
+          }
+          if (!blockIfFivePlaylistsTooShort(listToSend)) return false;
+          if (
+            mixRows.length === 5 &&
+            !confirmTrackTitleArtistCollisions(listToSend, mixRows)
+          ) {
+            addLog('Save round cancelled after possible duplicate-track warning.', 'warn');
+            return false;
+          }
         }
         pool = listToSend.map(cloneSongForSnapshot);
       } else {
@@ -11425,9 +11454,18 @@ const HostView: React.FC = () => {
             const d = (await r.json()) as { updatedAt?: string };
             const ts = d.updatedAt ? Date.parse(d.updatedAt) : NaN;
             if (Number.isFinite(ts)) writePrepCloudAckMs(roomId, ts);
+          } else {
+            console.warn(
+              `[host prep PUT] ${r.status} for room ${roomId} (${eventRounds.length} rounds)`,
+            );
+            addLog(
+              `Cloud prep sync failed (${r.status}). Round snapshots may stay local-only until this succeeds.`,
+              'warn',
+            );
           }
-        } catch {
-          /* ignore */
+        } catch (err) {
+          console.warn('[host prep PUT] network error:', err);
+          addLog('Cloud prep sync failed (network). Round snapshots may stay local-only.', 'warn');
         }
       })();
     }, 1000);

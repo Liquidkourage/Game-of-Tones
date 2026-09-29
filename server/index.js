@@ -15141,6 +15141,12 @@ app.put('/api/host/rooms/:roomId/prep', async (req, res) => {
     const updatedAt = await hostRoomPrepStore.upsertHostRoomPrep(db, uid, roomId, payload);
     const iso =
       updatedAt instanceof Date ? updatedAt.toISOString() : updatedAt != null ? String(updatedAt) : new Date().toISOString();
+    const savedSnapCount = body.rounds.filter(
+      (r) => r && r.savedMixSnapshot && Array.isArray(r.savedMixSnapshot.songs) && r.savedMixSnapshot.songs.length > 0,
+    ).length;
+    console.log(
+      `[host_room_prep] PUT ok room=${roomId} user=${uid} rounds=${body.rounds.length} withSnapshot=${savedSnapCount}`,
+    );
 
     try {
       const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
