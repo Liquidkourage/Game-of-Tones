@@ -113,6 +113,7 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   onCallSheet?: (roundIndex: number) => void;
   onOpenComposite?: (roundIndex: number) => void;
   onNewCustomPattern?: (roundIndex: number) => void;
+  onEditCustomPattern?: (roundIndex: number, pattern: SavedCustomPattern) => void;
   printablePdfLoading?: boolean;
   printableCardCount: number;
   onPrintableCardCountChange: (n: number) => void;
@@ -186,6 +187,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   onCallSheet,
   onOpenComposite,
   onNewCustomPattern,
+  onEditCustomPattern,
   printablePdfLoading,
   printableCardCount,
   onPrintableCardCountChange,
@@ -754,6 +756,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           onCallSheet={onCallSheet ? () => onCallSheet(index) : undefined}
           onOpenComposite={onOpenComposite ? () => onOpenComposite(index) : undefined}
           onNewCustomPattern={onNewCustomPattern}
+          onEditCustomPattern={onEditCustomPattern}
           poolCount={poolCount}
           minRequired={minRequired}
           listedTotal={listedTotal}

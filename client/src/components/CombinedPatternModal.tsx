@@ -22,6 +22,7 @@ import {
   normalizePatternComposite,
   renameSavedCompositePattern,
   saveCompositePattern,
+  updateSavedCompositePattern,
 } from '../patternDefinitions';
 
 export interface CombinedPatternModalProps {
@@ -111,6 +112,7 @@ const CombinedPatternModal: React.FC<CombinedPatternModalProps> = (props) => {
                     const n = r ? normalizePatternComposite(r.spec) : null;
                     if (n) {
                       commitPatternComposite(n);
+                      setCompositeRecipeSaveName(r!.name);
                       setEditingMaskClauseIndex(null);
                       setCompositePaintDraft([]);
                       addLog(`Loaded combined recipe: ${r!.name}`, 'info');
@@ -193,6 +195,43 @@ const CombinedPatternModal: React.FC<CombinedPatternModalProps> = (props) => {
               <button
                 type="button"
                 className="btn-secondary host-btn--sm"
+                disabled={!compositeRecipePickId}
+                title="Overwrite the selected saved recipe with the current clauses"
+                onClick={() => {
+                  if (!compositeRecipePickId) return;
+                  const picked = savedCompositePatterns.find((p) => p.id === compositeRecipePickId);
+                  const name =
+                    compositeRecipeSaveName.trim() ||
+                    (picked?.name ?? '').trim();
+                  if (!name) {
+                    showToast('Enter a recipe name first', 'warn');
+                    return;
+                  }
+                  const norm = normalizePatternComposite(patternComposite);
+                  if (!norm) {
+                    showToast('Cannot save invalid combined pattern', 'error');
+                    return;
+                  }
+                  const updated = updateSavedCompositePattern(compositeRecipePickId, {
+                    name,
+                    spec: norm,
+                  });
+                  if (!updated) {
+                    showToast('Could not update recipe', 'error');
+                    return;
+                  }
+                  setSavedCompositePatterns(getSavedCompositePatterns());
+                  setCompositeRecipeSaveName(updated.name);
+                  addLog(`Updated combined recipe: ${updated.name}`, 'info');
+                  showToast(`Updated “${updated.name}”`, 'success');
+                }}
+              >
+                <Save className="w-3.5 h-3.5" aria-hidden />
+                Update recipe
+              </button>
+              <button
+                type="button"
+                className="btn-secondary host-btn--sm"
                 onClick={() => {
                   const name = compositeRecipeSaveName.trim();
                   if (!name) {
@@ -210,14 +249,14 @@ const CombinedPatternModal: React.FC<CombinedPatternModalProps> = (props) => {
                     return;
                   }
                   setSavedCompositePatterns(getSavedCompositePatterns());
-                  setCompositeRecipeSaveName('');
+                  setCompositeRecipeSaveName(saved.name);
                   setCompositeRecipePickId(saved.id);
                   addLog(`Saved combined recipe: ${saved.name}`, 'info');
                   showToast(`Saved “${saved.name}”`, 'success');
                 }}
               >
                 <Save className="w-3.5 h-3.5" aria-hidden />
-                Save recipe
+                Save as new
               </button>
             </div>
 

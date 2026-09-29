@@ -55,6 +55,7 @@ import {
   PATTERN_OPTIONS,
   PRESET_SHAPE_PATTERNS,
   saveCustomPattern,
+  updateCustomPattern,
   SavedCustomPattern,
   CompositeClausePreset,
   PatternCompositeSpec,
@@ -76,7 +77,10 @@ import {
   pushOrgSharedHostAssets,
   type OrgSharedPlaylistRef,
 } from '../utils/orgSharedHostAssets';
-import CustomPatternModal, { type CustomPatternSavePayload } from './CustomPatternModal';
+import CustomPatternModal, {
+  type CustomPatternSaveMode,
+  type CustomPatternSavePayload,
+} from './CustomPatternModal';
 import CombinedPatternModal from './CombinedPatternModal';
 import SongAliasModal from './SongAliasModal';
 import {
@@ -1854,6 +1858,10 @@ const HostView: React.FC = () => {
   const [orgSharedAssetsReady, setOrgSharedAssetsReady] = useState(false);
   const orgSharedPushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showCustomPatternModal, setShowCustomPatternModal] = useState<boolean>(false);
+  /** When set, CustomPatternModal opens preloaded to overwrite this library id. */
+  const [editingCustomPatternInitial, setEditingCustomPatternInitial] = useState<
+    (CustomPatternSavePayload & { id: string }) | null
+  >(null);
   const [combinedPatternModalOpen, setCombinedPatternModalOpen] = useState(false);
   
   // Song title editing
@@ -7492,11 +7500,40 @@ const HostView: React.FC = () => {
 
   const handleNewCustomPattern = useCallback((roundIndex: number) => {
     compositeEditRoundIndexRef.current = roundIndex;
+    setEditingCustomPatternInitial(null);
     setShowCustomPatternModal(true);
   }, []);
 
-  const handleSaveCustomPattern = (patternData: CustomPatternSavePayload) => {
-    const savedPattern = saveCustomPattern(patternData);
+  const handleEditCustomPattern = useCallback((roundIndex: number, pattern: SavedCustomPattern) => {
+    compositeEditRoundIndexRef.current = roundIndex;
+    setEditingCustomPatternInitial({
+      id: pattern.id,
+      name: pattern.name,
+      positions: [...pattern.positions],
+      ...(pattern.matchReverse === true ? { matchReverse: true as const } : {}),
+      ...(pattern.matchAllowRotation === true ? { matchAllowRotation: true as const } : {}),
+      ...(pattern.matchAllowMirror === true ? { matchAllowMirror: true as const } : {}),
+    });
+    setShowCustomPatternModal(true);
+  }, []);
+
+  const closeCustomPatternModal = useCallback(() => {
+    setShowCustomPatternModal(false);
+    setEditingCustomPatternInitial(null);
+  }, []);
+
+  const handleSaveCustomPattern = (patternData: CustomPatternSavePayload, mode: CustomPatternSaveMode) => {
+    const overwriteId =
+      mode === 'update' && editingCustomPatternInitial?.id
+        ? editingCustomPatternInitial.id
+        : null;
+    const savedPattern = overwriteId
+      ? updateCustomPattern(overwriteId, patternData)
+      : saveCustomPattern(patternData);
+    if (!savedPattern) {
+      window.alert(overwriteId ? 'Could not update that saved shape.' : 'Could not save pattern.');
+      return;
+    }
     setSavedCustomPatterns(getSavedCustomPatterns());
     void pushOrgSharedHostAssets({ mode: 'merge' });
     const idx = compositeEditRoundIndexRef.current;
@@ -7532,9 +7569,14 @@ const HostView: React.FC = () => {
             '',
         });
       }
-      addLog(`Custom pattern set to ${savedPattern.name}`, 'info');
+      addLog(
+        overwriteId
+          ? `Custom pattern updated: ${savedPattern.name}`
+          : `Custom pattern set to ${savedPattern.name}`,
+        'info',
+      );
     }
-    setShowCustomPatternModal(false);
+    closeCustomPatternModal();
   };
 
   const handleEditSongAlias = (song: { id: string; title: string; artist: string }) => {
@@ -12043,6 +12085,7 @@ const HostView: React.FC = () => {
         onCallSheet={(idx) => handleDownloadRoundCallSheetPdf(eventRoundsRef.current[idx])}
         onOpenComposite={openCompositeForRound}
         onNewCustomPattern={handleNewCustomPattern}
+        onEditCustomPattern={handleEditCustomPattern}
         printablePdfLoading={printablePdfLoading}
         printableCardCount={printableCardCount}
         onPrintableCardCountChange={(n) => setPrintableCardCount(clampPrintableCardCount(n))}
@@ -12090,6 +12133,7 @@ const HostView: React.FC = () => {
       handleDownloadRoundCallSheetPdf,
       openCompositeForRound,
       handleNewCustomPattern,
+      handleEditCustomPattern,
       printablePdfLoading,
       printableCardCount,
       printableCardsPerPage,
@@ -15676,8 +15720,9 @@ const HostView: React.FC = () => {
       {/* Custom Pattern Modal */}
       <CustomPatternModal
         isOpen={showCustomPatternModal}
-        onClose={() => setShowCustomPatternModal(false)}
+        onClose={closeCustomPatternModal}
         onSave={handleSaveCustomPattern}
+        initialPattern={editingCustomPatternInitial ?? undefined}
       />
 
       {/* Song Title Edit Modal */}

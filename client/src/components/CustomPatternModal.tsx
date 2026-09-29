@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Trash2 } from 'lucide-react';
-import { resolveCustomPatternMask, saveCustomPattern, validatePatternPositions } from '../patternDefinitions';
+import { resolveCustomPatternMask, validatePatternPositions } from '../patternDefinitions';
 import HostSubmodalPortal from './HostSubmodalPortal';
 import './CustomPatternModal.css';
 
@@ -12,11 +12,14 @@ export interface CustomPatternSavePayload {
   matchAllowMirror?: boolean;
 }
 
+export type CustomPatternSaveMode = 'create' | 'update';
+
 interface CustomPatternModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (pattern: CustomPatternSavePayload) => void;
-  initialPattern?: CustomPatternSavePayload;
+  onSave: (pattern: CustomPatternSavePayload, mode: CustomPatternSaveMode) => void;
+  /** When set (with id), modal opens in edit mode — Update overwrites that library entry. */
+  initialPattern?: CustomPatternSavePayload & { id?: string };
 }
 
 const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
@@ -31,6 +34,9 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
   const [matchAllowRotation, setMatchAllowRotation] = useState(false);
   const [matchAllowMirror, setMatchAllowMirror] = useState(false);
   const [isValid, setIsValid] = useState(false);
+
+  const editingId = initialPattern?.id?.trim() || '';
+  const isEditing = Boolean(editingId);
 
   useEffect(() => {
     if (isOpen) {
@@ -67,17 +73,19 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
     );
   };
 
-  const handleSave = () => {
-    if (isValid) {
-      onSave({
-        name: patternName.trim(),
-        positions: selectedPositions,
-        ...(matchReverse ? { matchReverse: true as const } : {}),
-        ...(matchAllowRotation ? { matchAllowRotation: true as const } : {}),
-        ...(matchAllowMirror ? { matchAllowMirror: true as const } : {}),
-      });
-      onClose();
-    }
+  const buildPayload = (): CustomPatternSavePayload => ({
+    name: patternName.trim(),
+    positions: selectedPositions,
+    ...(matchReverse ? { matchReverse: true as const } : {}),
+    ...(matchAllowRotation ? { matchAllowRotation: true as const } : {}),
+    ...(matchAllowMirror ? { matchAllowMirror: true as const } : {}),
+  });
+
+  const handleSave = (mode: CustomPatternSaveMode) => {
+    if (!isValid) return;
+    if (mode === 'update' && !isEditing) return;
+    // Parent closes on success so a failed overwrite can keep the modal open.
+    onSave(buildPayload(), mode);
   };
 
   const handleClear = () => {
@@ -86,7 +94,7 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
 
   if (!isOpen) return null;
 
-  const modalTitle = initialPattern ? 'Edit custom pattern' : 'Create custom pattern';
+  const modalTitle = isEditing ? 'Edit custom pattern' : 'Create custom pattern';
   const displayedPositions = resolveCustomPatternMask(selectedPositions, matchReverse);
 
   return (
@@ -187,10 +195,33 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
           <button type="button" className="btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="btn-primary" onClick={handleSave} disabled={!isValid}>
-            <Save className="w-4 h-4" aria-hidden />
-            {initialPattern ? 'Update pattern' : 'Save pattern'}
-          </button>
+          {isEditing ? (
+            <>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => handleSave('create')}
+                disabled={!isValid}
+              >
+                <Save className="w-4 h-4" aria-hidden />
+                Save as new
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => handleSave('update')}
+                disabled={!isValid}
+              >
+                <Save className="w-4 h-4" aria-hidden />
+                Update pattern
+              </button>
+            </>
+          ) : (
+            <button type="button" className="btn-primary" onClick={() => handleSave('create')} disabled={!isValid}>
+              <Save className="w-4 h-4" aria-hidden />
+              Save pattern
+            </button>
+          )}
         </div>
       </div>
     </HostSubmodalPortal>

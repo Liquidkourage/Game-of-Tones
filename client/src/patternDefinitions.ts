@@ -1072,6 +1072,37 @@ export function saveCustomPattern(pattern: Omit<SavedCustomPattern, 'id' | 'crea
   return savedPattern;
 }
 
+/** Overwrite a saved custom shape in place (keeps id + createdAt). Returns null if missing / invalid. */
+export function updateCustomPattern(
+  id: string,
+  pattern: Omit<SavedCustomPattern, 'id' | 'createdAt'>,
+): SavedCustomPattern | null {
+  const trimmed = pattern.name.trim();
+  if (!id || !trimmed) return null;
+  if (!Array.isArray(pattern.positions) || pattern.positions.length === 0) return null;
+  if (!validatePatternPositions(pattern.positions)) return null;
+  const existing = getSavedCustomPatterns();
+  const idx = existing.findIndex((p) => p.id === id);
+  if (idx < 0) return null;
+  const updated: SavedCustomPattern = {
+    id: existing[idx].id,
+    createdAt: existing[idx].createdAt,
+    name: trimmed,
+    positions: [...pattern.positions],
+    ...(pattern.matchReverse === true ? { matchReverse: true as const } : {}),
+    ...(pattern.matchAllowRotation === true ? { matchAllowRotation: true as const } : {}),
+    ...(pattern.matchAllowMirror === true ? { matchAllowMirror: true as const } : {}),
+  };
+  existing[idx] = updated;
+  try {
+    localStorage.setItem(CUSTOM_PATTERNS_KEY, JSON.stringify(existing));
+  } catch (error) {
+    console.error('Failed to update custom pattern:', error);
+    return null;
+  }
+  return updated;
+}
+
 export function deleteCustomPattern(id: string): void {
   const existing = getSavedCustomPatterns();
   const filtered = existing.filter(p => p.id !== id);
@@ -1193,6 +1224,35 @@ export function saveCompositePattern(entry: {
   }
 
   return saved;
+}
+
+/** Overwrite a saved combined recipe in place (keeps id + createdAt). Returns null if missing / invalid. */
+export function updateSavedCompositePattern(
+  id: string,
+  entry: { name?: string; spec: PatternCompositeSpec },
+): SavedCompositePattern | null {
+  if (!id) return null;
+  const norm = normalizePatternComposite(JSON.parse(JSON.stringify(entry.spec)) as PatternCompositeSpec);
+  if (!norm) return null;
+  const existing = getSavedCompositePatterns();
+  const idx = existing.findIndex((p) => p.id === id);
+  if (idx < 0) return null;
+  const name = (typeof entry.name === 'string' ? entry.name : existing[idx].name).trim();
+  if (!name) return null;
+  const updated: SavedCompositePattern = {
+    id: existing[idx].id,
+    createdAt: existing[idx].createdAt,
+    name,
+    spec: norm,
+  };
+  existing[idx] = updated;
+  try {
+    localStorage.setItem(COMPOSITE_RECIPES_KEY, JSON.stringify(existing));
+  } catch (error) {
+    console.error('Failed to update composite pattern:', error);
+    return null;
+  }
+  return updated;
 }
 
 export function deleteSavedCompositePattern(id: string): void {

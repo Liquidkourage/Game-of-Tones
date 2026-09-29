@@ -61,6 +61,8 @@ interface RoundBucketSettingsProps {
   onCallSheet?: () => void;
   onOpenComposite?: () => void;
   onNewCustomPattern?: (roundIndex: number) => void;
+  /** Open draw modal preloaded to overwrite this saved library shape. */
+  onEditCustomPattern?: (roundIndex: number, pattern: SavedCustomPattern) => void;
   /** Live deduped card-ready pool size for this round (0 = tracks not hydrated yet). */
   poolCount?: number;
   /** Required card-ready tracks (24/25 for MIX by Free Center; 75 for 5×15 / 1×75). */
@@ -97,6 +99,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
   onCallSheet,
   onOpenComposite,
   onNewCustomPattern,
+  onEditCustomPattern,
   poolCount = 0,
   minRequired,
   listedTotal = 0,
@@ -174,6 +177,13 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
     if (!window.confirm(`Delete saved shape “${selectedSavedCustom.name}”?`)) return;
     deleteCustomPattern(selectedSavedCustom.id);
     onSavedCustomPatternsChange?.(getSavedCustomPatterns());
+  };
+
+  const handleEditSavedCustom = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    if (!selectedSavedCustom || !onEditCustomPattern) return;
+    onEditCustomPattern(roundIndex, selectedSavedCustom);
   };
 
   return (
@@ -283,7 +293,15 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
               Edit combined pattern…
             </button>
           ) : null}
-          {pattern === 'custom' && onNewCustomPattern ? (
+          {pattern === 'custom' && selectedSavedCustom && onEditCustomPattern ? (
+            <button
+              type="button"
+              className="round-bucket-settings__pattern-editor-btn round-bucket-settings__pattern-editor-btn--primary"
+              onClick={handleEditSavedCustom}
+            >
+              Edit saved shape…
+            </button>
+          ) : pattern === 'custom' && onNewCustomPattern ? (
             <button
               type="button"
               className="round-bucket-settings__pattern-editor-btn round-bucket-settings__pattern-editor-btn--primary"
@@ -330,6 +348,16 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
           </label>
           {selectedSavedCustom ? (
             <div className="round-bucket-settings__library-actions">
+              {onEditCustomPattern ? (
+                <button
+                  type="button"
+                  className="round-bucket-settings__link-btn"
+                  onClick={handleEditSavedCustom}
+                >
+                  <Pencil className="w-3 h-3" aria-hidden />
+                  Edit
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="round-bucket-settings__link-btn"

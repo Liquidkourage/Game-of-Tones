@@ -28,6 +28,7 @@ export interface HostRoundHubPatternPanelProps {
   selectedCustomPattern: SavedCustomPattern | null;
   onSelectSavedCustom: (p: SavedCustomPattern) => void;
   onNewCustomPattern: () => void;
+  onEditCustomPattern?: (p: SavedCustomPattern) => void;
   onSavedCustomPatternsChange?: (next: SavedCustomPattern[]) => void;
   customMask: string[];
   customMatchReverse: boolean;
@@ -53,6 +54,7 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
   selectedCustomPattern,
   onSelectSavedCustom,
   onNewCustomPattern,
+  onEditCustomPattern,
   onSavedCustomPatternsChange,
   customMask,
   customMatchReverse,
@@ -208,6 +210,12 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
 
     {selectedCustomPattern ? (
       <div className="host-round-hub-pattern__library-actions">
+        {onEditCustomPattern ? (
+          <button type="button" className="host-round-hub-pattern__link" onClick={() => onEditCustomPattern(selectedCustomPattern)}>
+            <Pencil className="w-3.5 h-3.5" aria-hidden />
+            Edit
+          </button>
+        ) : null}
         <button type="button" className="host-round-hub-pattern__link" onClick={handleRename}>
           <Pencil className="w-3.5 h-3.5" aria-hidden />
           Rename
