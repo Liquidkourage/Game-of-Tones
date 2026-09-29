@@ -812,6 +812,52 @@ function poolsOrderEqual(a: string[] | null | undefined, b: string[] | null | un
   return true;
 }
 
+/** True when `incoming` is `existing` plus zero or more appended letters. */
+function revealSequenceExtends(existing: string[], incoming: string[]): boolean {
+  if (!existing.length) return true;
+  if (incoming.length < existing.length) return false;
+  for (let i = 0; i < existing.length; i++) {
+    if (existing[i] !== incoming[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * Monotonic reveal-log merge. Never shrink unless forceClear / newer seqEpoch.
+ * Prefer local on divergent equal-length races so a letter does not flash then vanish.
+ */
+function mergeRevealSequences(
+  local: string[],
+  incoming: string[],
+  opts?: { forceClear?: boolean },
+): string[] {
+  if (opts?.forceClear) return [...incoming];
+  if (!incoming.length) return local;
+  if (!local.length) return [...incoming];
+  if (incoming.length >= local.length && revealSequenceExtends(local, incoming)) {
+    return [...incoming];
+  }
+  if (local.length > incoming.length && revealSequenceExtends(incoming, local)) {
+    return local;
+  }
+  return local.length >= incoming.length ? local : [...incoming];
+}
+
+/** Never raise baselines — higher baseline blanks already-revealed letters on call cards. */
+function mergeSongBaselinesPreferLower(
+  existing: Record<string, number>,
+  incoming: Record<string, number>,
+): Record<string, number> {
+  const out: Record<string, number> = { ...existing };
+  for (const [songId, baseline] of Object.entries(incoming)) {
+    if (typeof baseline !== 'number' || !Number.isFinite(baseline)) continue;
+    const floor = Math.max(0, Math.floor(baseline));
+    const prev = out[songId];
+    out[songId] = typeof prev === 'number' && Number.isFinite(prev) ? Math.min(prev, floor) : floor;
+  }
+  return out;
+}
+
 /** Drop sparse-array holes and placeholder ids from play-order lists. */
 function compactPlayedOrderIds(playedOrder: readonly string[]): string[] {
   return playedOrder.filter((id) => id && !id.startsWith('__placeholder_'));
@@ -1055,7 +1101,9 @@ const CallSongInfoFitBox: React.FC<{
       cancelAnimationFrame(raf);
       ro?.disconnect();
     };
-  });
+    // songId only: parent re-renders (reveal nonce / backoff) must not tear down the observer.
+    // ResizeObserver covers size changes when letters unmask.
+  }, [songId, onOverflow]);
   return (
     <div ref={ref} className="call-song-info" style={style}>
       {children}
@@ -1350,6 +1398,10 @@ const PublicDisplay: React.FC = () => {
   const migratedLocalRevealRef = useRef(false);
   /** False until first room-state / display-reveal-state — blocks empty client push from wiping server. */
   const revealStateHydratedRef = useRef(false);
+  /** Matches server publicDisplayRevealState.seqEpoch — bumps on intentional clears. */
+  const revealSeqEpochRef = useRef(0);
+  /** After keeping a longer local sequence, push once so server/other displays catch up. */
+  const pendingRevealHealRef = useRef(false);
   /** Latest applied played-list sync time — blocks out-of-order room-state from dropping calls. */
   const lastRoomStatePlayedSyncTsRef = useRef(0);
 
@@ -1363,6 +1415,8 @@ const PublicDisplay: React.FC = () => {
   useEffect(() => {
     revealStateHydratedRef.current = false;
     migratedLocalRevealRef.current = false;
+    revealSeqEpochRef.current = 0;
+    pendingRevealHealRef.current = false;
     lastRoomStatePlayedSyncTsRef.current = 0;
   }, [roomId]);
 
@@ -1400,12 +1454,14 @@ const PublicDisplay: React.FC = () => {
       revealSyncTimerRef.current = null;
       if (!socketRef.current || applyingServerRevealRef.current) return;
       if (!revealStateHydratedRef.current && !opts?.forceClear) return;
+      pendingRevealHealRef.current = false;
       persistRevealStateLocally();
       socketRef.current.emit('display-reveal-state-update', {
         roomId,
         revealSequence: revealSequenceRef.current,
         songBaselines: songBaselineRef.current,
         carouselIndex: carouselIndexRef.current,
+        seqEpoch: revealSeqEpochRef.current,
         forceClear: opts?.forceClear === true,
       });
     }, 200);
@@ -1723,46 +1779,57 @@ const PublicDisplay: React.FC = () => {
     socketRef.current = newSocket;
 
     const applyRevealStateFromServer = (
-      state: { revealSequence?: string[]; songBaselines?: Record<string, number>; carouselIndex?: number } | null | undefined,
+      state: {
+        revealSequence?: string[];
+        songBaselines?: Record<string, number>;
+        carouselIndex?: number;
+        seqEpoch?: number;
+      } | null | undefined,
       opts?: { restoreCarousel?: boolean; forceClear?: boolean },
     ) => {
       if (!state || typeof state !== 'object') return;
       applyingServerRevealRef.current = true;
+      let shouldHealServer = false;
       try {
+        const serverEpoch =
+          typeof state.seqEpoch === 'number' && Number.isFinite(state.seqEpoch)
+            ? Math.max(0, Math.floor(state.seqEpoch))
+            : revealSeqEpochRef.current;
+        const epochAdvanced = serverEpoch > revealSeqEpochRef.current;
+        const takeWholesale = opts?.forceClear === true || epochAdvanced;
+        if (epochAdvanced) {
+          revealSeqEpochRef.current = serverEpoch;
+        }
+
         if (Array.isArray(state.revealSequence)) {
           const serverSeq = state.revealSequence;
-          if (opts?.forceClear) {
-            revealSequenceRef.current = serverSeq;
+          if (takeWholesale) {
+            revealSequenceRef.current = [...serverSeq];
           } else {
             const localSeq = revealSequenceRef.current;
-            revealSequenceRef.current =
-              serverSeq.length >= localSeq.length ? serverSeq : localSeq;
+            const merged = mergeRevealSequences(localSeq, serverSeq);
+            revealSequenceRef.current = merged;
+            // Kept a longer local log than server — heal so dual displays converge.
+            if (merged.length > serverSeq.length) {
+              shouldHealServer = true;
+            }
           }
         }
         if (state.songBaselines && typeof state.songBaselines === 'object') {
-          if (opts?.forceClear) {
+          if (takeWholesale) {
             songBaselineRef.current = { ...state.songBaselines };
           } else {
-            const merged = { ...songBaselineRef.current };
-            for (const [songId, baseline] of Object.entries(state.songBaselines)) {
-              if (typeof baseline !== 'number' || !Number.isFinite(baseline)) continue;
-              const floor = Math.max(0, Math.floor(baseline));
-              const local = merged[songId];
-              merged[songId] = typeof local === 'number' ? Math.max(local, floor) : floor;
-            }
-            songBaselineRef.current = merged;
+            songBaselineRef.current = mergeSongBaselinesPreferLower(
+              songBaselineRef.current,
+              state.songBaselines,
+            );
           }
         }
         if (opts?.restoreCarousel !== false && typeof state.carouselIndex === 'number' && Number.isFinite(state.carouselIndex)) {
           const serverIdx = Math.max(0, Math.floor(state.carouselIndex));
           const localIdx = carouselIndexRef.current;
           // room-state often carries carouselIndex 0 until the display sync lands — never regress live scroll.
-          const idx =
-            opts?.forceClear === true
-              ? serverIdx
-              : serverIdx >= localIdx
-                ? serverIdx
-                : localIdx;
+          const idx = takeWholesale ? serverIdx : serverIdx >= localIdx ? serverIdx : localIdx;
           setCarouselIndex(idx);
           carouselIndexRef.current = idx;
         }
@@ -1770,6 +1837,10 @@ const PublicDisplay: React.FC = () => {
         setRevealLayoutNonce((n) => n + 1);
       } finally {
         applyingServerRevealRef.current = false;
+      }
+      if (shouldHealServer && !pendingRevealHealRef.current) {
+        pendingRevealHealRef.current = true;
+        syncRevealStateToServer();
       }
     };
 
@@ -1808,6 +1879,7 @@ const PublicDisplay: React.FC = () => {
         revealSequence: localLetters,
         songBaselines: localBaselines,
         carouselIndex: carouselIndexRef.current,
+        seqEpoch: revealSeqEpochRef.current,
       });
       try {
         localStorage.removeItem(`display_revealed_letters_${roomId}`);
@@ -2223,23 +2295,23 @@ const PublicDisplay: React.FC = () => {
           hydrateRevealStateFromRoom(payload, wasReconnecting);
 
           // After server reveal hydrate: backfill baselines for played songs still missing one.
+          // Use 0 (not current sequence length) — backfilling to "now" blanks all prior letters.
           if (
             (wasReconnecting || hadMismatch) &&
             Array.isArray(playedIdsForBaselineSync) &&
             playedIdsForBaselineSync.length > 0
           ) {
-            const currentBaseline = revealSequenceRef.current.length;
             const newBaselines: Record<string, number> = {};
             playedIdsForBaselineSync.forEach((songId: string) => {
               if (songBaselineRef.current[songId] === undefined) {
-                newBaselines[songId] = currentBaseline;
+                newBaselines[songId] = 0;
               }
             });
             if (Object.keys(newBaselines).length > 0) {
               songBaselineRef.current = { ...songBaselineRef.current, ...newBaselines };
               setRevealLayoutNonce((n) => n + 1);
               console.log(
-                `✅ Set baselines for ${Object.keys(newBaselines).length} played songs (post-hydrate, cutoff=${currentBaseline})`,
+                `✅ Set baselines for ${Object.keys(newBaselines).length} played songs (post-hydrate, cutoff=0)`,
               );
               syncRevealStateToServer();
             }
@@ -2373,15 +2445,23 @@ const PublicDisplay: React.FC = () => {
         }
 
         if (poolChanged && !keepFiveBy15) {
-          console.log(`🔄 oneby75-pool order changed (${n} ids) — clearing call list / reveal state`);
-          clearCallListSessionState();
-          newSocket.emit('display-reveal-state-update', {
-            roomId,
-            revealSequence: [],
-            songBaselines: {},
-            carouselIndex: 0,
-            forceClear: true,
-          });
+          // Mid-round pool re-emit must not wipe letters that already showed on call cards.
+          if (playedOrderRef.current.length > 0) {
+            console.log(
+              `🔄 oneby75-pool order changed (${n} ids) during live calls — keeping reveal state`,
+            );
+          } else {
+            console.log(`🔄 oneby75-pool order changed (${n} ids) — clearing call list / reveal state`);
+            clearCallListSessionState();
+            newSocket.emit('display-reveal-state-update', {
+              roomId,
+              revealSequence: [],
+              songBaselines: {},
+              carouselIndex: 0,
+              seqEpoch: revealSeqEpochRef.current,
+              forceClear: true,
+            });
+          }
         }
 
         // Keep fiveby15-pool headers when this oneby75 payload is only a 5-name keep-alive.
@@ -2829,25 +2909,14 @@ const PublicDisplay: React.FC = () => {
       // BUG #3 FIX: Set reset flag to prevent auto-reveal race conditions
       isResettingRef.current = true;
       
-      // CRITICAL: Reset all baselines to current revealSequenceRef length (not 0)
-      // This ensures songs that started before reset maintain their baselines
-      // Songs that start after reset will get baseline = revealSequenceRef.length (which is now 0)
-      const resetBaseline = revealSequenceRef.current.length; // Should be 0 after clearing, but use current for safety
+      // Clear the reveal log, then set every played song's baseline to 0 so *new*
+      // letters after reset apply to currently called songs (prior bug captured length
+      // before clear and blanked the next N reveals).
       revealSequenceRef.current = [];
-      
-      // Recalculate baselines for all currently played songs
-      // Set baseline to the length BEFORE clearing (so they don't show letters revealed after reset)
       const playedIds = playedOrderRef.current || [];
       const newBaselines: Record<string, number> = {};
       playedIds.forEach((pid: string) => {
-        // Use existing baseline if it exists and is less than resetBaseline
-        // Otherwise set to resetBaseline (meaning no letters revealed before reset)
-        const existingBaseline = songBaselineRef.current[pid];
-        if (existingBaseline !== undefined && existingBaseline <= resetBaseline) {
-          newBaselines[pid] = resetBaseline; // Reset to current length (0 after clear)
-        } else {
-          newBaselines[pid] = resetBaseline;
-        }
+        newBaselines[pid] = 0;
       });
       songBaselineRef.current = newBaselines;
       
@@ -2863,6 +2932,7 @@ const PublicDisplay: React.FC = () => {
         revealToastTimerRef.current = null;
       }
       setRevealToast('Letters reset - auto-reveal restarting');
+      setRevealLayoutNonce((n) => n + 1);
       setTimeout(() => {
         setRevealToast(null);
         // BUG #3 FIX: Clear reset flag after a short delay to allow baselines to stabilize

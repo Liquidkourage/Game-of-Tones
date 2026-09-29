@@ -2774,8 +2774,13 @@ function letterRevealToastEnabledForRoom(room) {
   return room?.publicDisplayLetterRevealToast !== false;
 }
 
-function emptyPublicDisplayRevealState() {
-  return { revealSequence: [], songBaselines: {}, carouselIndex: 0 };
+function emptyPublicDisplayRevealState(seqEpoch = 0) {
+  return {
+    revealSequence: [],
+    songBaselines: {},
+    carouselIndex: 0,
+    seqEpoch: Math.max(0, Math.floor(Number(seqEpoch) || 0)),
+  };
 }
 
 function ensurePublicDisplayRevealState(room) {
@@ -2786,6 +2791,7 @@ function ensurePublicDisplayRevealState(room) {
   if (!Array.isArray(s.revealSequence)) s.revealSequence = [];
   if (!s.songBaselines || typeof s.songBaselines !== 'object') s.songBaselines = {};
   if (typeof s.carouselIndex !== 'number' || !Number.isFinite(s.carouselIndex)) s.carouselIndex = 0;
+  if (typeof s.seqEpoch !== 'number' || !Number.isFinite(s.seqEpoch)) s.seqEpoch = 0;
   return s;
 }
 
@@ -2795,11 +2801,36 @@ function publicDisplayRevealStateForClient(room) {
     revealSequence: [...s.revealSequence],
     songBaselines: { ...s.songBaselines },
     carouselIndex: Math.max(0, Math.floor(s.carouselIndex)),
+    seqEpoch: Math.max(0, Math.floor(s.seqEpoch || 0)),
   };
 }
 
 function clearPublicDisplayRevealState(room) {
-  room.publicDisplayRevealState = emptyPublicDisplayRevealState();
+  const prevEpoch = ensurePublicDisplayRevealState(room).seqEpoch || 0;
+  room.publicDisplayRevealState = emptyPublicDisplayRevealState(prevEpoch + 1);
+}
+
+/** Append-only reveal log: accept extensions; never shrink unless forceClear / new seqEpoch. */
+function revealSequenceExtends(existing, incoming) {
+  if (!Array.isArray(existing) || existing.length === 0) return true;
+  if (!Array.isArray(incoming) || incoming.length < existing.length) return false;
+  for (let i = 0; i < existing.length; i++) {
+    if (existing[i] !== incoming[i]) return false;
+  }
+  return true;
+}
+
+function mergeSongBaselinesPreferLower(existing, incoming) {
+  const out = { ...(existing && typeof existing === 'object' ? existing : {}) };
+  if (!incoming || typeof incoming !== 'object') return out;
+  for (const [songId, baseline] of Object.entries(incoming)) {
+    if (typeof songId !== 'string' || typeof baseline !== 'number' || !Number.isFinite(baseline)) continue;
+    const floor = Math.max(0, Math.floor(baseline));
+    const prev = out[songId];
+    // Lower baseline = more revealed letters stay visible. Never raise (that blanks cards).
+    out[songId] = typeof prev === 'number' && Number.isFinite(prev) ? Math.min(prev, floor) : floor;
+  }
+  return out;
 }
 
 function clearPublicDisplaySessionState(room) {
@@ -9468,17 +9499,32 @@ io.on('connection', (socket) => {
       if (!room || !room.players.has(socket.id)) return;
 
       const state = ensurePublicDisplayRevealState(room);
-      if (Array.isArray(revealSequence)) {
+      const clientEpoch =
+        typeof data.seqEpoch === 'number' && Number.isFinite(data.seqEpoch)
+          ? Math.max(0, Math.floor(data.seqEpoch))
+          : null;
+      // Lagging projector from before an intentional clear must not restore old letters.
+      // forceClear is always allowed (may race with server-side clear that already bumped epoch).
+      const staleEpoch =
+        data.forceClear !== true && clientEpoch != null && clientEpoch < state.seqEpoch;
+
+      if (Array.isArray(revealSequence) && !staleEpoch) {
         const filtered = revealSequence
           .filter((ch) => typeof ch === 'string' && /^[A-Z0-9]$/.test(ch))
           .slice(0, 8000);
-        const existingLen = state.revealSequence.length;
-        // Ignore stale empty push (display refresh before room-state hydrate).
-        if (filtered.length > 0 || existingLen === 0 || data.forceClear === true) {
+        if (data.forceClear === true) {
+          state.seqEpoch = Math.max(state.seqEpoch || 0, clientEpoch || 0) + 1;
+          state.revealSequence = filtered;
+        } else if (
+          filtered.length > state.revealSequence.length &&
+          revealSequenceExtends(state.revealSequence, filtered)
+        ) {
+          // Dual-display last-write-wins used to accept shorter/equal sequences and blank letters.
           state.revealSequence = filtered;
         }
+        // Shorter, equal-length, or divergent: ignore (keep longer authoritative log).
       }
-      if (songBaselines && typeof songBaselines === 'object') {
+      if (songBaselines && typeof songBaselines === 'object' && !staleEpoch) {
         const nextBaselines = {};
         for (const [songId, baseline] of Object.entries(songBaselines)) {
           if (typeof songId === 'string' && typeof baseline === 'number' && Number.isFinite(baseline)) {
@@ -9488,11 +9534,15 @@ io.on('connection', (socket) => {
         if (data.forceClear === true) {
           state.songBaselines = nextBaselines;
         } else if (Object.keys(nextBaselines).length > 0) {
-          state.songBaselines = { ...state.songBaselines, ...nextBaselines };
+          state.songBaselines = mergeSongBaselinesPreferLower(state.songBaselines, nextBaselines);
         }
       }
-      if (typeof carouselIndex === 'number' && Number.isFinite(carouselIndex)) {
-        state.carouselIndex = Math.max(0, Math.floor(carouselIndex));
+      if (typeof carouselIndex === 'number' && Number.isFinite(carouselIndex) && !staleEpoch) {
+        // Never regress carousel from a lagging display.
+        const nextIdx = Math.max(0, Math.floor(carouselIndex));
+        if (data.forceClear === true || nextIdx >= state.carouselIndex) {
+          state.carouselIndex = nextIdx;
+        }
       }
       state.updatedAt = Date.now();
       io.to(roomId).emit('display-reveal-state', publicDisplayRevealStateForClient(room));
