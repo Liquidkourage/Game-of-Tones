@@ -9538,9 +9538,9 @@ io.on('connection', (socket) => {
         }
       }
       if (typeof carouselIndex === 'number' && Number.isFinite(carouselIndex) && !staleEpoch) {
-        // Never regress carousel from a lagging display.
+        // Never regress carousel from a lagging display — except intentional 1×75 forward-loop wrap.
         const nextIdx = Math.max(0, Math.floor(carouselIndex));
-        if (data.forceClear === true || nextIdx >= state.carouselIndex) {
+        if (data.forceClear === true || data.carouselWrap === true || nextIdx >= state.carouselIndex) {
           state.carouselIndex = nextIdx;
         }
       }

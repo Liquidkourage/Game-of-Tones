@@ -1446,15 +1446,21 @@ const PublicDisplay: React.FC = () => {
   const revealSequenceRef = useRef<string[]>([]);
   const songBaselineRef = useRef<Record<string, number>>({});
 
-  const syncRevealStateToServer = (opts?: { forceClear?: boolean }) => {
+  /** Set when 1×75 carousel snaps after a forward loop so server accepts the lower index. */
+  const pendingCarouselWrapRef = useRef(false);
+
+  const syncRevealStateToServer = (opts?: { forceClear?: boolean; carouselWrap?: boolean }) => {
     if (!roomId || !socketRef.current || applyingServerRevealRef.current) return;
     if (!revealStateHydratedRef.current && !opts?.forceClear) return;
+    if (opts?.carouselWrap === true) pendingCarouselWrapRef.current = true;
     if (revealSyncTimerRef.current) clearTimeout(revealSyncTimerRef.current);
     revealSyncTimerRef.current = setTimeout(() => {
       revealSyncTimerRef.current = null;
       if (!socketRef.current || applyingServerRevealRef.current) return;
       if (!revealStateHydratedRef.current && !opts?.forceClear) return;
       pendingRevealHealRef.current = false;
+      const carouselWrap = pendingCarouselWrapRef.current;
+      pendingCarouselWrapRef.current = false;
       persistRevealStateLocally();
       socketRef.current.emit('display-reveal-state-update', {
         roomId,
@@ -1463,6 +1469,7 @@ const PublicDisplay: React.FC = () => {
         carouselIndex: carouselIndexRef.current,
         seqEpoch: revealSeqEpochRef.current,
         forceClear: opts?.forceClear === true,
+        carouselWrap,
       });
     }, 200);
   };
@@ -1829,7 +1836,12 @@ const PublicDisplay: React.FC = () => {
           const serverIdx = Math.max(0, Math.floor(state.carouselIndex));
           const localIdx = carouselIndexRef.current;
           // room-state often carries carouselIndex 0 until the display sync lands — never regress live scroll.
-          const idx = takeWholesale ? serverIdx : serverIdx >= localIdx ? serverIdx : localIdx;
+          let idx = takeWholesale ? serverIdx : serverIdx >= localIdx ? serverIdx : localIdx;
+          // Collapse duplicate-tail indices from a pre-wrap server value (avoids one fly-through on reconnect).
+          const totalCols = countPlayOrderColumns(playedOrderRef.current);
+          if (totalCols > visibleCols) {
+            while (idx >= totalCols) idx -= totalCols;
+          }
           setCarouselIndex(idx);
           carouselIndexRef.current = idx;
         }
@@ -2404,7 +2416,10 @@ const PublicDisplay: React.FC = () => {
 
     newSocket.on('display-reveal-state', (data: any) => {
       if (data && typeof data === 'object') {
-        applyRevealStateFromServer(data);
+        // Letters/baselines only — never re-apply carouselIndex from this echo.
+        // Re-applying after a forward-loop snap (idx → idx−total) races the server's
+        // "never regress carousel" rule and animates 0→total on a 1s tween forever ("fly through").
+        applyRevealStateFromServer(data, { restoreCarousel: false });
         revealStateHydratedRef.current = true;
       }
     });
@@ -3535,8 +3550,11 @@ const PublicDisplay: React.FC = () => {
     const idx = carouselIndexRef.current;
     if (idx < total) return;
     setAnimating(false);
-    setCarouselIndex(idx - total);
-    carouselIndexRef.current = idx - total;
+    const wrapped = idx - total;
+    setCarouselIndex(wrapped);
+    carouselIndexRef.current = wrapped;
+    // Server rejects plain lower carouselIndex ("never regress"); flag the intentional wrap.
+    syncRevealStateToServer({ carouselWrap: true });
     requestAnimationFrame(() => setAnimating(true));
   }, [columnCallListLayout, animating, visibleCols]);
 
@@ -3603,7 +3621,7 @@ const PublicDisplay: React.FC = () => {
   const carouselScrollEnabled =
     !columnCallListLayout && countPlayOrderColumns(playedOrderForDisplay) > visibleCols;
 
-  /** After song 26+ (6th column), static grid swaps to scroll track — measure width before first slide. */
+  /** After song 26+ (6th column), static grid swaps to scroll track — measure width once on entry. */
   useLayoutEffect(() => {
     if (!carouselScrollEnabled) return;
     remeasureCarouselViewport();
@@ -3617,7 +3635,9 @@ const PublicDisplay: React.FC = () => {
       cancelAnimationFrame(raf1);
       if (raf2) cancelAnimationFrame(raf2);
     };
-  }, [carouselScrollEnabled, playedOrderRevision, remeasureCarouselViewport]);
+    // Intentionally only when scroll mode toggles — re-running on every played song
+    // toggles `animating` and can interrupt/re-fire slide completion (wrap snap races).
+  }, [carouselScrollEnabled, remeasureCarouselViewport]);
 
   // Measure viewport width for pixel-perfect slides (one column per step)
   useEffect(() => {
