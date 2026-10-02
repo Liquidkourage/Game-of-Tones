@@ -1641,10 +1641,21 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
       // In strict mode, do not fallback silently
       console.error('❌ Playback error in strict mode:', playbackError?.body?.error?.message || playbackError?.message || playbackError);
       const errorMsg = playbackError?.body?.error?.message || playbackError?.message || '';
-      if (playbackError?.code === 'spotify_not_playing' || /restriction/i.test(errorMsg) || playbackError?.body?.error?.status === 403) {
+      if (playbackError?.code === 'spotify_not_playing') {
+        // Fail-open mid-round: keep snippet clock; soft notice (no blocking alert).
+        io.to(roomId).emit('playback-warning', {
+          message: `Playback confirm flaky: ${errorMsg || 'Spotify did not confirm audio'} — round keeps advancing.`,
+          type: 'spotify_not_playing',
+        });
+        if (roomStillPlaying(roomId)) {
+          startSimpleProgression(roomId, targetDeviceId, room.snippetLength);
+        }
+        return { ok: false, error: 'spotify_not_playing', soft: true };
+      }
+      if (/restriction/i.test(errorMsg) || playbackError?.body?.error?.status === 403) {
         io.to(roomId).emit('playback-error', { 
           message: `Playback failed: ${errorMsg}`,
-          type: playbackError?.code === 'spotify_not_playing' ? 'spotify_not_playing' : 'restriction',
+          type: 'restriction',
           suggestions: [
             'Ensure you have Spotify Premium (required for remote control)',
             'Open Spotify on the target device and press play once',
@@ -4051,7 +4062,8 @@ async function transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, curr
     if (spotifyDevices.jamTransferOnCooldown(room)) return false;
     spotifyDevices.markJamTransferAttempt(room);
   }
-  await spotifyFor(roomId).transferPlayback(transferTarget, false);
+  // play:true — play:false empties Windows Now Playing on device-switch restore.
+  await spotifyFor(roomId).transferPlayback(transferTarget, true);
   spotifyDevices.cacheJamDeviceId(room, transferTarget);
   return true;
 }
@@ -4165,7 +4177,8 @@ function startSimpleContextMonitor(roomId, deviceId) {
         console.warn(`⚠️ Device switch detected! Expected: ${transferTarget}, Got: ${currentDeviceId}. Transferring back...`);
         
         try {
-          await spotifyFor(roomId).transferPlayback(transferTarget, false);
+          // play:true — play:false empties Windows Connect Now Playing on restore.
+          await spotifyFor(roomId).transferPlayback(transferTarget, true);
           spotifyDevices.cacheJamDeviceId(room, transferTarget);
           routineServerLog(`✅ Transferred playback back to locked device: ${transferTarget}`);
           clearMonitorSuspect();
@@ -4561,6 +4574,7 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     routineServerLog(`✅ Playback started successfully for: ${nextSong.name}`);
     routineServerLog(`✅ Simple advance: ${nextSong.name} by ${nextSong.artist}`);
     room._spotifyAdvanceSoftRetries = 0;
+    room._spotifyNotPlayingSoftRetries = 0;
 
     if (roomStillPlaying(roomId)) {
       startSimpleProgression(roomId, resolvedDeviceId, room.snippetLength);
@@ -4570,14 +4584,84 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     showLog.logSpotifyApiError('simple song advance', error);
     const spErr = spotifyFor(roomId);
 
+    // Confirm flakiness: fail-open — keep 20s advance alive; soft notice; no blocking alert.
     if (error?.code === 'spotify_not_playing') {
-      clearRoomTimer(roomId);
-      io.to(roomId).emit('playback-error', {
+      const soft = Number(room._spotifyNotPlayingSoftRetries || 0);
+      io.to(roomId).emit('playback-warning', {
         message:
-          error?.message ||
-          'Spotify is not actually playing on the locked PC. Press play once in the Spotify app, then Start Game again.',
-        type: 'spotify_not_playing',
+          soft < 1
+            ? 'Spotify confirm was slow — round keeps advancing. Checking the locked speaker…'
+            : 'Spotify still would not confirm this track — skipping to the next call.',
+        type: soft < 1 ? 'spotify_not_playing' : 'spotify_not_playing_autoskip',
       });
+
+      // Never clearRoomTimer here — board must stay on the snippet clock.
+      if (roomStillPlaying(roomId)) {
+        startSimpleProgression(roomId, resolvedDeviceId, room.snippetLength);
+      }
+
+      if (soft < 1) {
+        room._spotifyNotPlayingSoftRetries = soft + 1;
+        clearSpotifyCallRetryTimer(room);
+        room._spotifyCallRetryTimer = setTimeout(async () => {
+          room._spotifyCallRetryTimer = null;
+          if (!roomStillPlaying(roomId) || room._spotifyAdvanceLocked) return;
+          try {
+            const state = await spErr.getCurrentPlaybackState();
+            const wantMs = room.currentSongStartMs || 0;
+            if (state?.item?.id === nextSong.id) {
+              if (!state.is_playing) {
+                try {
+                  await spErr.resumePlayback(resolvedDeviceId);
+                } catch (_) {
+                  /* ignore */
+                }
+              }
+              const prog = Number(state.progress_ms || 0);
+              if (wantMs > 0 && prog < 2500 && Math.abs(prog - wantMs) > 4000) {
+                try {
+                  await spErr.seekToPosition(wantMs, resolvedDeviceId);
+                } catch (_) {
+                  /* ignore */
+                }
+              }
+              room._spotifyNotPlayingSoftRetries = 0;
+              routineServerLog('✅ Soft recover: correct track already on device (no rebind)');
+              return;
+            }
+            // One gentle replay — no bind@0 (avoids audible restart from 0).
+            routineServerLog('🔄 Soft recover: context replay without bind@0…');
+            await spErr.startPlayback(
+              resolvedDeviceId,
+              [`spotify:track:${nextSong.id}`],
+              wantMs,
+              { ...songSpotifyPlaybackContextOptions(nextSong), allowBindAtZero: false },
+            );
+            room._spotifyNotPlayingSoftRetries = 0;
+            routineServerLog('✅ Soft recover startPlayback completed');
+          } catch (recoverErr) {
+            console.warn(
+              '⚠️ Soft recover failed — auto-skipping to keep show moving:',
+              showLog.spotifyErrorSummary(recoverErr),
+            );
+            room._spotifyNotPlayingSoftRetries = 0;
+            io.to(roomId).emit('playback-warning', {
+              message: 'Could not confirm playback on the locked speaker — skipping to the next call.',
+              type: 'spotify_not_playing_autoskip',
+            });
+            if (!roomStillPlaying(roomId) || room._spotifyAdvanceLocked) return;
+            playNextSongSimple(roomId, resolvedDeviceId);
+          }
+        }, 2200);
+      } else {
+        room._spotifyNotPlayingSoftRetries = 0;
+        clearSpotifyCallRetryTimer(room);
+        room._spotifyCallRetryTimer = setTimeout(() => {
+          room._spotifyCallRetryTimer = null;
+          if (!roomStillPlaying(roomId) || room._spotifyAdvanceLocked) return;
+          playNextSongSimple(roomId, resolvedDeviceId);
+        }, 600);
+      }
       return;
     }
 
@@ -4590,27 +4674,49 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     if (roomStillPlaying(roomId) && !room._spotifyAdvanceLocked) {
       try {
         if (!spErr.isQuarantined()) {
-          routineServerLog('🔄 Attempting hard re-start after song advance failure...');
+          routineServerLog('🔄 Attempting resume/seek recover after song advance failure...');
           try {
-            await spErr.startPlayback(
-              resolvedDeviceId,
-              [`spotify:track:${nextSong.id}`],
-              room.currentSongStartMs || 0,
-              { ...songSpotifyPlaybackContextOptions(nextSong) },
-            );
+            const state = await spErr.getCurrentPlaybackState();
+            if (state?.item?.id === nextSong.id) {
+              if (!state.is_playing) await spErr.resumePlayback(resolvedDeviceId);
+              const wantMs = room.currentSongStartMs || 0;
+              const prog = Number(state.progress_ms || 0);
+              if (wantMs > 0 && prog < 2500 && Math.abs(prog - wantMs) > 4000) {
+                try {
+                  await spErr.seekToPosition(wantMs, resolvedDeviceId);
+                } catch (_) {
+                  /* ignore */
+                }
+              }
+            } else {
+              // Prefer context play without bind@0 thrash when item never bound.
+              await spErr.startPlayback(
+                resolvedDeviceId,
+                [`spotify:track:${nextSong.id}`],
+                room.currentSongStartMs || 0,
+                { ...songSpotifyPlaybackContextOptions(nextSong), allowBindAtZero: false },
+              );
+            }
           } catch {
             await spErr.resumePlayback(resolvedDeviceId);
           }
-          routineServerLog('✅ Recovery start/resume attempt completed');
+          routineServerLog('✅ Recovery resume/seek attempt completed');
+          if (roomStillPlaying(roomId)) {
+            startSimpleProgression(roomId, resolvedDeviceId, room.snippetLength);
+          }
+          room._spotifyAdvanceSoftRetries = 0;
+          return;
         }
       } catch (resumeError) {
         console.warn('⚠️ Failed to recover playback:', showLog.spotifyErrorSummary(resumeError));
         if (resumeError?.code === 'spotify_not_playing') {
-          clearRoomTimer(roomId);
-          io.to(roomId).emit('playback-error', {
-            message: resumeError.message,
+          io.to(roomId).emit('playback-warning', {
+            message: resumeError.message || 'Spotify confirm flaky — round keeps advancing.',
             type: 'spotify_not_playing',
           });
+          if (roomStillPlaying(roomId)) {
+            startSimpleProgression(roomId, resolvedDeviceId, room.snippetLength);
+          }
           return;
         }
         if (isSpotifyRateLimitOrQuarantineError(resumeError, spErr)) {
@@ -4627,17 +4733,31 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
 
     const retries = Number(room._spotifyAdvanceSoftRetries || 0);
     if (retries >= 2) {
-      console.warn('⚠️ Soft advance retries exhausted — host must Skip/Resume manually');
-      clearRoomTimer(roomId);
-      io.to(roomId).emit('playback-error', {
+      console.warn('⚠️ Soft advance retries exhausted — auto-skipping to keep show moving');
+      io.to(roomId).emit('playback-warning', {
         message:
-          'Spotify would not start this track on the locked speaker after retries. The call is on the board — use Skip to continue, or re-select the device under Connection.',
-        type: 'advance_exhausted',
+          'Spotify would not start this track after retries — skipping to the next call. Re-select the device under Connection if audio stays silent.',
+        type: 'advance_exhausted_autoskip',
       });
+      room._spotifyAdvanceSoftRetries = 0;
+      // Keep advancing — do not clear timer / block on Skip.
+      if (roomStillPlaying(roomId)) {
+        startSimpleProgression(roomId, resolvedDeviceId, room.snippetLength);
+      }
+      clearSpotifyCallRetryTimer(room);
+      room._spotifyCallRetryTimer = setTimeout(() => {
+        room._spotifyCallRetryTimer = null;
+        if (!roomStillPlaying(roomId) || room._spotifyAdvanceLocked) return;
+        playNextSongSimple(roomId, resolvedDeviceId);
+      }, 600);
       return;
     }
     room._spotifyAdvanceSoftRetries = retries + 1;
     routineServerLog(`🔄 Retrying same call in 3 seconds (soft retry ${room._spotifyAdvanceSoftRetries}/2)...`);
+    // Fail-open: keep snippet clock running while we soft-retry.
+    if (roomStillPlaying(roomId)) {
+      startSimpleProgression(roomId, resolvedDeviceId, room.snippetLength);
+    }
     clearSpotifyCallRetryTimer(room);
     room._spotifyCallRetryTimer = setTimeout(() => {
       room._spotifyCallRetryTimer = null;
@@ -12126,6 +12246,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     room.gameState = 'playing';
     room._spotifyAdvanceLocked = false;
     room._spotifyAdvanceSoftRetries = 0;
+    room._spotifyNotPlayingSoftRetries = 0;
     room._spotifyAdvanceLockReason = null;
     clearSpotifyCallRetryTimer(room);
     if (room.mixFinalized) {

@@ -5173,6 +5173,25 @@ const HostView: React.FC = () => {
       
       console.error('Playback error:', msg);
       setSpotifyError(msg);
+      addLog(`Playback error: ${msg}`, 'error');
+
+      // Confirm flakiness / fail-open paths — never block the round with alert().
+      const softBlockTypes = new Set([
+        'spotify_not_playing',
+        'spotify_not_playing_autoskip',
+        'advance_exhausted',
+        'advance_exhausted_autoskip',
+        'audio_unconfirmed',
+      ]);
+      if (softBlockTypes.has(type)) {
+        showHostAckNotificationSocketRef.current({
+          id: `playback-soft-${type}`,
+          title: 'Playback notice',
+          variant: 'warning',
+          message: msg,
+        });
+        return;
+      }
       
       if (type === 'restriction' && suggestions.length > 0) {
         const suggestionText = suggestions.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n');
@@ -5180,8 +5199,6 @@ const HostView: React.FC = () => {
       } else {
         alert(msg + '\n\nTip: Ensure Spotify is open and active on your chosen device, then use Transfer Playback in the Spotify app.');
       }
-      
-      addLog(`Playback error: ${msg}`, 'error');
     });
 
     newSocket.on('spotify-failsafe', (data: any) => {
@@ -5233,23 +5250,20 @@ const HostView: React.FC = () => {
       
       console.warn('Playback warning:', msg);
       addLog(`Playback warning: ${msg}`, 'warn');
+
+      showHostAckNotificationSocketRef.current({
+        id: `playback-warning-${type}`,
+        title: type === 'spotify_not_playing_autoskip' || type === 'advance_exhausted_autoskip'
+          ? 'Skipped track'
+          : 'Playback notice',
+        variant: 'warning',
+        message: msg,
+      });
       
       // Show helpful suggestions for restriction warnings
       if (type === 'restriction' && suggestions.length > 0) {
         const suggestionText = suggestions.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n');
         console.log(`Restriction suggestions:\n${suggestionText}`);
-        // Non-blocking toast instead of alert to avoid desync
-        try {
-          const toast = document.createElement('div');
-          toast.textContent = msg;
-          Object.assign(toast.style, {
-            position: 'fixed', bottom: '14px', left: '14px', maxWidth: '70vw',
-            background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)',
-            padding: '10px 12px', borderRadius: '10px', zIndex: 9999, fontWeight: 700
-          } as unknown as CSSStyleDeclaration);
-          document.body.appendChild(toast);
-          setTimeout(() => { try { document.body.removeChild(toast); } catch {} }, 3000);
-        } catch {}
       }
     });
 

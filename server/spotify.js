@@ -1503,6 +1503,8 @@ class SpotifyService {
         ? `spotify:album:${contextAlbumId}`
         : null;
     const confirm = options.confirm !== false;
+    // bind@0 restarts audible audio from the top — only as last resort when item never bound.
+    const allowBindAtZero = options.allowBindAtZero !== false;
 
     const playViaContext = async (ms) => {
       await this.spotifyApi.play({
@@ -1529,13 +1531,46 @@ class SpotifyService {
       }
       const playing = !!state?.is_playing;
       const itemId = state?.item?.id || null;
-      return { playing, itemId, state };
+      const progressMs = Number(state?.progress_ms || 0);
+      return { playing, itemId, progressMs, state };
+    };
+
+    /** If the called track is already bound, resume/seek — never wipe with bind@0. */
+    const settleBoundTrack = async (snap, label) => {
+      if (!trackId || snap.itemId !== trackId) return false;
+      if (!snap.playing) {
+        try {
+          await this.resumePlayback(deviceId);
+        } catch (_) {
+          /* ignore */
+        }
+        await new Promise((r) => setTimeout(r, 250));
+        snap = await readSnap();
+      }
+      // Early start already audible but stuck near 0 after a bad bind — nudge to Early.
+      if (
+        positionMs > 0 &&
+        Number.isFinite(snap.progressMs) &&
+        snap.progressMs < 2500 &&
+        Math.abs(snap.progressMs - positionMs) > 4000
+      ) {
+        try {
+          await this.seekToPosition(positionMs, deviceId);
+          routineSpotifyLog(`🎯 startPlayback ${label}: seek to Early ${positionMs}ms (was ${snap.progressMs}ms)`);
+        } catch (_) {
+          /* keep whatever is playing */
+        }
+      }
+      routineSpotifyLog(
+        `🔎 startPlayback ${label}: item bound (is_playing=${snap.playing} progress=${snap.progressMs}ms) — success without rebind`,
+      );
+      return true;
     };
 
     /** Poll — Windows Connect often returns item=none for a few hundred ms after a successful play. */
-    const confirmPlaying = async (label) => {
-      for (let attempt = 1; attempt <= 5; attempt++) {
-        await new Promise((r) => setTimeout(r, attempt === 1 ? 450 : 350));
+    const confirmPlaying = async (label, maxAttempts = 5) => {
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        await new Promise((r) => setTimeout(r, attempt === 1 ? 450 : 400));
         let snap = await readSnap();
         // Correct item loaded but paused — nudge resume (common right after context bind).
         if (trackId && snap.itemId === trackId && !snap.playing) {
@@ -1549,16 +1584,11 @@ class SpotifyService {
         }
         const ok = snap.playing && (!trackId || snap.itemId === trackId);
         routineSpotifyLog(
-          `🔎 startPlayback ${label}#${attempt}: is_playing=${snap.playing} item=${snap.itemId || 'none'} ok=${ok}`,
+          `🔎 startPlayback ${label}#${attempt}: is_playing=${snap.playing} item=${snap.itemId || 'none'} progress=${snap.progressMs}ms ok=${ok}`,
         );
         if (ok) return true;
         // Bound with correct item even if is_playing flickers — don't destroy the session.
-        if (trackId && snap.itemId === trackId) {
-          routineSpotifyLog(
-            `🔎 startPlayback ${label}#${attempt}: item bound (is_playing=${snap.playing}) — treating as success`,
-          );
-          return true;
-        }
+        if (await settleBoundTrack(snap, `${label}#${attempt}`)) return true;
       }
       return false;
     };
@@ -1569,13 +1599,31 @@ class SpotifyService {
         routineSpotifyLog(`🎵 startPlayback context_uri ${ctxKind} @${positionMs}ms`);
         await playViaContext(positionMs);
         if (!confirm) return;
-        if (await confirmPlaying('after-context')) return;
+        // Longer first poll — Connect confirm lags while Early audio is already audible.
+        if (await confirmPlaying('after-context', 8)) return;
+
+        // Extra grace: if the right item finally appears, settle — do NOT bind@0 (audible restart).
+        {
+          const late = await readSnap();
+          if (await settleBoundTrack(late, 'after-context-late')) return;
+          if (late.playing && !late.itemId) {
+            routineSpotifyLog(
+              '⏳ startPlayback after-context: is_playing with item=none — waiting before bind@0',
+            );
+            if (await confirmPlaying('after-context-grace', 4)) return;
+            const late2 = await readSnap();
+            if (await settleBoundTrack(late2, 'after-context-grace-late')) return;
+          }
+        }
 
         // Mid-track Early offset sometimes fails to bind — retry at 0 then seek (no URI).
-        if (positionMs > 0) {
-          routineSpotifyLog('🔧 context@Early not confirmed — bind@0 then seek');
+        // Only when item never bound; skip when caller forbids (soft-recover path).
+        if (positionMs > 0 && allowBindAtZero) {
+          const preBind = await readSnap();
+          if (await settleBoundTrack(preBind, 'pre-bind-0')) return;
+          routineSpotifyLog('🔧 context@Early not confirmed — bind@0 then seek (last resort)');
           await playViaContext(0);
-          if (await confirmPlaying('after-context-bind-0')) {
+          if (await confirmPlaying('after-context-bind-0', 6)) {
             try {
               await this.seekToPosition(positionMs, deviceId);
             } catch (_) {
@@ -1583,6 +1631,17 @@ class SpotifyService {
             }
             return;
           }
+          const postBind = await readSnap();
+          if (await settleBoundTrack(postBind, 'after-bind-0-late')) {
+            try {
+              await this.seekToPosition(positionMs, deviceId);
+            } catch (_) {
+              /* ignore */
+            }
+            return;
+          }
+        } else if (positionMs > 0 && !allowBindAtZero) {
+          routineSpotifyLog('⏭️ context@Early unconfirmed — skipping bind@0 (allowBindAtZero=false)');
         }
 
         const errCtx = new Error(
@@ -1596,7 +1655,7 @@ class SpotifyService {
 
       await playViaUris(positionMs);
       if (!confirm) return;
-      if (await confirmPlaying('after-uri')) return;
+      if (await confirmPlaying('after-uri', 8)) return;
 
       const err = new Error(
         'Spotify accepted play but is_playing stayed false on the locked PC (Now Playing empty). ' +
