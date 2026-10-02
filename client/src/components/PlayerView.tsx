@@ -962,6 +962,12 @@ const PlayerView: React.FC = () => {
       setMySongRequests([]);
     });
 
+    newSocket.on('song-request-removed', (data: any) => {
+      const requestId = typeof data?.requestId === 'string' ? data.requestId : '';
+      if (!requestId) return;
+      setMySongRequests((prev) => prev.filter((entry) => entry.id !== requestId));
+    });
+
     // Roster updates are host/display-only — do not subscribe on player phones.
 
     newSocket.on('bingo-column-letters-updated', (data: any) => {

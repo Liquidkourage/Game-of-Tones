@@ -6045,6 +6045,56 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('remove-song-request', (data = {}, acknowledge) => {
+    const reply = (payload) => {
+      if (typeof acknowledge === 'function') acknowledge(payload);
+    };
+    try {
+      const roomId = typeof data.roomId === 'string' ? data.roomId : '';
+      const room = rooms.get(roomId);
+      const player = room?.players?.get(socket.id);
+      const isHost = !!room && (socket.id === room.host || player?.isHost);
+      const requestId = typeof data.requestId === 'string' ? data.requestId.trim() : '';
+      if (!room || !isHost || !requestId) {
+        reply({ ok: false });
+        return;
+      }
+      const requests = Array.isArray(room.songRequests) ? room.songRequests : [];
+      const index = requests.findIndex((entry) => entry?.id === requestId);
+      if (index < 0) {
+        reply({ ok: false });
+        return;
+      }
+      const removed = requests[index];
+      room.songRequests = requests.filter((_, i) => i !== index);
+      persistRoomSongRequests(room);
+      const submitterClientId =
+        typeof removed?.clientId === 'string' && removed.clientId.trim()
+          ? removed.clientId.trim()
+          : '';
+      const submitterName =
+        typeof removed?.playerName === 'string' ? removed.playerName.trim() : '';
+      for (const [playerId, roomPlayer] of room.players) {
+        if (playerId === room.host || roomPlayer?.isHost) {
+          io.to(playerId).emit('song-request-removed', { requestId });
+          continue;
+        }
+        if (isDisplayConnectionPlayer(roomPlayer)) continue;
+        const playerClientId =
+          typeof roomPlayer?.clientId === 'string' ? roomPlayer.clientId.trim() : '';
+        if (submitterClientId && playerClientId && playerClientId === submitterClientId) {
+          io.to(playerId).emit('song-request-removed', { requestId });
+        } else if (!submitterClientId && submitterName && roomPlayer?.name === submitterName) {
+          io.to(playerId).emit('song-request-removed', { requestId });
+        }
+      }
+      reply({ ok: true, requestId });
+    } catch (error) {
+      console.error('remove-song-request failed:', error?.message || error);
+      reply({ ok: false });
+    }
+  });
+
   socket.on('clear-song-requests', (data = {}) => {
     const roomId = typeof data.roomId === 'string' ? data.roomId : '';
     const room = rooms.get(roomId);

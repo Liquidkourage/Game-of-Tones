@@ -147,18 +147,6 @@
   scrollbar-width: thin;
 }
 
-.host-requests-queue {
-  flex: 1 0 100%;
-  display: grid;
-  gap: 6px;
-  max-height: clamp(180px, 28vh, 360px);
-  margin-top: 4px;
-  padding: 2px 6px 2px 34px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-}
-
 .host-playlist-library-inline .host-tempo-library {
   max-height: clamp(260px, calc(100vh - 430px), 680px);
   overflow-y: auto;

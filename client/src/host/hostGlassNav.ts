@@ -1,4 +1,11 @@
-export type HostGlassNavId = 'game' | 'rounds' | 'setup' | 'players' | 'display' | 'settings';
+export type HostGlassNavId =
+  | 'game'
+  | 'rounds'
+  | 'setup'
+  | 'players'
+  | 'requests'
+  | 'display'
+  | 'settings';
 
 export const HOST_GLASS_NAV_ITEMS: Array<{
   id: HostGlassNavId;
@@ -8,6 +15,7 @@ export const HOST_GLASS_NAV_ITEMS: Array<{
   { id: 'rounds', label: 'Rounds' },
   { id: 'setup', label: 'Setup' },
   { id: 'players', label: 'Players' },
+  { id: 'requests', label: 'Requests' },
   { id: 'display', label: 'Display' },
   { id: 'settings', label: 'Settings' },
 ];

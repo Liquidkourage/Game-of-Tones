@@ -1,4 +1,4 @@
-/* Host glass theme — R4 refined: violet–mint glass + sidebar shell */
+/* Host glass theme ? R4 refined: violet?mint glass + sidebar shell */
 
 .host-glass-theme.host-view {
   background: transparent;
@@ -78,7 +78,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-/* Shell + sidebar — grid keeps the nav column left-docked across tab changes */
+/* Shell + sidebar ? grid keeps the nav column left-docked across tab changes */
 .host-glass-theme .host-shell {
   display: grid;
   grid-template-columns: 124px minmax(0, 1fr);
@@ -383,7 +383,7 @@
   box-shadow: 0 0 28px rgba(0, 255, 136, 0.25);
 }
 
-/* Show actions — horizontal glass bar under hero on wide screens */
+/* Show actions ? horizontal glass bar under hero on wide screens */
 .host-glass-theme .host-show-actions {
   display: flex;
   flex-wrap: wrap;
@@ -420,7 +420,7 @@
   gap: 14px;
 }
 
-/* Modals — match host-glass-panel surfaces */
+/* Modals ? match host-glass-panel surfaces */
 .host-glass-theme .host-connection-modal-backdrop {
   background: rgba(8, 10, 18, 0.78);
   backdrop-filter: blur(10px);
@@ -523,7 +523,7 @@
   box-shadow: 0 4px 20px rgba(0, 255, 136, 0.2);
 }
 
-/* —— R4 dashboard grid —— */
+/* ?? R4 dashboard grid ?? */
 .host-glass-theme .host-glass-workspace {
   display: flex;
   flex-direction: column;
@@ -655,7 +655,7 @@
   box-shadow: 0 0 10px rgba(0, 255, 136, 0.8);
 }
 
-/* R4 sliders — mint thumb on violet track */
+/* R4 sliders ? mint thumb on violet track */
 .host-glass-theme .host-range {
   height: 6px;
   border-radius: 999px;
@@ -977,7 +977,7 @@
   align-self: flex-start;
 }
 
-/* Legacy alias — keep if referenced elsewhere */
+/* Legacy alias ? keep if referenced elsewhere */
 .host-glass-theme .host-r4-queue {
   grid-column: 2;
   grid-row: 2;
@@ -1762,8 +1762,9 @@
   }
 }
 
-/* Host workspace panels (Players, Settings, Rounds extras, Game live) */
+/* Host workspace panels (Players, Requests, Settings, Rounds extras, Game live) */
 .host-glass-theme .host-players-workspace,
+.host-glass-theme .host-requests-workspace,
 .host-glass-theme .host-settings-workspace,
 .host-glass-theme .host-rounds-workspace-col,
 .host-glass-theme .host-game-live-extras {
@@ -1790,6 +1791,7 @@
 }
 
 .host-glass-theme .host-players-workspace__title,
+.host-glass-theme .host-requests-workspace__title,
 .host-glass-theme .host-settings-workspace__title,
 .host-glass-theme .host-round-timeline__title,
 .host-glass-theme .host-inline-library__title,
@@ -1906,6 +1908,174 @@
 .host-glass-theme .host-players-workspace__badge--online {
   background: rgba(126, 200, 255, 0.15);
   color: #7ec8ff;
+}
+
+.host-glass-theme .host-requests-workspace__summary,
+.host-glass-theme .host-requests-workspace__queue {
+  padding: 16px 18px;
+}
+
+.host-glass-theme .host-requests-workspace__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.host-glass-theme .host-requests-workspace__title-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--host-glass-violet-bright);
+}
+
+.host-glass-theme .host-requests-workspace__blurb {
+  margin: 0 0 12px;
+  font-size: 0.86rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.host-glass-theme .host-requests-workspace__stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.host-glass-theme .host-requests-workspace__stats strong {
+  color: var(--host-glass-violet-bright);
+  font-weight: 800;
+}
+
+.host-glass-theme .host-requests-workspace__link {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--host-glass-mint);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.host-glass-theme .host-requests-workspace__empty {
+  margin: 0;
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.host-glass-theme .host-requests-workspace__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: min(62vh, 640px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.host-glass-theme .host-requests-workspace__row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.host-glass-theme .host-requests-workspace__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: baseline;
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.host-glass-theme .host-requests-workspace__from {
+  opacity: 0.6;
+  font-size: 0.8rem;
+}
+
+.host-glass-theme .host-requests-workspace__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.host-glass-theme .host-requests-workspace__status {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.host-glass-theme .host-requests-workspace__status--approved {
+  color: var(--host-glass-mint);
+}
+
+.host-glass-theme .host-requests-workspace__status--rejected {
+  color: #ff9a9a;
+}
+
+.host-glass-theme .host-requests-workspace__remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  appearance: none;
+  background: rgba(255, 100, 100, 0.12);
+  border: 1px solid rgba(255, 140, 140, 0.28);
+  color: #ffb4b4;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.host-glass-theme .host-requests-workspace__remove svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.host-glass-theme .host-requests-workspace__remove:hover:not(:disabled) {
+  background: rgba(255, 100, 100, 0.2);
+}
+
+.host-glass-theme .host-requests-workspace__remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.host-glass-theme .host-requests-workspace__picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.host-glass-theme .host-requests-workspace__picker-label {
+  opacity: 0.8;
+  font-size: 0.72rem;
+}
+
+.host-glass-theme .host-requests-workspace__picker .host-playlist-quick-add {
+  text-align: left;
+  white-space: normal;
+  line-height: 1.25;
 }
 
 .host-glass-theme .host-preshow-checklist__list {
@@ -2130,7 +2300,7 @@
   color: rgba(255, 255, 255, 0.5);
 }
 
-/* Column-mode rounds: one small chip per playlist, listed in B–I–N–G–O card-column order. */
+/* Column-mode rounds: one small chip per playlist, listed in B?I?N?G?O card-column order. */
 .host-glass-theme .host-round-timeline__playlist-chips {
   display: flex;
   flex-wrap: wrap;
@@ -2533,7 +2703,7 @@
   margin-bottom: 10px;
 }
 
-/* Focus � live: full-width Now Playing, hide summary + actions */
+/* Focus ? live: full-width Now Playing, hide summary + actions */
 .host-view[data-game-layout='focus'] .host-r4-grid {
   grid-template-columns: 1fr;
   grid-template-rows: auto auto;
@@ -2572,7 +2742,7 @@
   min-height: 0;
 }
 
-/* Transport � live: Now Playing + call log 2-col; no Host actions */
+/* Transport ? live: Now Playing + call log 2-col; no Host actions */
 .host-view[data-game-layout='transport'] .host-r4-grid {
   grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr);
   grid-template-rows: auto;
@@ -2603,7 +2773,7 @@
   display: none;
 }
 
-/* Compact � live: denser single column */
+/* Compact ? live: denser single column */
 .host-view[data-game-layout='compact'] .host-r4-grid {
   grid-template-columns: 1fr;
   grid-template-rows: auto;
@@ -2645,7 +2815,7 @@
   margin-bottom: 6px;
 }
 
-/* Show desk � live: denser 2-col without Host actions (verify sticky above) */
+/* Show desk ? live: denser 2-col without Host actions (verify sticky above) */
 .host-view[data-game-layout='show_desk'] .host-r4-actions {
   display: none;
 }
@@ -2771,7 +2941,9 @@
 }
 
 .host-view[data-game-layout='focus'] .host-players-workspace,
-.host-view[data-game-layout='compact'] .host-players-workspace {
+.host-view[data-game-layout='compact'] .host-players-workspace,
+.host-view[data-game-layout='focus'] .host-requests-workspace,
+.host-view[data-game-layout='compact'] .host-requests-workspace {
   gap: 10px;
 }
 

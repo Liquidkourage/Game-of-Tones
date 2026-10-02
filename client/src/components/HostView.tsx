@@ -43,6 +43,7 @@ import {
   Copy,
   Download,
   ExternalLink,
+  Inbox,
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC, ENABLE_APPLE_MUSIC } from '../config';
@@ -170,6 +171,7 @@ import {
 } from '../utils/hostRoomRecovery';
 import { acquireHostRoomSocket, scheduleReleaseHostRoomSocket } from '../utils/hostRoomSocket';
 import HostPlayersPanel from './host/HostPlayersPanel';
+import HostRequestsPanel from './host/HostRequestsPanel';
 import HostSettingsPanel from './host/HostSettingsPanel';
 import HostPreShowChecklist, { type PreShowCheckItem } from './host/HostPreShowChecklist';
 import HostRoundTimeline from './host/HostRoundTimeline';
@@ -2077,6 +2079,7 @@ const HostView: React.FC = () => {
       rounds: <ListMusic aria-hidden />,
       setup: <Settings2 aria-hidden />,
       players: <Users aria-hidden />,
+      requests: <Inbox aria-hidden />,
       display: <Monitor aria-hidden />,
       settings: <Settings aria-hidden />,
     }),
@@ -4032,6 +4035,12 @@ const HostView: React.FC = () => {
       }
     });
     newSocket.on('song-requests-cleared', () => setSongRequests([]));
+    newSocket.on('song-request-removed', (data: any) => {
+      const requestId = typeof data?.requestId === 'string' ? data.requestId : '';
+      if (!requestId) return;
+      setSongRequests((prev) => prev.filter((entry) => entry.id !== requestId));
+      setRequestTrackPicker((prev) => (prev?.requestId === requestId ? null : prev));
+    });
     newSocket.on('prequeue-updated', (data: any) => {
       setPreQueueEnabled(!!data?.enabled);
       if (typeof data?.window === 'number') setPreQueueWindow(data.window);
@@ -8497,6 +8506,47 @@ const HostView: React.FC = () => {
     [socket, roomId, requestModerationBusyId, showToast, emitModerateSongRequest],
   );
 
+  const removeSongRequest = useCallback(
+    async (request: SongRequestEntry) => {
+      if (!socket || !roomId || requestModerationBusyId) return;
+      setRequestModerationBusyId(request.id);
+      setRequestTrackPicker((prev) => (prev?.requestId === request.id ? null : prev));
+      try {
+        await new Promise<void>((resolve, reject) => {
+          socket.emit(
+            'remove-song-request',
+            { roomId, requestId: request.id },
+            (result: { ok?: boolean } | undefined) =>
+              result?.ok ? resolve() : reject(new Error('Remove request failed')),
+          );
+        });
+        setSongRequests((prev) => prev.filter((entry) => entry.id !== request.id));
+        showToast(`Removed “${request.title}”.`, 'info');
+      } catch (error) {
+        console.error('Song request remove failed:', error);
+        showToast('Could not remove that request. Try again.', 'error');
+      } finally {
+        setRequestModerationBusyId(null);
+      }
+    },
+    [socket, roomId, requestModerationBusyId, showToast],
+  );
+
+  const clearAllSongRequests = useCallback(() => {
+    if (!socket || !roomId) return;
+    if (
+      !window.confirm(
+        'Clear all song requests in this room? Approved tracks will leave the Requests pool.',
+      )
+    ) {
+      return;
+    }
+    setSongRequests([]);
+    setRequestTrackPicker(null);
+    socket.emit('clear-song-requests', { roomId });
+    showToast('All song requests cleared.', 'info');
+  }, [socket, roomId, showToast]);
+
   const generateSongList = useCallback(
     async (opts?: {
       force?: boolean;
@@ -12859,7 +12909,6 @@ const HostView: React.FC = () => {
                         }}
                         onDragEnd={() => setLibraryPlaylistDragActive(false)}
                         onDoubleClick={(e) => handleLibraryPlaylistDoubleClick(e, REQUESTS_PLAYLIST_ID)}
-                        style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}
                       >
                         <span
                           className={
@@ -12879,13 +12928,20 @@ const HostView: React.FC = () => {
                             <span className="host-playlist-virtual-badge">Virtual</span>
                           </span>
                           <span className="host-playlist-desc">
-                            Player submissions matched to Spotify after host approval.
+                            Moderate submissions on the Requests tab. Drag here to assign a Requests round.
                           </span>
                         </span>
                         <span style={{ fontSize: '0.8rem', color: '#c9a6ff', paddingTop: 3 }}>
                           {requestPoolSongs.length} approved ·{' '}
                           {songRequests.filter((request) => request.status === 'pending').length} pending
                         </span>
+                        <button
+                          type="button"
+                          className="host-playlist-quick-add"
+                          onClick={() => onHostGlassNav('requests')}
+                        >
+                          Open Requests
+                        </button>
                         {libraryQuickAssignRound ? (
                           <button
                             type="button"
@@ -12911,106 +12967,6 @@ const HostView: React.FC = () => {
                               : `Add to ${libraryQuickAssignRound.name}`}
                           </button>
                         ) : null}
-                        <div className="host-requests-queue">
-                          {songRequests.length === 0 ? (
-                            <span className="host-playlist-desc">
-                              No requests yet. Players submit from their card menu.
-                            </span>
-                          ) : (
-                            songRequests
-                              .slice()
-                              .reverse()
-                              .map((request) => (
-                                <span
-                                  key={request.id}
-                                  style={{
-                                    display: 'flex',
-                                    gap: 8,
-                                    alignItems: 'center',
-                                    flexWrap: 'wrap',
-                                    fontSize: '0.78rem',
-                                  }}
-                                >
-                                  <strong>{request.title}</strong>
-                                  {request.artist ? <span>— {request.artist}</span> : null}
-                                  <span style={{ opacity: 0.65 }}>from {request.playerName}</span>
-                                  {request.status === 'pending' ? (
-                                    <>
-                                      <button
-                                        type="button"
-                                        className="host-playlist-quick-add"
-                                        disabled={requestModerationBusyId === request.id}
-                                        onClick={() => void moderateSongRequest(request, 'approved')}
-                                      >
-                                        Find &amp; approve
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="host-playlist-quick-add"
-                                        disabled={requestModerationBusyId === request.id}
-                                        onClick={() => void moderateSongRequest(request, 'rejected')}
-                                      >
-                                        Reject
-                                      </button>
-                                      {requestTrackPicker?.requestId === request.id ? (
-                                        <div
-                                          style={{
-                                            flexBasis: '100%',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            gap: 6,
-                                            marginTop: 4,
-                                            padding: '8px 10px',
-                                            borderRadius: 10,
-                                            background: 'rgba(0,0,0,0.28)',
-                                            border: '1px solid rgba(255,255,255,0.12)',
-                                          }}
-                                        >
-                                          <span style={{ opacity: 0.8, fontSize: '0.72rem' }}>
-                                            Pick the Spotify track:
-                                          </span>
-                                          {requestTrackPicker.tracks.map((track) => (
-                                            <button
-                                              key={track.id}
-                                              type="button"
-                                              className="host-playlist-quick-add"
-                                              disabled={requestModerationBusyId === request.id}
-                                              onClick={() => void confirmSongRequestTrack(request, track)}
-                                              style={{
-                                                textAlign: 'left',
-                                                whiteSpace: 'normal',
-                                                lineHeight: 1.25,
-                                              }}
-                                            >
-                                              <strong>{track.name}</strong>
-                                              <span style={{ opacity: 0.75 }}> — {track.artist}</span>
-                                            </button>
-                                          ))}
-                                          <button
-                                            type="button"
-                                            className="host-playlist-quick-add"
-                                            onClick={() => setRequestTrackPicker(null)}
-                                          >
-                                            Cancel match
-                                          </button>
-                                        </div>
-                                      ) : null}
-                                    </>
-                                  ) : (
-                                    <span
-                                      style={{
-                                        color: request.status === 'approved' ? '#00ff88' : '#ff9a9a',
-                                      }}
-                                    >
-                                      {request.status === 'approved'
-                                        ? `Approved${request.resolvedSong ? ` as ${request.resolvedSong.name}` : ''}`
-                                        : 'Rejected'}
-                                    </span>
-                                  )}
-                                </span>
-                              ))
-                          )}
-                        </div>
                       </div>
                       {(() => {
                         const assignedRoundCount =
@@ -14380,6 +14336,24 @@ const HostView: React.FC = () => {
                   roster={hostPlayerRoster}
                   onOpenPlayerCards={openPlayerCardsModal}
                   onCopyJoinLink={handleCopyJoinLink}
+                />
+              </div>
+            ) : null}
+
+            {hostGlassNav === 'requests' && roomId ? (
+              <div data-host-tutorial="requests">
+                <HostRequestsPanel
+                  requests={songRequests}
+                  approvedCount={requestPoolSongs.length}
+                  pendingCount={songRequests.filter((r) => r.status === 'pending').length}
+                  busyRequestId={requestModerationBusyId}
+                  trackPicker={requestTrackPicker}
+                  onModerate={(request, status) => void moderateSongRequest(request, status)}
+                  onConfirmTrack={(request, track) => void confirmSongRequestTrack(request, track)}
+                  onCancelTrackPicker={() => setRequestTrackPicker(null)}
+                  onRemove={(request) => void removeSongRequest(request)}
+                  onClearAll={clearAllSongRequests}
+                  onGoToRounds={() => onHostGlassNav('rounds')}
                 />
               </div>
             ) : null}
