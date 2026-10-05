@@ -2951,16 +2951,29 @@ const HostView: React.FC = () => {
           }
           // Merge org co-host playlist refs + round-assigned ids that aren't in this Spotify library.
           const byId = new Map(allPlaylists.map((p) => [canonicalPlaylistIdForMatch(String(p.id)), p]));
+          const snapshotCounts = new Map<string, number>();
+          for (const round of eventRoundsRef.current) {
+            for (const song of round.savedMixSnapshot?.songs || []) {
+              const pid = String(song.sourcePlaylistId || '').trim();
+              if (!pid || pid.startsWith('__')) continue;
+              const canon = canonicalPlaylistIdForMatch(pid);
+              snapshotCounts.set(canon, (snapshotCounts.get(canon) || 0) + 1);
+            }
+          }
           const shelf: OrgSharedPlaylistRef[] = [
             ...orgSharedPlaylistRefs,
             ...eventRoundsRef.current.flatMap((round) => {
               const ids = round.playlistIds || [];
               const names = round.playlistNames || [];
-              return ids.map((id, i) => ({
-                id: String(id),
-                name: typeof names[i] === 'string' && names[i].trim() ? names[i].trim() : 'Team playlist',
-                tracks: 0,
-              }));
+              return ids.map((id, i) => {
+                const pid = String(id);
+                const canon = canonicalPlaylistIdForMatch(pid);
+                return {
+                  id: pid,
+                  name: typeof names[i] === 'string' && names[i].trim() ? names[i].trim() : 'Team playlist',
+                  tracks: snapshotCounts.get(canon) || 0,
+                };
+              });
             }),
           ];
           for (const ref of shelf) {
@@ -2968,10 +2981,12 @@ const HostView: React.FC = () => {
             if (!id || id.startsWith('__')) continue;
             const canon = canonicalPlaylistIdForMatch(id);
             if (byId.has(canon)) continue;
+            const snap = snapshotCounts.get(canon) || 0;
+            const refTracks = typeof ref.tracks === 'number' ? ref.tracks : 0;
             byId.set(canon, {
               id,
               name: ref.name || 'Team playlist',
-              tracks: typeof ref.tracks === 'number' ? ref.tracks : 0,
+              tracks: Math.max(refTracks, snap),
               description: 'Shared by a co-host in your organization',
               orgShared: true,
             });
@@ -8755,6 +8770,8 @@ const HostView: React.FC = () => {
             retryAfterSec?: number;
             upstreamUnavailable?: boolean;
             cacheMessage?: string;
+            fromOrgTeammateCache?: boolean;
+            fromOrgPrepSnapshot?: boolean;
           } = {};
           try {
             data = (await response.json()) as typeof data;
@@ -8766,8 +8783,11 @@ const HostView: React.FC = () => {
             continue;
           }
           if (!response.ok && !data.success) {
+            const privateNoSnap = data.error === 'org_playlist_private_no_snapshot';
             addLog(
-              `Failed to load tracks for ${playlist.name || playlist.id}: ${data.message || data.error || response.status}${catalog ? ' (Tempo Library)' : ''}.`,
+              privateNoSnap
+                ? `${playlist.name || playlist.id}: private on another Spotify account — Tempo has no saved snapshot/cache yet. Ask that host to open or save the round once.`
+                : `Failed to load tracks for ${playlist.name || playlist.id}: ${data.message || data.error || response.status}${catalog ? ' (Tempo Library)' : ''}.`,
               'warn',
             );
           }
@@ -8811,6 +8831,14 @@ const HostView: React.FC = () => {
               variant: 'warning',
               message: data.cacheMessage || 'Using cached tracks because Spotify is temporarily unavailable.',
             });
+          }
+          if (
+            data.success &&
+            data.tracks &&
+            (data.fromOrgTeammateCache || data.fromOrgPrepSnapshot) &&
+            data.cacheMessage
+          ) {
+            addLog(`${playlist.name || playlist.id}: ${data.cacheMessage}`, 'info');
           }
           if (data.success && data.tracks) {
             const plCanon = canonicalPlaylistIdForMatch(playlist.id);
@@ -11295,13 +11323,21 @@ const HostView: React.FC = () => {
     for (const round of eventRounds) {
       const ids = round.playlistIds || [];
       const names = round.playlistNames || [];
+      const snapshotCounts = new Map<string, number>();
+      for (const song of round.savedMixSnapshot?.songs || []) {
+        const pid = String(song.sourcePlaylistId || '').trim();
+        if (!pid || pid.startsWith('__')) continue;
+        snapshotCounts.set(pid, (snapshotCounts.get(pid) || 0) + 1);
+      }
       for (let i = 0; i < ids.length; i++) {
         const id = String(ids[i] || '').trim();
         if (!id || id.startsWith('__')) continue;
+        const canon = canonicalPlaylistIdForMatch(id);
+        const fromSnap = snapshotCounts.get(id) || snapshotCounts.get(canon) || 0;
         refs.push({
           id,
           name: typeof names[i] === 'string' && names[i].trim() ? names[i].trim() : 'Team playlist',
-          tracks: 0,
+          tracks: fromSnap,
           updatedAt: Date.now(),
         });
       }
@@ -11313,6 +11349,16 @@ const HostView: React.FC = () => {
   /** Inject org playlist refs into the visible library without waiting for another Spotify list fetch. */
   useEffect(() => {
     if (orgSharedPlaylistRefs.length === 0) return;
+    // Prefer counts from this room's saved-round snapshots when shelf still says 0.
+    const snapshotCounts = new Map<string, number>();
+    for (const round of eventRoundsRef.current) {
+      for (const song of round.savedMixSnapshot?.songs || []) {
+        const pid = String(song.sourcePlaylistId || '').trim();
+        if (!pid || pid.startsWith('__')) continue;
+        const canon = canonicalPlaylistIdForMatch(pid);
+        snapshotCounts.set(canon, (snapshotCounts.get(canon) || 0) + 1);
+      }
+    }
     setPlaylists((prev) => {
       const byId = new Map(prev.map((p) => [canonicalPlaylistIdForMatch(String(p.id)), { ...p }]));
       let changed = false;
@@ -11321,9 +11367,20 @@ const HostView: React.FC = () => {
         if (!id || id.startsWith('__')) continue;
         const canon = canonicalPlaylistIdForMatch(id);
         const existing = byId.get(canon);
+        const snapCount = snapshotCounts.get(canon) || 0;
+        const refTracks = typeof ref.tracks === 'number' ? ref.tracks : 0;
+        const bestListed = Math.max(refTracks, snapCount);
         if (existing) {
+          let next = existing;
           if (!existing.orgShared) {
-            byId.set(canon, { ...existing, orgShared: true });
+            next = { ...next, orgShared: true };
+          }
+          const prevListed = Math.max(0, Number(existing.tracks) || 0);
+          if (bestListed > prevListed && (existing.tracksLoaded == null || existing.tracksLoaded <= 0)) {
+            next = { ...next, tracks: bestListed };
+          }
+          if (next !== existing) {
+            byId.set(canon, next);
             changed = true;
           }
           continue;
@@ -11331,7 +11388,7 @@ const HostView: React.FC = () => {
         byId.set(canon, {
           id,
           name: ref.name || 'Team playlist',
-          tracks: typeof ref.tracks === 'number' ? ref.tracks : 0,
+          tracks: bestListed,
           description: 'Shared by a co-host in your organization',
           orgShared: true,
         });

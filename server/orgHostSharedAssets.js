@@ -113,6 +113,34 @@ function mergeById(existing, incoming, sanitize, max) {
     .slice(0, max);
 }
 
+/** Prefer higher track counts + newer timestamps so a later tracks:0 harvest cannot wipe a real count. */
+function mergePlaylistRefsById(existing, incoming, max) {
+  const map = new Map();
+  const put = (row) => {
+    const s = sanitizePlaylistRefRow(row);
+    if (!s) return;
+    const prev = map.get(s.id);
+    if (!prev) {
+      map.set(s.id, s);
+      return;
+    }
+    const tracks = Math.max(prev.tracks || 0, s.tracks || 0);
+    const name =
+      s.name && s.name !== 'Shared playlist'
+        ? s.name
+        : prev.name && prev.name !== 'Shared playlist'
+          ? prev.name
+          : s.name || prev.name;
+    const updatedAt = Math.max(prev.updatedAt || 0, s.updatedAt || 0);
+    map.set(s.id, { id: s.id, name, tracks, updatedAt });
+  };
+  for (const row of existing) put(row);
+  for (const row of incoming) put(row);
+  return Array.from(map.values())
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    .slice(0, max);
+}
+
 async function ensureOrgHostSharedAssetsTable(db) {
   if (!db) return false;
   await db.query(`
@@ -177,7 +205,7 @@ async function mergeOrgHostSharedAssets(db, organizationId, patch) {
 
   const playlistRefs =
     patch && Array.isArray(patch.playlistRefs)
-      ? mergeById(current.playlistRefs, patch.playlistRefs, sanitizePlaylistRefRow, MAX_PLAYLIST_REFS)
+      ? mergePlaylistRefsById(current.playlistRefs, patch.playlistRefs, MAX_PLAYLIST_REFS)
       : current.playlistRefs.map(sanitizePlaylistRefRow).filter(Boolean).slice(0, MAX_PLAYLIST_REFS);
 
   const r = await db.query(
@@ -253,22 +281,129 @@ async function replaceOrgHostSharedAssets(db, organizationId, patch) {
   };
 }
 
-/** Extract playlist id/name pairs from cloud prep rounds for org shelf. */
+/**
+ * Count songs per sourcePlaylistId from a round's saved mix (and leftover recap when present).
+ * Used so org shelf rows show real counts instead of silent 0.
+ */
+function trackCountsByPlaylistIdFromRound(round) {
+  const counts = new Map();
+  const bump = (rawId) => {
+    const id = typeof rawId === 'string' ? rawId.trim() : '';
+    if (!id || id.startsWith('__')) return;
+    counts.set(id, (counts.get(id) || 0) + 1);
+  };
+  const songs = Array.isArray(round?.savedMixSnapshot?.songs) ? round.savedMixSnapshot.songs : [];
+  for (const song of songs) {
+    bump(song?.sourcePlaylistId);
+  }
+  const leftovers = Array.isArray(round?.playRecap?.leftoverSongs) ? round.playRecap.leftoverSongs : [];
+  for (const song of leftovers) {
+    // Leftover pool remaps sourcePlaylistId to __leftovers__; prefer origin Spotify id when present.
+    const origin =
+      song?.spotifyContextPlaylistId ||
+      song?.originPlaylistId ||
+      (typeof song?.sourcePlaylistId === 'string' && !String(song.sourcePlaylistId).startsWith('__')
+        ? song.sourcePlaylistId
+        : null);
+    bump(origin);
+  }
+  return counts;
+}
+
+/** Extract playlist id/name/track-count refs from cloud prep rounds for org shelf. */
 function playlistRefsFromPrepRounds(rounds) {
   if (!Array.isArray(rounds)) return [];
-  const out = [];
+  const byId = new Map();
   for (const round of rounds) {
     if (!round || typeof round !== 'object') continue;
     const ids = Array.isArray(round.playlistIds) ? round.playlistIds : [];
     const names = Array.isArray(round.playlistNames) ? round.playlistNames : [];
+    const snapshotCounts = trackCountsByPlaylistIdFromRound(round);
+    const updatedAt =
+      typeof round.savedMixSnapshot?.savedAt === 'number' && Number.isFinite(round.savedMixSnapshot.savedAt)
+        ? round.savedMixSnapshot.savedAt
+        : Date.now();
     for (let i = 0; i < ids.length; i++) {
       const id = typeof ids[i] === 'string' ? ids[i].trim() : '';
       if (!id || id.startsWith('__')) continue;
       const name = typeof names[i] === 'string' && names[i].trim() ? names[i].trim() : 'Shared playlist';
-      out.push({ id, name, tracks: 0, updatedAt: Date.now() });
+      const tracks = snapshotCounts.get(id) || 0;
+      const prev = byId.get(id);
+      if (!prev) {
+        byId.set(id, { id, name, tracks, updatedAt });
+        continue;
+      }
+      byId.set(id, {
+        id,
+        name: name !== 'Shared playlist' ? name : prev.name,
+        tracks: Math.max(prev.tracks || 0, tracks),
+        updatedAt: Math.max(prev.updatedAt || 0, updatedAt),
+      });
+    }
+    // Also surface playlists that appear only via snapshot songs (no playlistIds row).
+    for (const [id, tracks] of snapshotCounts.entries()) {
+      if (byId.has(id)) {
+        const prev = byId.get(id);
+        if (tracks > (prev.tracks || 0)) {
+          byId.set(id, { ...prev, tracks });
+        }
+        continue;
+      }
+      byId.set(id, { id, name: 'Shared playlist', tracks, updatedAt });
     }
   }
-  return out;
+  return Array.from(byId.values());
+}
+
+/**
+ * Build a deduped song list for one Spotify playlist id from org member prep snapshots.
+ * Prefer the longest snapshot (closest to a full playlist inventory).
+ */
+function songsForPlaylistFromPrepRounds(rounds, playlistId) {
+  const pid = typeof playlistId === 'string' ? playlistId.trim() : '';
+  if (!pid || pid.startsWith('__') || !Array.isArray(rounds)) return [];
+  let best = [];
+  for (const round of rounds) {
+    if (!round || typeof round !== 'object') continue;
+    const songs = Array.isArray(round.savedMixSnapshot?.songs) ? round.savedMixSnapshot.songs : [];
+    const matched = [];
+    const seen = new Set();
+    for (const song of songs) {
+      const src = typeof song?.sourcePlaylistId === 'string' ? song.sourcePlaylistId.trim() : '';
+      if (src !== pid) continue;
+      const sid = song?.id != null ? String(song.id) : '';
+      if (!sid || seen.has(sid)) continue;
+      seen.add(sid);
+      matched.push(song);
+    }
+    if (matched.length > best.length) best = matched;
+  }
+  return best;
+}
+
+/**
+ * Load the fullest prep snapshot song list for a playlist across every org member's cloud prep.
+ */
+async function loadOrgPrepPlaylistTracks(db, organizationId, playlistId) {
+  if (!db || organizationId == null) return [];
+  const pid = typeof playlistId === 'string' ? playlistId.trim() : '';
+  if (!pid || pid.startsWith('__')) return [];
+  const r = await db.query(
+    `SELECT p.payload
+     FROM host_room_prep p
+     INNER JOIN users u ON u.id = p.user_id
+     WHERE u.organization_id = $1
+        OR u.id = (SELECT owner_user_id FROM organizations WHERE id = $1)`,
+    [organizationId],
+  );
+  let best = [];
+  for (const row of r.rows) {
+    const payload = row.payload && typeof row.payload === 'object' ? row.payload : {};
+    const rounds = Array.isArray(payload.rounds) ? payload.rounds : [];
+    const songs = songsForPlaylistFromPrepRounds(rounds, pid);
+    if (songs.length > best.length) best = songs;
+  }
+  return best;
 }
 
 /**
@@ -546,7 +681,10 @@ module.exports = {
   ensureOrgPlaylistRefsFromPrep,
   ensureOrgAssetsFromPrep,
   shareAssetsFromPrepRounds,
+  loadOrgPrepPlaylistTracks,
+  songsForPlaylistFromPrepRounds,
   sanitizeCustomPatternRow,
   sanitizeCompositePatternRow,
   sanitizePlaylistRefRow,
+  mergePlaylistRefsById,
 };

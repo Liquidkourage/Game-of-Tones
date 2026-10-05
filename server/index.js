@@ -2184,6 +2184,101 @@ async function loadHostPlaylistTracksCache(organizationId, playlistId) {
   }
 }
 
+/**
+ * Find the fullest Spotify track cache for a playlist among other org members
+ * (organization_id column is `user_${uid}` per host — not the Tempo org id).
+ * Scoped to the caller's Tempo organization only.
+ */
+async function loadOrgTeammatePlaylistTracksCache(tempoOrganizationId, playlistId, excludeOrgKey) {
+  if (!db || tempoOrganizationId == null) return null;
+  const pid = String(playlistId || '').trim();
+  if (!pid) return null;
+  try {
+    const r = await db.query(
+      `SELECT c.organization_id, c.data, c.updated_at
+       FROM host_spotify_playlist_tracks_cache c
+       INNER JOIN users u ON c.organization_id = ('user_' || u.id::text)
+       WHERE c.playlist_id = $1
+         AND (
+           u.organization_id = $2
+           OR u.id = (SELECT owner_user_id FROM organizations WHERE id = $2)
+         )
+         AND ($3::text IS NULL OR c.organization_id <> $3)
+       ORDER BY jsonb_array_length(COALESCE(c.data->'tracks', '[]'::jsonb)) DESC,
+                c.updated_at DESC
+       LIMIT 1`,
+      [pid, tempoOrganizationId, excludeOrgKey || null],
+    );
+    if (r.rows.length === 0) return null;
+    const row = r.rows[0];
+    const d = row.data;
+    if (!d || typeof d !== 'object') return null;
+    const tracks = Array.isArray(d.tracks) ? d.tracks : [];
+    if (tracks.length === 0) return null;
+    const snapshotId =
+      d.snapshotId != null && String(d.snapshotId).trim() !== '' ? String(d.snapshotId) : null;
+    return {
+      tracks,
+      snapshotId,
+      updatedAt: row.updated_at,
+      sourceOrgKey: row.organization_id,
+    };
+  } catch (e) {
+    console.error('loadOrgTeammatePlaylistTracksCache:', e?.message || e);
+    return null;
+  }
+}
+
+/**
+ * Enrich shelf playlist refs that still show 0 with lengths from org teammate track caches.
+ */
+async function enrichPlaylistRefsWithOrgTrackCacheCounts(tempoOrganizationId, playlistRefs) {
+  if (!db || tempoOrganizationId == null || !Array.isArray(playlistRefs) || playlistRefs.length === 0) {
+    return playlistRefs;
+  }
+  const needIds = playlistRefs
+    .filter((r) => r && (!r.tracks || r.tracks === 0) && typeof r.id === 'string')
+    .map((r) => String(r.id).trim())
+    .filter((id) => id && !id.startsWith('__'));
+  if (needIds.length === 0) return playlistRefs;
+  try {
+    const r = await db.query(
+      `SELECT c.playlist_id, MAX(jsonb_array_length(COALESCE(c.data->'tracks', '[]'::jsonb))) AS track_count
+       FROM host_spotify_playlist_tracks_cache c
+       INNER JOIN users u ON c.organization_id = ('user_' || u.id::text)
+       WHERE c.playlist_id = ANY($1::text[])
+         AND (
+           u.organization_id = $2
+           OR u.id = (SELECT owner_user_id FROM organizations WHERE id = $2)
+         )
+       GROUP BY c.playlist_id`,
+      [needIds, tempoOrganizationId],
+    );
+    if (r.rows.length === 0) return playlistRefs;
+    const byId = new Map(
+      r.rows.map((row) => [String(row.playlist_id), Math.max(0, Number(row.track_count) || 0)]),
+    );
+    return playlistRefs.map((ref) => {
+      if (!ref || (ref.tracks && ref.tracks > 0)) return ref;
+      const n = byId.get(String(ref.id));
+      if (!n || n <= 0) return ref;
+      return { ...ref, tracks: n };
+    });
+  } catch (e) {
+    console.error('enrichPlaylistRefsWithOrgTrackCacheCounts:', e?.message || e);
+    return playlistRefs;
+  }
+}
+
+function spotifyStatusCodeFromError(error) {
+  return Number(error?.statusCode ?? error?.body?.error?.status ?? error?.status ?? 0);
+}
+
+function isSpotifyPlaylistAccessError(error) {
+  const sc = spotifyStatusCodeFromError(error);
+  return sc === 403 || sc === 404;
+}
+
 async function deleteHostPlaylistTracksCacheForOrg(organizationId) {
   if (!db) return;
   try {
@@ -2253,7 +2348,9 @@ function makeSpotifyUpstreamUnavailableError(retryAfterSec) {
 
 /**
  * Host playlist-tracks route: DB seed + quarantine fallback + persist after live fetch.
- * @returns {{ tracks: object[], fromTracksCache?: boolean, stale?: boolean, cacheUpdatedAt?: Date, upstreamUnavailable?: boolean, cacheMessage?: string }}
+ * Org teammates: when this host's Spotify token cannot see a co-host private playlist (or cache
+ * is empty), fall back to org-scoped teammate track caches and room-prep mix snapshots.
+ * @returns {{ tracks: object[], fromTracksCache?: boolean, stale?: boolean, cacheUpdatedAt?: Date, upstreamUnavailable?: boolean, cacheMessage?: string, fromOrgTeammateCache?: boolean, fromOrgPrepSnapshot?: boolean }}
  */
 async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { forceRefresh }) {
   const uid = hostAuth.getHostUserIdFromRequest(req);
@@ -2284,6 +2381,90 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
     throw err;
   }
 
+  /** Resolve Tempo org id for cross-host cache/prep fallback (never cross org). */
+  async function resolveTempoOrgIdForHost() {
+    if (uid == null || !db) return null;
+    try {
+      const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+      return ctx.organization?.id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function tryOrgSharedTrackFallbacks(reason) {
+    const tempoOrgId = await resolveTempoOrgIdForHost();
+    if (tempoOrgId == null) return null;
+
+    const teammate = await loadOrgTeammatePlaylistTracksCache(tempoOrgId, playlistId, orgId);
+    if (teammate && Array.isArray(teammate.tracks) && teammate.tracks.length > 0) {
+      if (spotifyPipelineLog.isEnabled()) {
+        spotifyPipelineLog.log('playlist_tracks_serving_from_org_teammate_cache', {
+          org_key: orgId,
+          tempo_org_id: tempoOrgId,
+          playlist_id: String(playlistId),
+          source_org_key: teammate.sourceOrgKey,
+          track_count: teammate.tracks.length,
+          reason,
+        });
+      }
+      console.log(
+        `[org playlist-tracks] user=${uid} playlist=${playlistId} served ${teammate.tracks.length} tracks from teammate cache ${teammate.sourceOrgKey} (${reason})`,
+      );
+      // Seed this host's cache so subsequent loads stay local without re-hitting Spotify.
+      if (orgId) {
+        void saveHostPlaylistTracksCache(orgId, playlistId, {
+          tracks: teammate.tracks,
+          snapshotId: teammate.snapshotId,
+        });
+      }
+      return {
+        tracks: mapTracks(teammate.tracks),
+        fromTracksCache: true,
+        fromOrgTeammateCache: true,
+        stale: true,
+        cacheUpdatedAt: teammate.updatedAt,
+        cacheMessage:
+          'Using a co-host’s cached Spotify tracks (this playlist may be private on their account).',
+      };
+    }
+
+    const prepSongs = await orgHostSharedAssetsStore.loadOrgPrepPlaylistTracks(
+      db,
+      tempoOrgId,
+      playlistId,
+    );
+    if (Array.isArray(prepSongs) && prepSongs.length > 0) {
+      if (spotifyPipelineLog.isEnabled()) {
+        spotifyPipelineLog.log('playlist_tracks_serving_from_org_prep_snapshot', {
+          org_key: orgId,
+          tempo_org_id: tempoOrgId,
+          playlist_id: String(playlistId),
+          track_count: prepSongs.length,
+          reason,
+        });
+      }
+      console.log(
+        `[org playlist-tracks] user=${uid} playlist=${playlistId} served ${prepSongs.length} tracks from org prep snapshot (${reason})`,
+      );
+      if (orgId) {
+        void saveHostPlaylistTracksCache(orgId, playlistId, {
+          tracks: prepSongs,
+          snapshotId: null,
+        });
+      }
+      return {
+        tracks: mapTracks(prepSongs),
+        fromTracksCache: true,
+        fromOrgPrepSnapshot: true,
+        stale: true,
+        cacheMessage:
+          'Using songs saved in a co-host’s round snapshot (full Spotify playlist may be private on their account).',
+      };
+    }
+    return null;
+  }
+
   const force = forceRefresh === true;
   let dbRow = null;
   if (orgId && !force) {
@@ -2312,6 +2493,10 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
         cacheUpdatedAt: dbRow.updatedAt,
       };
     }
+    const orgFallback = await tryOrgSharedTrackFallbacks(
+      svc.isQuarantined() ? 'quarantine_no_own_cache' : 'live_show_no_own_cache',
+    );
+    if (orgFallback) return orgFallback;
     if (svc.isQuarantined()) {
       const err = new Error('Spotify API quarantined (getPlaylistTracks)');
       err.statusCode = 429;
@@ -2339,6 +2524,10 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
         cacheMessage: SPOTIFY_UPSTREAM_CACHE_MESSAGE,
       };
     }
+    const orgFallback = await tryOrgSharedTrackFallbacks('spotify_5xx_cooldown');
+    if (orgFallback) {
+      return { ...orgFallback, upstreamUnavailable: true };
+    }
     throw makeSpotifyUpstreamUnavailableError(cooldownRemainingSec);
   }
 
@@ -2355,8 +2544,12 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
         tracks: peek?.tracks?.length ? peek.tracks : tracks,
         snapshotId: peek?.snapshotId ?? null,
       });
+      return { tracks, loadStats, fromTracksCache: false };
     }
-    return { tracks, loadStats, fromTracksCache: false };
+    // Spotify returned empty — private/unreadable to this token, or truly empty. Try org snapshots.
+    const orgFallback = await tryOrgSharedTrackFallbacks('spotify_empty_tracks');
+    if (orgFallback) return orgFallback;
+    return { tracks: Array.isArray(tracks) ? tracks : [], loadStats, fromTracksCache: false };
   } catch (error) {
     if (svc.isRateLimitError(error) && dbRow && Array.isArray(dbRow.tracks) && dbRow.tracks.length > 0) {
       if (spotifyPipelineLog.isEnabled()) {
@@ -2372,6 +2565,10 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
         stale: true,
         cacheUpdatedAt: dbRow.updatedAt,
       };
+    }
+    if (svc.isRateLimitError(error)) {
+      const orgFallback = await tryOrgSharedTrackFallbacks('spotify_429');
+      if (orgFallback) return orgFallback;
     }
     if (isSpotifyTransient5xx(error)) {
       // Transient upstream outage: short per-org+playlist cooldown; never an auth problem, never clears tokens.
@@ -2396,7 +2593,24 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
           cacheMessage: SPOTIFY_UPSTREAM_CACHE_MESSAGE,
         };
       }
+      const orgFallback = await tryOrgSharedTrackFallbacks(`spotify_${error?.statusCode || '5xx'}`);
+      if (orgFallback) {
+        return { ...orgFallback, upstreamUnavailable: true };
+      }
       throw makeSpotifyUpstreamUnavailableError(Math.ceil(SPOTIFY_TRACKS_5XX_COOLDOWN_MS / 1000));
+    }
+    if (isSpotifyPlaylistAccessError(error)) {
+      const orgFallback = await tryOrgSharedTrackFallbacks(
+        `spotify_${spotifyStatusCodeFromError(error) || 'access'}`,
+      );
+      if (orgFallback) return orgFallback;
+      const sc = spotifyStatusCodeFromError(error) || 403;
+      const err = new Error(
+        'This playlist is private on another Spotify account. Tempo has no saved snapshot or co-host cache for it yet — ask that host to open/save the round once, or share/follow the playlist.',
+      );
+      err.statusCode = sc;
+      err.code = 'org_playlist_private_no_snapshot';
+      throw err;
     }
     throw error;
   }
@@ -15407,20 +15621,25 @@ app.get('/api/org/shared-host-assets', async (req, res) => {
     }
     // Backfill playlist refs + custom/combined patterns embedded in teammate room prep.
     const assets = await orgHostSharedAssetsStore.ensureOrgAssetsFromPrep(db, ctx.organization.id);
+    const playlistRefs = await enrichPlaylistRefsWithOrgTrackCacheCounts(
+      ctx.organization.id,
+      assets.playlistRefs,
+    );
     const updatedAt =
       assets.updatedAt instanceof Date
         ? assets.updatedAt.toISOString()
         : assets.updatedAt != null
           ? String(assets.updatedAt)
           : null;
+    const withCounts = playlistRefs.filter((r) => r && r.tracks > 0).length;
     console.log(
-      `[org shared-host-assets] GET user=${uid} org=${ctx.organization.id} custom=${assets.customPatterns.length} composite=${assets.compositePatterns.length} playlists=${assets.playlistRefs.length}`,
+      `[org shared-host-assets] GET user=${uid} org=${ctx.organization.id} custom=${assets.customPatterns.length} composite=${assets.compositePatterns.length} playlists=${playlistRefs.length} withTrackCounts=${withCounts}`,
     );
     res.json({
       organizationId: ctx.organization.id,
       customPatterns: assets.customPatterns,
       compositePatterns: assets.compositePatterns,
-      playlistRefs: assets.playlistRefs,
+      playlistRefs,
       updatedAt,
     });
   } catch (e) {
@@ -17508,9 +17727,20 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
       ...(result.cacheUpdatedAt ? { cacheUpdatedAt: result.cacheUpdatedAt } : {}),
       ...(result.upstreamUnavailable ? { upstreamUnavailable: true } : {}),
       ...(result.cacheMessage ? { cacheMessage: result.cacheMessage } : {}),
+      ...(result.fromOrgTeammateCache ? { fromOrgTeammateCache: true } : {}),
+      ...(result.fromOrgPrepSnapshot ? { fromOrgPrepSnapshot: true } : {}),
       webApiQuarantine: svc.getWebApiQuarantineInfo(),
     });
   } catch (error) {
+    if (error?.code === 'org_playlist_private_no_snapshot') {
+      return res.status(403).json({
+        error: 'org_playlist_private_no_snapshot',
+        message:
+          error.message ||
+          'This playlist is private on another Spotify account and Tempo has no saved snapshot yet.',
+        status: 403,
+      });
+    }
     if (sendSpotifyUpstreamUnavailableIfNeeded(res, error)) {
       console.warn(
         `⚠️ Spotify upstream unavailable for playlist ${req.params?.playlistId || '?'} — served friendly 503`,
