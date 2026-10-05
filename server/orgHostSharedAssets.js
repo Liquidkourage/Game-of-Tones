@@ -356,8 +356,24 @@ function playlistRefsFromPrepRounds(rounds) {
 }
 
 /**
+ * Origin Spotify playlist id for a prep song (mix snapshot or leftover remapped to __leftovers__).
+ */
+function prepSongOriginPlaylistId(song) {
+  if (!song || typeof song !== 'object') return '';
+  const origin =
+    (typeof song.spotifyContextPlaylistId === 'string' && song.spotifyContextPlaylistId.trim()) ||
+    (typeof song.originPlaylistId === 'string' && song.originPlaylistId.trim()) ||
+    (typeof song.sourcePlaylistId === 'string' &&
+    !String(song.sourcePlaylistId).startsWith('__')
+      ? song.sourcePlaylistId.trim()
+      : '');
+  return origin || '';
+}
+
+/**
  * Build a deduped song list for one Spotify playlist id from org member prep snapshots.
  * Prefer the longest snapshot (closest to a full playlist inventory).
+ * Includes leftover pool songs when their origin playlist id matches.
  */
 function songsForPlaylistFromPrepRounds(rounds, playlistId) {
   const pid = typeof playlistId === 'string' ? playlistId.trim() : '';
@@ -366,11 +382,13 @@ function songsForPlaylistFromPrepRounds(rounds, playlistId) {
   for (const round of rounds) {
     if (!round || typeof round !== 'object') continue;
     const songs = Array.isArray(round.savedMixSnapshot?.songs) ? round.savedMixSnapshot.songs : [];
+    const leftovers = Array.isArray(round.playRecap?.leftoverSongs)
+      ? round.playRecap.leftoverSongs
+      : [];
     const matched = [];
     const seen = new Set();
-    for (const song of songs) {
-      const src = typeof song?.sourcePlaylistId === 'string' ? song.sourcePlaylistId.trim() : '';
-      if (src !== pid) continue;
+    for (const song of [...songs, ...leftovers]) {
+      if (prepSongOriginPlaylistId(song) !== pid) continue;
       const sid = song?.id != null ? String(song.id) : '';
       if (!sid || seen.has(sid)) continue;
       seen.add(sid);
@@ -396,6 +414,25 @@ async function loadOrgPrepPlaylistTracks(db, organizationId, playlistId) {
         OR u.id = (SELECT owner_user_id FROM organizations WHERE id = $1)`,
     [organizationId],
   );
+  let best = [];
+  for (const row of r.rows) {
+    const payload = row.payload && typeof row.payload === 'object' ? row.payload : {};
+    const rounds = Array.isArray(payload.rounds) ? payload.rounds : [];
+    const songs = songsForPlaylistFromPrepRounds(rounds, pid);
+    if (songs.length > best.length) best = songs;
+  }
+  return best;
+}
+
+/**
+ * Site admin / creator only: fullest prep snapshot for a playlist across *any* host's cloud prep.
+ * Uses stored snapshots only — never another host's Spotify token.
+ */
+async function loadAnyHostPrepPlaylistTracks(db, playlistId) {
+  if (!db) return [];
+  const pid = typeof playlistId === 'string' ? playlistId.trim() : '';
+  if (!pid || pid.startsWith('__')) return [];
+  const r = await db.query(`SELECT payload FROM host_room_prep`);
   let best = [];
   for (const row of r.rows) {
     const payload = row.payload && typeof row.payload === 'object' ? row.payload : {};
@@ -682,6 +719,7 @@ module.exports = {
   ensureOrgAssetsFromPrep,
   shareAssetsFromPrepRounds,
   loadOrgPrepPlaylistTracks,
+  loadAnyHostPrepPlaylistTracks,
   songsForPlaylistFromPrepRounds,
   sanitizeCustomPatternRow,
   sanitizeCompositePatternRow,

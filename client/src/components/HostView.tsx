@@ -8772,6 +8772,8 @@ const HostView: React.FC = () => {
             cacheMessage?: string;
             fromOrgTeammateCache?: boolean;
             fromOrgPrepSnapshot?: boolean;
+            fromAdminHostCache?: boolean;
+            fromAdminPrepSnapshot?: boolean;
           } = {};
           try {
             data = (await response.json()) as typeof data;
@@ -8835,7 +8837,10 @@ const HostView: React.FC = () => {
           if (
             data.success &&
             data.tracks &&
-            (data.fromOrgTeammateCache || data.fromOrgPrepSnapshot) &&
+            (data.fromOrgTeammateCache ||
+              data.fromOrgPrepSnapshot ||
+              data.fromAdminHostCache ||
+              data.fromAdminPrepSnapshot) &&
             data.cacheMessage
           ) {
             addLog(`${playlist.name || playlist.id}: ${data.cacheMessage}`, 'info');

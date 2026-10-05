@@ -2184,6 +2184,45 @@ async function loadHostPlaylistTracksCache(organizationId, playlistId) {
   }
 }
 
+/** Site creator / admin emails from TEMPO_ADMIN_EMAILS (same list as /api/admin/*). */
+function getTempoAdminEmailSet() {
+  return new Set(
+    (process.env.TEMPO_ADMIN_EMAILS || '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+/** True when the request host JWT user is listed in TEMPO_ADMIN_EMAILS. */
+async function isRequestTempoAdminUser(req) {
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (uid == null || !db) return false;
+  try {
+    const row = await usersStore.getUserById(db, uid);
+    const email = usersStore.normalizeHostEmail(row?.email || '');
+    return !!(email && getTempoAdminEmailSet().has(email));
+  } catch {
+    return false;
+  }
+}
+
+function parsePlaylistTracksCacheRow(row) {
+  if (!row) return null;
+  const d = row.data;
+  if (!d || typeof d !== 'object') return null;
+  const tracks = Array.isArray(d.tracks) ? d.tracks : [];
+  if (tracks.length === 0) return null;
+  const snapshotId =
+    d.snapshotId != null && String(d.snapshotId).trim() !== '' ? String(d.snapshotId) : null;
+  return {
+    tracks,
+    snapshotId,
+    updatedAt: row.updated_at,
+    sourceOrgKey: row.organization_id,
+  };
+}
+
 /**
  * Find the fullest Spotify track cache for a playlist among other org members
  * (organization_id column is `user_${uid}` per host — not the Tempo org id).
@@ -2210,21 +2249,37 @@ async function loadOrgTeammatePlaylistTracksCache(tempoOrganizationId, playlistI
       [pid, tempoOrganizationId, excludeOrgKey || null],
     );
     if (r.rows.length === 0) return null;
-    const row = r.rows[0];
-    const d = row.data;
-    if (!d || typeof d !== 'object') return null;
-    const tracks = Array.isArray(d.tracks) ? d.tracks : [];
-    if (tracks.length === 0) return null;
-    const snapshotId =
-      d.snapshotId != null && String(d.snapshotId).trim() !== '' ? String(d.snapshotId) : null;
-    return {
-      tracks,
-      snapshotId,
-      updatedAt: row.updated_at,
-      sourceOrgKey: row.organization_id,
-    };
+    return parsePlaylistTracksCacheRow(r.rows[0]);
   } catch (e) {
     console.error('loadOrgTeammatePlaylistTracksCache:', e?.message || e);
+    return null;
+  }
+}
+
+/**
+ * Site admin / creator only: fullest track cache for a playlist from *any* host.
+ * Stored snapshots only — never uses another host's Spotify token.
+ */
+async function loadAnyHostPlaylistTracksCache(playlistId, excludeOrgKey) {
+  if (!db) return null;
+  const pid = String(playlistId || '').trim();
+  if (!pid) return null;
+  try {
+    const r = await db.query(
+      `SELECT c.organization_id, c.data, c.updated_at
+       FROM host_spotify_playlist_tracks_cache c
+       WHERE c.playlist_id = $1
+         AND ($2::text IS NULL OR c.organization_id <> $2)
+         AND jsonb_array_length(COALESCE(c.data->'tracks', '[]'::jsonb)) > 0
+       ORDER BY jsonb_array_length(COALESCE(c.data->'tracks', '[]'::jsonb)) DESC,
+                c.updated_at DESC
+       LIMIT 1`,
+      [pid, excludeOrgKey || null],
+    );
+    if (r.rows.length === 0) return null;
+    return parsePlaylistTracksCacheRow(r.rows[0]);
+  } catch (e) {
+    console.error('loadAnyHostPlaylistTracksCache:', e?.message || e);
     return null;
   }
 }
@@ -2266,6 +2321,40 @@ async function enrichPlaylistRefsWithOrgTrackCacheCounts(tempoOrganizationId, pl
     });
   } catch (e) {
     console.error('enrichPlaylistRefsWithOrgTrackCacheCounts:', e?.message || e);
+    return playlistRefs;
+  }
+}
+
+/**
+ * Site admin / creator: fill remaining 0-count shelf refs from any host's track cache.
+ */
+async function enrichPlaylistRefsWithAnyHostTrackCacheCounts(playlistRefs) {
+  if (!db || !Array.isArray(playlistRefs) || playlistRefs.length === 0) return playlistRefs;
+  const needIds = playlistRefs
+    .filter((r) => r && (!r.tracks || r.tracks === 0) && typeof r.id === 'string')
+    .map((r) => String(r.id).trim())
+    .filter((id) => id && !id.startsWith('__'));
+  if (needIds.length === 0) return playlistRefs;
+  try {
+    const r = await db.query(
+      `SELECT c.playlist_id, MAX(jsonb_array_length(COALESCE(c.data->'tracks', '[]'::jsonb))) AS track_count
+       FROM host_spotify_playlist_tracks_cache c
+       WHERE c.playlist_id = ANY($1::text[])
+       GROUP BY c.playlist_id`,
+      [needIds],
+    );
+    if (r.rows.length === 0) return playlistRefs;
+    const byId = new Map(
+      r.rows.map((row) => [String(row.playlist_id), Math.max(0, Number(row.track_count) || 0)]),
+    );
+    return playlistRefs.map((ref) => {
+      if (!ref || (ref.tracks && ref.tracks > 0)) return ref;
+      const n = byId.get(String(ref.id));
+      if (!n || n <= 0) return ref;
+      return { ...ref, tracks: n };
+    });
+  } catch (e) {
+    console.error('enrichPlaylistRefsWithAnyHostTrackCacheCounts:', e?.message || e);
     return playlistRefs;
   }
 }
@@ -2350,7 +2439,9 @@ function makeSpotifyUpstreamUnavailableError(retryAfterSec) {
  * Host playlist-tracks route: DB seed + quarantine fallback + persist after live fetch.
  * Org teammates: when this host's Spotify token cannot see a co-host private playlist (or cache
  * is empty), fall back to org-scoped teammate track caches and room-prep mix snapshots.
- * @returns {{ tracks: object[], fromTracksCache?: boolean, stale?: boolean, cacheUpdatedAt?: Date, upstreamUnavailable?: boolean, cacheMessage?: string, fromOrgTeammateCache?: boolean, fromOrgPrepSnapshot?: boolean }}
+ * Site admin (TEMPO_ADMIN_EMAILS): if org-scoped lookup fails, fall back to *any* host's
+ * stored cache/prep snapshot (never another host's live Spotify token).
+ * @returns {{ tracks: object[], fromTracksCache?: boolean, stale?: boolean, cacheUpdatedAt?: Date, upstreamUnavailable?: boolean, cacheMessage?: string, fromOrgTeammateCache?: boolean, fromOrgPrepSnapshot?: boolean, fromAdminHostCache?: boolean, fromAdminPrepSnapshot?: boolean }}
  */
 async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { forceRefresh }) {
   const uid = hostAuth.getHostUserIdFromRequest(req);
@@ -2381,7 +2472,7 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
     throw err;
   }
 
-  /** Resolve Tempo org id for cross-host cache/prep fallback (never cross org). */
+  /** Resolve Tempo org id for cross-host cache/prep fallback (org-scoped unless admin). */
   async function resolveTempoOrgIdForHost() {
     if (uid == null || !db) return null;
     try {
@@ -2394,74 +2485,138 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
 
   async function tryOrgSharedTrackFallbacks(reason) {
     const tempoOrgId = await resolveTempoOrgIdForHost();
-    if (tempoOrgId == null) return null;
+    const isAdmin = await isRequestTempoAdminUser(req);
 
-    const teammate = await loadOrgTeammatePlaylistTracksCache(tempoOrgId, playlistId, orgId);
-    if (teammate && Array.isArray(teammate.tracks) && teammate.tracks.length > 0) {
-      if (spotifyPipelineLog.isEnabled()) {
-        spotifyPipelineLog.log('playlist_tracks_serving_from_org_teammate_cache', {
-          org_key: orgId,
-          tempo_org_id: tempoOrgId,
-          playlist_id: String(playlistId),
-          source_org_key: teammate.sourceOrgKey,
-          track_count: teammate.tracks.length,
-          reason,
-        });
+    if (tempoOrgId != null) {
+      const teammate = await loadOrgTeammatePlaylistTracksCache(tempoOrgId, playlistId, orgId);
+      if (teammate && Array.isArray(teammate.tracks) && teammate.tracks.length > 0) {
+        if (spotifyPipelineLog.isEnabled()) {
+          spotifyPipelineLog.log('playlist_tracks_serving_from_org_teammate_cache', {
+            org_key: orgId,
+            tempo_org_id: tempoOrgId,
+            playlist_id: String(playlistId),
+            source_org_key: teammate.sourceOrgKey,
+            track_count: teammate.tracks.length,
+            reason,
+          });
+        }
+        console.log(
+          `[org playlist-tracks] user=${uid} playlist=${playlistId} served ${teammate.tracks.length} tracks from teammate cache ${teammate.sourceOrgKey} (${reason})`,
+        );
+        // Seed this host's cache so subsequent loads stay local without re-hitting Spotify.
+        if (orgId) {
+          void saveHostPlaylistTracksCache(orgId, playlistId, {
+            tracks: teammate.tracks,
+            snapshotId: teammate.snapshotId,
+          });
+        }
+        return {
+          tracks: mapTracks(teammate.tracks),
+          fromTracksCache: true,
+          fromOrgTeammateCache: true,
+          stale: true,
+          cacheUpdatedAt: teammate.updatedAt,
+          cacheMessage:
+            'Using a co-host’s cached Spotify tracks (this playlist may be private on their account).',
+        };
       }
-      console.log(
-        `[org playlist-tracks] user=${uid} playlist=${playlistId} served ${teammate.tracks.length} tracks from teammate cache ${teammate.sourceOrgKey} (${reason})`,
+
+      const prepSongs = await orgHostSharedAssetsStore.loadOrgPrepPlaylistTracks(
+        db,
+        tempoOrgId,
+        playlistId,
       );
-      // Seed this host's cache so subsequent loads stay local without re-hitting Spotify.
-      if (orgId) {
-        void saveHostPlaylistTracksCache(orgId, playlistId, {
-          tracks: teammate.tracks,
-          snapshotId: teammate.snapshotId,
-        });
+      if (Array.isArray(prepSongs) && prepSongs.length > 0) {
+        if (spotifyPipelineLog.isEnabled()) {
+          spotifyPipelineLog.log('playlist_tracks_serving_from_org_prep_snapshot', {
+            org_key: orgId,
+            tempo_org_id: tempoOrgId,
+            playlist_id: String(playlistId),
+            track_count: prepSongs.length,
+            reason,
+          });
+        }
+        console.log(
+          `[org playlist-tracks] user=${uid} playlist=${playlistId} served ${prepSongs.length} tracks from org prep snapshot (${reason})`,
+        );
+        if (orgId) {
+          void saveHostPlaylistTracksCache(orgId, playlistId, {
+            tracks: prepSongs,
+            snapshotId: null,
+          });
+        }
+        return {
+          tracks: mapTracks(prepSongs),
+          fromTracksCache: true,
+          fromOrgPrepSnapshot: true,
+          stale: true,
+          cacheMessage:
+            'Using songs saved in a co-host’s round snapshot (full Spotify playlist may be private on their account).',
+        };
       }
-      return {
-        tracks: mapTracks(teammate.tracks),
-        fromTracksCache: true,
-        fromOrgTeammateCache: true,
-        stale: true,
-        cacheUpdatedAt: teammate.updatedAt,
-        cacheMessage:
-          'Using a co-host’s cached Spotify tracks (this playlist may be private on their account).',
-      };
     }
 
-    const prepSongs = await orgHostSharedAssetsStore.loadOrgPrepPlaylistTracks(
-      db,
-      tempoOrgId,
-      playlistId,
-    );
-    if (Array.isArray(prepSongs) && prepSongs.length > 0) {
-      if (spotifyPipelineLog.isEnabled()) {
-        spotifyPipelineLog.log('playlist_tracks_serving_from_org_prep_snapshot', {
-          org_key: orgId,
-          tempo_org_id: tempoOrgId,
-          playlist_id: String(playlistId),
-          track_count: prepSongs.length,
-          reason,
-        });
+    // Site admin / creator: any host's stored cache or prep (beyond org boundary).
+    if (isAdmin) {
+      const anyCache = await loadAnyHostPlaylistTracksCache(playlistId, orgId);
+      if (anyCache && Array.isArray(anyCache.tracks) && anyCache.tracks.length > 0) {
+        if (spotifyPipelineLog.isEnabled()) {
+          spotifyPipelineLog.log('playlist_tracks_serving_from_admin_host_cache', {
+            org_key: orgId,
+            playlist_id: String(playlistId),
+            source_org_key: anyCache.sourceOrgKey,
+            track_count: anyCache.tracks.length,
+            reason,
+          });
+        }
+        console.log(
+          `[admin playlist-tracks] user=${uid} playlist=${playlistId} served ${anyCache.tracks.length} tracks from host cache ${anyCache.sourceOrgKey} (${reason})`,
+        );
+        if (orgId) {
+          void saveHostPlaylistTracksCache(orgId, playlistId, {
+            tracks: anyCache.tracks,
+            snapshotId: anyCache.snapshotId,
+          });
+        }
+        return {
+          tracks: mapTracks(anyCache.tracks),
+          fromTracksCache: true,
+          fromAdminHostCache: true,
+          stale: true,
+          cacheUpdatedAt: anyCache.updatedAt,
+          cacheMessage: 'Using another host’s cached Spotify tracks (site admin).',
+        };
       }
-      console.log(
-        `[org playlist-tracks] user=${uid} playlist=${playlistId} served ${prepSongs.length} tracks from org prep snapshot (${reason})`,
-      );
-      if (orgId) {
-        void saveHostPlaylistTracksCache(orgId, playlistId, {
-          tracks: prepSongs,
-          snapshotId: null,
-        });
+
+      const anyPrep = await orgHostSharedAssetsStore.loadAnyHostPrepPlaylistTracks(db, playlistId);
+      if (Array.isArray(anyPrep) && anyPrep.length > 0) {
+        if (spotifyPipelineLog.isEnabled()) {
+          spotifyPipelineLog.log('playlist_tracks_serving_from_admin_prep_snapshot', {
+            org_key: orgId,
+            playlist_id: String(playlistId),
+            track_count: anyPrep.length,
+            reason,
+          });
+        }
+        console.log(
+          `[admin playlist-tracks] user=${uid} playlist=${playlistId} served ${anyPrep.length} tracks from any-host prep snapshot (${reason})`,
+        );
+        if (orgId) {
+          void saveHostPlaylistTracksCache(orgId, playlistId, {
+            tracks: anyPrep,
+            snapshotId: null,
+          });
+        }
+        return {
+          tracks: mapTracks(anyPrep),
+          fromTracksCache: true,
+          fromAdminPrepSnapshot: true,
+          stale: true,
+          cacheMessage: 'Using songs from another host’s round snapshot (site admin).',
+        };
       }
-      return {
-        tracks: mapTracks(prepSongs),
-        fromTracksCache: true,
-        fromOrgPrepSnapshot: true,
-        stale: true,
-        cacheMessage:
-          'Using songs saved in a co-host’s round snapshot (full Spotify playlist may be private on their account).',
-      };
     }
+
     return null;
   }
 
@@ -14370,11 +14525,7 @@ async function requireAdmin(req, res) {
   }
   const row = await usersStore.getUserById(db, uid);
   const email = usersStore.normalizeHostEmail(row?.email || '');
-  const adminEmails = (process.env.TEMPO_ADMIN_EMAILS || '')
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  if (email && adminEmails.includes(email)) return true;
+  if (email && getTempoAdminEmailSet().has(email)) return true;
   res.status(401).json({
     error: 'forbidden',
     message: 'This account is not listed in TEMPO_ADMIN_EMAILS.',
@@ -14399,11 +14550,7 @@ app.get('/api/admin/me', async (req, res) => {
     }
     const row = await usersStore.getUserById(db, uid);
     const email = usersStore.normalizeHostEmail(row?.email || '');
-    const adminEmails = (process.env.TEMPO_ADMIN_EMAILS || '')
-      .split(',')
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-    const admin = !!(email && adminEmails.includes(email));
+    const admin = !!(email && getTempoAdminEmailSet().has(email));
     return res.json({
       admin,
       adminConfigured,
@@ -15621,10 +15768,14 @@ app.get('/api/org/shared-host-assets', async (req, res) => {
     }
     // Backfill playlist refs + custom/combined patterns embedded in teammate room prep.
     const assets = await orgHostSharedAssetsStore.ensureOrgAssetsFromPrep(db, ctx.organization.id);
-    const playlistRefs = await enrichPlaylistRefsWithOrgTrackCacheCounts(
+    let playlistRefs = await enrichPlaylistRefsWithOrgTrackCacheCounts(
       ctx.organization.id,
       assets.playlistRefs,
     );
+    // Site admin: fill remaining 0s from any host's track cache (stored data only).
+    if (await isRequestTempoAdminUser(req)) {
+      playlistRefs = await enrichPlaylistRefsWithAnyHostTrackCacheCounts(playlistRefs);
+    }
     const updatedAt =
       assets.updatedAt instanceof Date
         ? assets.updatedAt.toISOString()
@@ -17729,6 +17880,8 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
       ...(result.cacheMessage ? { cacheMessage: result.cacheMessage } : {}),
       ...(result.fromOrgTeammateCache ? { fromOrgTeammateCache: true } : {}),
       ...(result.fromOrgPrepSnapshot ? { fromOrgPrepSnapshot: true } : {}),
+      ...(result.fromAdminHostCache ? { fromAdminHostCache: true } : {}),
+      ...(result.fromAdminPrepSnapshot ? { fromAdminPrepSnapshot: true } : {}),
       webApiQuarantine: svc.getWebApiQuarantineInfo(),
     });
   } catch (error) {
