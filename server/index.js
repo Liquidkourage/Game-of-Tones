@@ -2359,6 +2359,137 @@ async function enrichPlaylistRefsWithAnyHostTrackCacheCounts(playlistRefs) {
   }
 }
 
+/**
+ * When a shelf playlist id is known but tracks still show 0: ask Spotify with *this* host's token
+ * (public/collaborative playlists fill), then fall back to fetchHostPlaylistTracksForApi
+ * (own cache → org/admin stored snapshots). Never uses another host's live Spotify token.
+ */
+async function enrichPlaylistRefsWithSpotifyLookups(req, playlistRefs, options = {}) {
+  if (!Array.isArray(playlistRefs) || playlistRefs.length === 0) return playlistRefs;
+  if (!hostSpotifyHasTokens(req)) return playlistRefs;
+  const svc = spotifyForRequest(req);
+  if (!svc) return playlistRefs;
+  if (
+    svc.isQuarantined() ||
+    (typeof svc.isNonEssentialTrafficBlocked === 'function' && svc.isNonEssentialTrafficBlocked())
+  ) {
+    return playlistRefs;
+  }
+
+  const maxIds = Math.min(40, Math.max(0, Number(options.maxIds) || 18));
+  const concurrency = Math.min(5, Math.max(1, Number(options.concurrency) || 3));
+  const need = playlistRefs.filter(
+    (r) =>
+      r &&
+      (!r.tracks || r.tracks === 0) &&
+      typeof r.id === 'string' &&
+      !String(r.id).trim().startsWith('__') &&
+      /^[A-Za-z0-9]{22}$/.test(String(r.id).trim()),
+  );
+  if (need.length === 0 || maxIds <= 0) return playlistRefs;
+
+  const targets = need.slice(0, maxIds);
+  const countsById = new Map();
+  let metaHits = 0;
+  let trackHits = 0;
+  let accessDenied = 0;
+  let errors = 0;
+
+  async function lookupOne(ref) {
+    const playlistId = String(ref.id).trim();
+    const playlistInfo = {
+      id: playlistId,
+      name: typeof ref.name === 'string' && ref.name.trim() ? ref.name.trim() : 'Shared playlist',
+    };
+    // Cheap count first (one playlist metadata call).
+    try {
+      const meta = await svc.getPlaylistMetadataBrief(playlistId);
+      const n = Math.max(0, Number(meta?.tracks) || 0);
+      if (n > 0) {
+        countsById.set(playlistId, n);
+        metaHits += 1;
+        // Warm this host's track cache in the background (do not block shelf GET).
+        void fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { forceRefresh: false })
+          .then((fetched) => {
+            if (Array.isArray(fetched?.tracks) && fetched.tracks.length > 0) trackHits += 1;
+          })
+          .catch(() => {});
+        return;
+      }
+    } catch (metaErr) {
+      if (isSpotifyPlaylistAccessError(metaErr)) {
+        // Private to this token — still try org/admin stored caches via the tracks path.
+      } else if (svc.isRateLimitError && svc.isRateLimitError(metaErr)) {
+        throw metaErr;
+      } else {
+        errors += 1;
+      }
+    }
+
+    // Metadata empty/403: try full tracks path (cache + org + admin prep fallbacks).
+    try {
+      const fetched = await fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, {
+        forceRefresh: false,
+      });
+      const len = Array.isArray(fetched?.tracks) ? fetched.tracks.length : 0;
+      if (len > 0) {
+        countsById.set(playlistId, len);
+        trackHits += 1;
+      }
+    } catch (trackErr) {
+      if (isSpotifyPlaylistAccessError(trackErr) || trackErr?.code === 'org_playlist_private_no_snapshot') {
+        accessDenied += 1;
+      } else if (svc.isRateLimitError && svc.isRateLimitError(trackErr)) {
+        throw trackErr;
+      } else {
+        errors += 1;
+      }
+    }
+  }
+
+  try {
+    for (let i = 0; i < targets.length; i += concurrency) {
+      const batch = targets.slice(i, i + concurrency);
+      const results = await Promise.allSettled(batch.map((ref) => lookupOne(ref)));
+      for (const r of results) {
+        if (r.status === 'rejected') {
+          const err = r.reason;
+          if (svc.isRateLimitError && svc.isRateLimitError(err)) {
+            console.warn(
+              `[org shared-host-assets] Spotify lookup stopped early (rate limit) after ${countsById.size} fill(s)`,
+            );
+            i = targets.length; // break outer
+            break;
+          }
+          errors += 1;
+        }
+      }
+    }
+  } catch (e) {
+    console.error('enrichPlaylistRefsWithSpotifyLookups:', e?.message || e);
+  }
+
+  if (countsById.size === 0) {
+    if (targets.length > 0) {
+      console.log(
+        `[org shared-host-assets] Spotify lookup tried=${targets.length} filled=0 metaHits=${metaHits} trackHits=${trackHits} accessDenied=${accessDenied} errors=${errors}`,
+      );
+    }
+    return playlistRefs;
+  }
+
+  console.log(
+    `[org shared-host-assets] Spotify lookup tried=${targets.length} filled=${countsById.size} metaHits=${metaHits} trackHits=${trackHits} accessDenied=${accessDenied} errors=${errors}`,
+  );
+
+  return playlistRefs.map((ref) => {
+    if (!ref || (ref.tracks && ref.tracks > 0)) return ref;
+    const n = countsById.get(String(ref.id).trim());
+    if (!n || n <= 0) return ref;
+    return { ...ref, tracks: n };
+  });
+}
+
 function spotifyStatusCodeFromError(error) {
   return Number(error?.statusCode ?? error?.body?.error?.status ?? error?.status ?? 0);
 }
@@ -15775,6 +15906,25 @@ app.get('/api/org/shared-host-assets', async (req, res) => {
     // Site admin: fill remaining 0s from any host's track cache (stored data only).
     if (await isRequestTempoAdminUser(req)) {
       playlistRefs = await enrichPlaylistRefsWithAnyHostTrackCacheCounts(playlistRefs);
+    }
+    // Known playlist ids still at 0: pull counts/tracks via this host's Spotify token
+    // (public/collaborative fill; private still uses org/admin cache fallbacks inside).
+    const beforeSpotify = playlistRefs.filter((r) => r && r.tracks > 0).length;
+    playlistRefs = await enrichPlaylistRefsWithSpotifyLookups(req, playlistRefs, {
+      maxIds: 18,
+      concurrency: 3,
+    });
+    const afterSpotify = playlistRefs.filter((r) => r && r.tracks > 0).length;
+    // Persist improved counts onto the org shelf so the next GET does not re-probe Spotify.
+    if (afterSpotify > beforeSpotify) {
+      void orgHostSharedAssetsStore
+        .mergeOrgHostSharedAssets(db, ctx.organization.id, { playlistRefs })
+        .catch((persistErr) => {
+          console.warn(
+            '[org shared-host-assets] persist Spotify-enriched counts failed:',
+            persistErr?.message || persistErr,
+          );
+        });
     }
     const updatedAt =
       assets.updatedAt instanceof Date

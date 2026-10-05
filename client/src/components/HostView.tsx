@@ -1859,6 +1859,8 @@ const HostView: React.FC = () => {
   /** State twin of the ref so effects (e.g. playlist-ref upload) re-run after first org sync. */
   const [orgSharedAssetsReady, setOrgSharedAssetsReady] = useState(false);
   const orgSharedPushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Playlist ids already probed for zero-count Spotify/cache hydrate (avoid retry loops). */
+  const orgSharedZeroHydrateAttemptedRef = useRef<Set<string>>(new Set());
   const [showCustomPatternModal, setShowCustomPatternModal] = useState<boolean>(false);
   /** When set, CustomPatternModal opens preloaded to overwrite this library id. */
   const [editingCustomPatternInitial, setEditingCustomPatternInitial] = useState<
@@ -2980,13 +2982,28 @@ const HostView: React.FC = () => {
             const id = String(ref.id || '').trim();
             if (!id || id.startsWith('__')) continue;
             const canon = canonicalPlaylistIdForMatch(id);
-            if (byId.has(canon)) continue;
             const snap = snapshotCounts.get(canon) || 0;
             const refTracks = typeof ref.tracks === 'number' ? ref.tracks : 0;
+            const bestListed = Math.max(refTracks, snap);
+            const existing = byId.get(canon);
+            if (existing) {
+              // Spotify library / list-cache sometimes lists other-host rows at tracks:0 —
+              // never let that wipe a known shelf/snapshot count.
+              const prevListed = Math.max(0, Number(existing.tracks) || 0);
+              let next = existing;
+              if (bestListed > prevListed && (existing.tracksLoaded == null || existing.tracksLoaded <= 0)) {
+                next = { ...next, tracks: bestListed };
+              }
+              if (!existing.orgShared) {
+                next = { ...next, orgShared: true };
+              }
+              if (next !== existing) byId.set(canon, next);
+              continue;
+            }
             byId.set(canon, {
               id,
               name: ref.name || 'Team playlist',
-              tracks: Math.max(refTracks, snap),
+              tracks: bestListed,
               description: 'Shared by a co-host in your organization',
               orgShared: true,
             });
@@ -11264,6 +11281,7 @@ const HostView: React.FC = () => {
     }
     let cancelled = false;
     orgSharedAssetsHydratedRef.current = false;
+    orgSharedZeroHydrateAttemptedRef.current = new Set();
     setOrgSharedAssetsReady(false);
     void (async () => {
       // Ensure localStorage libraries are in React state before merge/push.
@@ -11402,6 +11420,102 @@ const HostView: React.FC = () => {
       return changed ? Array.from(byId.values()) : prev;
     });
   }, [orgSharedPlaylistRefs]);
+
+  /**
+   * Shelf rows that still show 0 after server enrich: pull tracks with this host's Spotify token
+   * (public playlists fill; private still hit org/admin cache inside the tracks API).
+   */
+  useEffect(() => {
+    if (!hostAccount?.id || !getHostJwt() || !orgSharedAssetsReady) return;
+    if (!readHostSpotifyWebEnabled()) return;
+    const zeroIds = orgSharedPlaylistRefs
+      .filter((ref) => {
+        const id = String(ref?.id || '').trim();
+        if (!id || id.startsWith('__')) return false;
+        if (!/^[A-Za-z0-9]{22}$/.test(id)) return false;
+        if (orgSharedZeroHydrateAttemptedRef.current.has(id)) return false;
+        return !(typeof ref.tracks === 'number' && ref.tracks > 0);
+      })
+      .map((ref) => ({
+        id: String(ref.id).trim(),
+        name: typeof ref.name === 'string' && ref.name.trim() ? ref.name.trim() : 'Team playlist',
+      }));
+    if (zeroIds.length === 0) return;
+
+    let cancelled = false;
+    const concurrency = 2;
+    const maxHydrate = 24;
+    const targets = zeroIds.slice(0, maxHydrate);
+    for (const row of targets) {
+      orgSharedZeroHydrateAttemptedRef.current.add(row.id);
+    }
+    const filled: OrgSharedPlaylistRef[] = [];
+
+    const hydrateOne = async (row: { id: string; name: string }) => {
+      const qs = new URLSearchParams();
+      if (row.name) qs.set('playlistName', row.name);
+      const url = `${API_BASE || ''}/api/spotify/playlist-tracks/${encodeURIComponent(row.id)}${
+        qs.toString() ? `?${qs.toString()}` : ''
+      }`;
+      const response = await hostFetch(url, { cache: 'no-store' });
+      if (!response.ok) return;
+      const data = (await response.json().catch(() => null)) as {
+        success?: boolean;
+        tracks?: unknown[];
+      } | null;
+      if (!data?.success || !Array.isArray(data.tracks) || data.tracks.length === 0) return;
+      const n = data.tracks.length;
+      filled.push({ id: row.id, name: row.name, tracks: n, updatedAt: Date.now() });
+      if (cancelled) return;
+      setPlaylists((prev) => {
+        const canon = canonicalPlaylistIdForMatch(row.id);
+        let changed = false;
+        const next = prev.map((p) => {
+          if (canonicalPlaylistIdForMatch(String(p.id)) !== canon) return p;
+          const prevListed = Math.max(0, Number(p.tracks) || 0);
+          if (n <= prevListed && p.tracksLoaded != null && p.tracksLoaded > 0) return p;
+          changed = true;
+          return {
+            ...p,
+            tracks: Math.max(prevListed, n),
+            tracksLoaded: Math.max(p.tracksLoaded || 0, n),
+            orgShared: true,
+          };
+        });
+        return changed ? next : prev;
+      });
+      setOrgSharedPlaylistRefs((prev) =>
+        prev.map((ref) =>
+          String(ref.id).trim() === row.id
+            ? { ...ref, tracks: Math.max(typeof ref.tracks === 'number' ? ref.tracks : 0, n) }
+            : ref,
+        ),
+      );
+    };
+
+    void (async () => {
+      for (let i = 0; i < targets.length; i += concurrency) {
+        if (cancelled) return;
+        const batch = targets.slice(i, i + concurrency);
+        await Promise.allSettled(batch.map((row) => hydrateOne(row)));
+      }
+      if (cancelled || filled.length === 0) return;
+      // Persist newly discovered counts onto the org shelf for teammates.
+      void pushOrgSharedHostAssets({
+        mode: 'merge',
+        playlistRefs: filled,
+        includePatterns: false,
+      });
+      addLog(
+        `Filled track counts for ${filled.length} team playlist(s) via Spotify / saved cache.`,
+        'info',
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hostAccount?.id, orgSharedAssetsReady, orgSharedPlaylistRefs, addLog]);
 
   /** Load saved host defaults: localStorage immediately, then the DB copy (cross-device source of truth). */
   useEffect(() => {
