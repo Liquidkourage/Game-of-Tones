@@ -54,7 +54,6 @@ import {
   getPatternDisplayName,
   getSavedCustomPatterns,
   PATTERN_OPTIONS,
-  PRESET_SHAPE_PATTERNS,
   saveCustomPattern,
   updateCustomPattern,
   SavedCustomPattern,

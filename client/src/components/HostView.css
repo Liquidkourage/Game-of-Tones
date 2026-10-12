@@ -925,27 +925,6 @@
   margin-bottom: 12px;
 }
 
-.host-round-hub-pattern__saved-shapes {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.host-round-hub-pattern__saved-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: rgba(200, 247, 228, 0.75);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.host-round-hub-pattern__saved-empty {
-  margin: 0;
-  font-size: 0.78rem;
-  color: #9aa5b1;
-  line-height: 1.35;
-}
-
 .host-round-hub-pattern__shape-grid {
   display: flex;
   flex-wrap: wrap;

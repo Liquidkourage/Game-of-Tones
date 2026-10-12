@@ -800,19 +800,6 @@
   margin-top: 4px;
 }
 
-.round-bucket-settings__saved-shapes {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.round-bucket-settings__saved-empty {
-  margin: 0;
-  font-size: 0.72rem;
-  color: rgba(200, 247, 228, 0.55);
-  line-height: 1.35;
-}
-
 .round-bucket-settings__shape-grid {
   display: flex;
   flex-wrap: wrap;

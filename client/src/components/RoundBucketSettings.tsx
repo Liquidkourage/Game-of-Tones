@@ -2,12 +2,12 @@ import React from 'react';
 import { ListMusic, Pencil, Printer, Save, Trash2 } from 'lucide-react';
 import {
   BINGO_PATTERNS,
-  DEFAULT_PRESET_SHAPE_PATTERN,
+  DEFAULT_SHAPE_PATTERN,
   HOST_PATTERN_CATEGORY_OPTIONS,
-  PRESET_SHAPE_PATTERNS,
+  SHAPE_PATTERNS,
   LINE_PATTERN_MAX_LINES,
   hostPatternCategory,
-  isPresetShapePattern,
+  isShapePattern,
   normalizeLinesRequired,
   deleteCustomPattern,
   getSavedCustomPatterns,
@@ -165,8 +165,8 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
       return;
     }
     if (cat === 'pattern') {
-      if (!isPresetShapePattern(pattern) && pattern !== 'custom') {
-        selectPattern(DEFAULT_PRESET_SHAPE_PATTERN);
+      if (!isShapePattern(pattern) && pattern !== 'custom') {
+        selectPattern(DEFAULT_SHAPE_PATTERN);
       }
       return;
     }
@@ -192,7 +192,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
 
   const handleRenameSavedCustom = () => {
     if (!selectedSavedCustom) return;
-    const next = window.prompt('Rename saved shape', selectedSavedCustom.name);
+    const next = window.prompt('Rename shape', selectedSavedCustom.name);
     if (next == null) return;
     const updated = renameCustomPattern(selectedSavedCustom.id, next);
     if (!updated) {
@@ -204,7 +204,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
 
   const handleDeleteSavedCustom = () => {
     if (!selectedSavedCustom) return;
-    if (!window.confirm(`Delete saved shape “${selectedSavedCustom.name}”?`)) return;
+    if (!window.confirm(`Delete “${selectedSavedCustom.name}”?`)) return;
     deleteCustomPattern(selectedSavedCustom.id);
     onSavedCustomPatternsChange?.(getSavedCustomPatterns());
   };
@@ -280,7 +280,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
       {category === 'pattern' ? (
         <div className="round-bucket-settings__shapes" role="group" aria-label="Pattern shapes">
           <div className="round-bucket-settings__shape-grid" role="list">
-            {PRESET_SHAPE_PATTERNS.map((shapeKey) => {
+            {SHAPE_PATTERNS.map((shapeKey) => {
               const active = pattern === shapeKey;
               const def = BINGO_PATTERNS[shapeKey];
               return (

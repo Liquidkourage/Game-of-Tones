@@ -2,12 +2,12 @@ import React from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import {
   BINGO_PATTERNS,
-  DEFAULT_PRESET_SHAPE_PATTERN,
+  DEFAULT_SHAPE_PATTERN,
   HOST_PATTERN_CATEGORY_OPTIONS,
-  PRESET_SHAPE_PATTERNS,
+  SHAPE_PATTERNS,
   LINE_PATTERN_MAX_LINES,
   hostPatternCategory,
-  isPresetShapePattern,
+  isShapePattern,
   normalizeLinesRequired,
   deleteCustomPattern,
   getSavedCustomPatterns,
@@ -86,8 +86,8 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
       return;
     }
     if (cat === 'pattern') {
-      if (!isPresetShapePattern(pattern) && pattern !== 'custom') {
-        onSelectPattern(DEFAULT_PRESET_SHAPE_PATTERN);
+      if (!isShapePattern(pattern) && pattern !== 'custom') {
+        onSelectPattern(DEFAULT_SHAPE_PATTERN);
       }
       return;
     }
@@ -101,7 +101,7 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
 
   const handleRename = () => {
     if (!selectedCustomPattern) return;
-    const next = window.prompt('Rename saved shape', selectedCustomPattern.name);
+    const next = window.prompt('Rename shape', selectedCustomPattern.name);
     if (next == null) return;
     const updated = renameCustomPattern(selectedCustomPattern.id, next);
     if (!updated) {
@@ -113,7 +113,7 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
 
   const handleDelete = () => {
     if (!selectedCustomPattern) return;
-    if (!window.confirm(`Delete saved shape “${selectedCustomPattern.name}”?`)) return;
+    if (!window.confirm(`Delete “${selectedCustomPattern.name}”?`)) return;
     deleteCustomPattern(selectedCustomPattern.id);
     onSavedCustomPatternsChange?.(getSavedCustomPatterns());
   };
@@ -167,7 +167,7 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
     {category === 'pattern' ? (
       <div className="host-round-hub-pattern__shapes" role="group" aria-label="Pattern shapes">
         <div className="host-round-hub-pattern__shape-grid" role="list">
-          {PRESET_SHAPE_PATTERNS.map((shapeKey) => {
+          {SHAPE_PATTERNS.map((shapeKey) => {
             const def = BINGO_PATTERNS[shapeKey];
             const active = pattern === shapeKey;
             return (

@@ -155,11 +155,11 @@ export const BINGO_PATTERNS: Record<BingoPattern, PatternDefinition> = {
 
 export const PATTERN_OPTIONS = Object.values(BINGO_PATTERNS);
 
-/** Shape presets (not line / cover-all / custom). */
-export const PRESET_SHAPE_PATTERNS: readonly BingoPattern[] = ['four_corners', 'x', 't', 'l', 'u', 'plus'];
+/** Fixed shapes shown in the Pattern chip list (not line / cover-all / composite). */
+export const SHAPE_PATTERNS: readonly BingoPattern[] = ['four_corners', 'x', 't', 'l', 'u', 'plus'];
 
-/** Default preset when the host picks the Pattern category without one already active. */
-export const DEFAULT_PRESET_SHAPE_PATTERN: BingoPattern = 'four_corners';
+/** Default when the host picks Pattern without a shape (or custom) already active. */
+export const DEFAULT_SHAPE_PATTERN: BingoPattern = 'four_corners';
 
 /**
  * Top-level Host Setup pattern categories (UI only).
@@ -175,18 +175,18 @@ export const HOST_PATTERN_CATEGORY_OPTIONS: readonly { value: HostPatternCategor
   { value: 'composite', label: 'Combined' },
 ] as const;
 
-export function isPresetShapePattern(pattern: BingoPattern | string): boolean {
-  return (PRESET_SHAPE_PATTERNS as readonly string[]).includes(pattern);
+export function isShapePattern(pattern: BingoPattern | string): boolean {
+  return (SHAPE_PATTERNS as readonly string[]).includes(pattern);
 }
 
 /**
  * Map a stored bingoPattern id to the Host Setup top-level category.
- * Saved custom shapes live under Pattern; `custom` in HOST_PATTERN_CATEGORY_OPTIONS
- * is the "New" action (open draw modal), not a sticky category.
+ * Host-drawn customs share the Pattern list with fixed shapes; `custom` in
+ * HOST_PATTERN_CATEGORY_OPTIONS is the "New" action (open draw modal), not a sticky category.
  */
 export function hostPatternCategory(pattern: BingoPattern): HostPatternCategory {
   if (pattern === 'line') return 'line';
-  if (isPresetShapePattern(pattern) || pattern === 'custom') return 'pattern';
+  if (isShapePattern(pattern) || pattern === 'custom') return 'pattern';
   if (pattern === 'full_card' || pattern === 'blackout') return 'full_card';
   if (pattern === 'composite') return 'composite';
   return 'line';
@@ -975,7 +975,7 @@ export function hostPatternLegitProgress(
     return { hit, total, pct, winComplete: pct >= 100 };
   }
 
-  if (PRESET_SHAPE_PATTERNS.includes(canonical as BingoPattern)) {
+  if (SHAPE_PATTERNS.includes(canonical as BingoPattern)) {
     const pts = BINGO_PATTERNS[canonical as BingoPattern]?.positions;
     if (pts?.length) {
       const { hit, total, pct } = maskLegitRatioBest(card, pts, undefined, legit);
@@ -1092,7 +1092,7 @@ export function patternHintCellPositions(opts: {
     return unionCompositeHighlightPositions(opts.patternComposite);
   }
 
-  // Presets / cover-all: ignore any leftover custom mask or composite props.
+  // Fixed shapes / cover-all: ignore any leftover custom mask or composite props.
   const def = BINGO_PATTERNS[pattern as BingoPattern];
   if (def?.positions?.length) return [...def.positions];
   return [];
