@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import {
   BINGO_PATTERNS,
   DEFAULT_PRESET_SHAPE_PATTERN,
@@ -32,6 +32,7 @@ export interface HostRoundHubPatternPanelProps {
   savedCustomPatterns: SavedCustomPattern[];
   selectedCustomPattern: SavedCustomPattern | null;
   onSelectSavedCustom: (p: SavedCustomPattern) => void;
+  /** Open draw-custom modal (create). Wired from top-level New only. */
   onNewCustomPattern: () => void;
   onEditCustomPattern?: (p: SavedCustomPattern) => void;
   onSavedCustomPatternsChange?: (next: SavedCustomPattern[]) => void;
@@ -79,8 +80,13 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
         : getPatternDisplayName(pattern);
 
   const selectCategory = (cat: HostPatternCategory) => {
+    if (cat === 'custom') {
+      // New: open draw modal only — do not switch into a Custom panel.
+      onNewCustomPattern();
+      return;
+    }
     if (cat === 'pattern') {
-      if (!isPresetShapePattern(pattern)) {
+      if (!isPresetShapePattern(pattern) && pattern !== 'custom') {
         onSelectPattern(DEFAULT_PRESET_SHAPE_PATTERN);
       }
       return;
@@ -90,7 +96,6 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
       onOpenCompositeModal();
       return;
     }
-    // New (custom): surface saved shapes in-panel — do not force the draw editor open.
     onSelectPattern(cat);
   };
 
@@ -160,22 +165,56 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
     ) : null}
 
     {category === 'pattern' ? (
-      <div className="host-round-hub-pattern__shapes">
-        {PRESET_SHAPE_PATTERNS.map((shapeKey) => {
-          const def = BINGO_PATTERNS[shapeKey];
-          const active = pattern === shapeKey;
-          return (
-            <button
-              key={shapeKey}
-              type="button"
-              className={`host-round-hub-pattern__shape${active ? ' host-round-hub-pattern__shape--active' : ''}`}
-              title={def.description}
-              onClick={() => onSelectPattern(shapeKey)}
-            >
-              {def.label}
-            </button>
-          );
-        })}
+      <div className="host-round-hub-pattern__shapes" role="group" aria-label="Pattern shapes">
+        <div className="host-round-hub-pattern__shape-grid" role="list">
+          {PRESET_SHAPE_PATTERNS.map((shapeKey) => {
+            const def = BINGO_PATTERNS[shapeKey];
+            const active = pattern === shapeKey;
+            return (
+              <button
+                key={shapeKey}
+                type="button"
+                role="listitem"
+                className={`host-round-hub-pattern__shape-chip${active ? ' host-round-hub-pattern__shape-chip--active' : ''}`}
+                aria-pressed={active}
+                title={def.description}
+                onClick={() => onSelectPattern(shapeKey)}
+              >
+                <HostPatternMiniPreview
+                  pattern={shapeKey}
+                  className="host-pattern-mini-preview--chip"
+                  label={def.label}
+                />
+                <span className="host-round-hub-pattern__shape-chip-name">{def.label}</span>
+              </button>
+            );
+          })}
+          {savedCustomPatterns.map((sp) => {
+            const active = pattern === 'custom' && selectedCustomPattern?.id === sp.id;
+            return (
+              <button
+                key={sp.id}
+                type="button"
+                role="listitem"
+                className={`host-round-hub-pattern__shape-chip${active ? ' host-round-hub-pattern__shape-chip--active' : ''}`}
+                aria-pressed={active}
+                title={sp.name}
+                onClick={() => onSelectSavedCustom(sp)}
+              >
+                <HostPatternMiniPreview
+                  pattern="custom"
+                  customPattern={sp.positions}
+                  customMatchReverse={sp.matchReverse === true}
+                  customMatchAllowRotation={sp.matchAllowRotation === true}
+                  customMatchAllowMirror={sp.matchAllowMirror === true}
+                  className="host-pattern-mini-preview--chip"
+                  label={sp.name}
+                />
+                <span className="host-round-hub-pattern__shape-chip-name">{sp.name}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     ) : null}
 
@@ -197,43 +236,6 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
 
     {pattern === 'custom' ? (
       <div className="host-round-hub-pattern__custom">
-        <div className="host-round-hub-pattern__saved-shapes">
-          <span className="host-round-hub-pattern__saved-label">Saved shapes</span>
-          {savedCustomPatterns.length === 0 ? (
-            <p className="host-round-hub-pattern__saved-empty">
-              No saved shapes yet. Draw one to get started.
-            </p>
-          ) : (
-            <div className="host-round-hub-pattern__shape-grid" role="list">
-              {savedCustomPatterns.map((sp) => {
-                const active = selectedCustomPattern?.id === sp.id;
-                return (
-                  <button
-                    key={sp.id}
-                    type="button"
-                    role="listitem"
-                    className={`host-round-hub-pattern__shape-chip${active ? ' host-round-hub-pattern__shape-chip--active' : ''}`}
-                    aria-pressed={active}
-                    title={sp.name}
-                    onClick={() => onSelectSavedCustom(sp)}
-                  >
-                    <HostPatternMiniPreview
-                      pattern="custom"
-                      customPattern={sp.positions}
-                      customMatchReverse={sp.matchReverse === true}
-                      customMatchAllowRotation={sp.matchAllowRotation === true}
-                      customMatchAllowMirror={sp.matchAllowMirror === true}
-                      className="host-pattern-mini-preview--chip"
-                      label={sp.name}
-                    />
-                    <span className="host-round-hub-pattern__shape-chip-name">{sp.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
         {selectedCustomPattern ? (
           <div className="host-round-hub-pattern__library-actions">
             {onEditCustomPattern ? (
@@ -252,11 +254,6 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
             </button>
           </div>
         ) : null}
-
-        <button type="button" className="btn-secondary host-round-hub-pattern__draw-btn" onClick={onNewCustomPattern}>
-          <Plus className="w-4 h-4" aria-hidden />
-          Draw custom pattern…
-        </button>
 
         {customMask.length > 0 ? (
           <div className="host-round-hub-pattern__custom-rules">

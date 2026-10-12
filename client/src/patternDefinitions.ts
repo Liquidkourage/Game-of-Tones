@@ -179,12 +179,15 @@ export function isPresetShapePattern(pattern: BingoPattern | string): boolean {
   return (PRESET_SHAPE_PATTERNS as readonly string[]).includes(pattern);
 }
 
-/** Map a stored bingoPattern id to the Host Setup top-level category. */
+/**
+ * Map a stored bingoPattern id to the Host Setup top-level category.
+ * Saved custom shapes live under Pattern; `custom` in HOST_PATTERN_CATEGORY_OPTIONS
+ * is the "New" action (open draw modal), not a sticky category.
+ */
 export function hostPatternCategory(pattern: BingoPattern): HostPatternCategory {
   if (pattern === 'line') return 'line';
-  if (isPresetShapePattern(pattern)) return 'pattern';
+  if (isPresetShapePattern(pattern) || pattern === 'custom') return 'pattern';
   if (pattern === 'full_card' || pattern === 'blackout') return 'full_card';
-  if (pattern === 'custom') return 'custom';
   if (pattern === 'composite') return 'composite';
   return 'line';
 }

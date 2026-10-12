@@ -1,5 +1,5 @@
 import React from 'react';
-import { ListMusic, Pencil, Plus, Printer, Save, Trash2 } from 'lucide-react';
+import { ListMusic, Pencil, Printer, Save, Trash2 } from 'lucide-react';
 import {
   BINGO_PATTERNS,
   DEFAULT_PRESET_SHAPE_PATTERN,
@@ -64,6 +64,7 @@ interface RoundBucketSettingsProps {
   onPrintPdf?: () => void;
   onCallSheet?: () => void;
   onOpenComposite?: () => void;
+  /** Open draw-custom modal (create). Wired from top-level New only. */
   onNewCustomPattern?: (roundIndex: number) => void;
   /** Open draw modal preloaded to overwrite this saved library shape. */
   onEditCustomPattern?: (roundIndex: number, pattern: SavedCustomPattern) => void;
@@ -155,12 +156,16 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
     if (v === 'composite') {
       window.setTimeout(() => openCombinedEditor(), 0);
     }
-    // New (custom): show saved shapes in-panel — do not force the draw editor open.
   };
 
   const selectCategory = (cat: HostPatternCategory) => {
+    if (cat === 'custom') {
+      // New: open draw modal only — do not switch into a Custom panel.
+      onNewCustomPattern?.(roundIndex);
+      return;
+    }
     if (cat === 'pattern') {
-      if (!isPresetShapePattern(pattern)) {
+      if (!isPresetShapePattern(pattern) && pattern !== 'custom') {
         selectPattern(DEFAULT_PRESET_SHAPE_PATTERN);
       }
       return;
@@ -273,25 +278,68 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
       </div>
 
       {category === 'pattern' ? (
-        <div className="round-bucket-settings__shapes" role="group" aria-label="Pattern presets">
-          {PRESET_SHAPE_PATTERNS.map((shapeKey) => {
-            const active = pattern === shapeKey;
-            return (
-              <button
-                key={shapeKey}
-                type="button"
-                className={
-                  active
-                    ? 'round-bucket-settings__shape round-bucket-settings__shape--active'
-                    : 'round-bucket-settings__shape'
-                }
-                title={BINGO_PATTERNS[shapeKey].description}
-                onClick={() => selectPattern(shapeKey)}
-              >
-                {BINGO_PATTERNS[shapeKey].label}
-              </button>
-            );
-          })}
+        <div className="round-bucket-settings__shapes" role="group" aria-label="Pattern shapes">
+          <div className="round-bucket-settings__shape-grid" role="list">
+            {PRESET_SHAPE_PATTERNS.map((shapeKey) => {
+              const active = pattern === shapeKey;
+              const def = BINGO_PATTERNS[shapeKey];
+              return (
+                <button
+                  key={shapeKey}
+                  type="button"
+                  role="listitem"
+                  className={
+                    active
+                      ? 'round-bucket-settings__shape-chip round-bucket-settings__shape-chip--active'
+                      : 'round-bucket-settings__shape-chip'
+                  }
+                  aria-pressed={active}
+                  title={def.description}
+                  onClick={() => selectPattern(shapeKey)}
+                >
+                  <HostPatternMiniPreview
+                    pattern={shapeKey}
+                    className="host-pattern-mini-preview--chip"
+                    label={def.label}
+                  />
+                  <span className="round-bucket-settings__shape-chip-name">{def.label}</span>
+                </button>
+              );
+            })}
+            {savedCustomPatterns.map((sp) => {
+              const active = pattern === 'custom' && selectedSavedCustom?.id === sp.id;
+              return (
+                <button
+                  key={sp.id}
+                  type="button"
+                  role="listitem"
+                  className={
+                    active
+                      ? 'round-bucket-settings__shape-chip round-bucket-settings__shape-chip--active'
+                      : 'round-bucket-settings__shape-chip'
+                  }
+                  aria-pressed={active}
+                  title={sp.name}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    applySavedCustom(sp);
+                  }}
+                >
+                  <HostPatternMiniPreview
+                    pattern="custom"
+                    customPattern={sp.positions}
+                    customMatchReverse={sp.matchReverse === true}
+                    customMatchAllowRotation={sp.matchAllowRotation === true}
+                    customMatchAllowMirror={sp.matchAllowMirror === true}
+                    className="host-pattern-mini-preview--chip"
+                    label={sp.name}
+                  />
+                  <span className="round-bucket-settings__shape-chip-name">{sp.name}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       ) : null}
 
@@ -320,51 +368,6 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
 
       {pattern === 'custom' ? (
         <div className="round-bucket-settings__custom">
-          <div className="round-bucket-settings__saved-shapes">
-            <span className="round-bucket-settings__label">Saved shapes</span>
-            {savedCustomPatterns.length === 0 ? (
-              <p className="round-bucket-settings__saved-empty">
-                No saved shapes yet. Draw one to get started.
-              </p>
-            ) : (
-              <div className="round-bucket-settings__shape-grid" role="list">
-                {savedCustomPatterns.map((sp) => {
-                  const active = selectedSavedCustom?.id === sp.id;
-                  return (
-                    <button
-                      key={sp.id}
-                      type="button"
-                      role="listitem"
-                      className={
-                        active
-                          ? 'round-bucket-settings__shape-chip round-bucket-settings__shape-chip--active'
-                          : 'round-bucket-settings__shape-chip'
-                      }
-                      aria-pressed={active}
-                      title={sp.name}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        applySavedCustom(sp);
-                      }}
-                    >
-                      <HostPatternMiniPreview
-                        pattern="custom"
-                        customPattern={sp.positions}
-                        customMatchReverse={sp.matchReverse === true}
-                        customMatchAllowRotation={sp.matchAllowRotation === true}
-                        customMatchAllowMirror={sp.matchAllowMirror === true}
-                        className="host-pattern-mini-preview--chip"
-                        label={sp.name}
-                      />
-                      <span className="round-bucket-settings__shape-chip-name">{sp.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
           {selectedSavedCustom ? (
             <div className="round-bucket-settings__library-actions">
               {onEditCustomPattern ? (
@@ -402,21 +405,6 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
                 Delete
               </button>
             </div>
-          ) : null}
-
-          {onNewCustomPattern ? (
-            <button
-              type="button"
-              className="round-bucket-settings__pattern-editor-btn round-bucket-settings__pattern-editor-btn--primary round-bucket-settings__draw-btn"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onNewCustomPattern(roundIndex);
-              }}
-            >
-              <Plus className="w-3.5 h-3.5" aria-hidden />
-              Draw custom pattern…
-            </button>
           ) : null}
 
           <div className="round-bucket-settings__custom-rules">
