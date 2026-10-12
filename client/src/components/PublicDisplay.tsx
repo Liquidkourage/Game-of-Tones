@@ -58,7 +58,8 @@ import {
   normalizeLinesRequired,
   customMaskHighlightPositions,
   LINE_PATTERN_MAX_LINES,
-  customPatternMaskVariants,
+  buildCustomPatternProjectorDemoFrames,
+  expandMaskMatchVariants,
   clauseHighlightPositions,
   describeCompositeClauseBrief,
   describeCompositeClauseAudience,
@@ -66,6 +67,15 @@ import {
   describeLinePatternLabel,
   getPatternDisplayName,
 } from '../patternDefinitions';
+
+/** Avoid resetting projector demo timers when room-state re-sends the same mask Set. */
+function samePosSet(prev: Set<string>, nextList: readonly string[]): boolean {
+  if (prev.size !== nextList.length) return false;
+  for (const p of nextList) {
+    if (!prev.has(p)) return false;
+  }
+  return true;
+}
 
 /** Public-facing domain shown on the projector splash ("Go to …"). Display copy only — the QR code still encodes this deployment's real /player/:roomId URL. */
 const PUBLIC_DISPLAY_JOIN_DOMAIN = 'TempoMusicBingo.com';
@@ -263,6 +273,24 @@ function expandCompositeClauseToDemoFrames(clause: PatternCompositeClause): { la
   if (clause.kind === 'preset' && clause.preset === 'full_card') {
     const positions = clauseHighlightPositions(clause);
     return positions.length ? [{ label: describeCompositeClauseBrief(clause), positions }] : [];
+  }
+  if (clause.kind === 'mask') {
+    const base = describeCompositeClauseBrief(clause);
+    const frames = expandMaskMatchVariants(clause.positions, {
+      matchAllowRotation: clause.matchAllowRotation,
+      matchAllowMirror: clause.matchAllowMirror,
+      matchAnywhere: clause.matchAnywhere,
+    });
+    if (frames.length > 1) {
+      return frames.map((positions, i) => ({
+        label: `${base} · ${i + 1}/${frames.length}`,
+        positions,
+      }));
+    }
+    if (frames.length === 1) {
+      return [{ label: base, positions: frames[0] }];
+    }
+    return [];
   }
   const positions = clauseHighlightPositions(clause);
   if (!positions.length) return [];
@@ -1619,15 +1647,28 @@ const PublicDisplay: React.FC = () => {
     [linesRequired],
   );
 
+  /** Stable mask fingerprint so room-state Set churn does not reset the anywhere demo cycle. */
+  const customMaskKey = useMemo(
+    () => Array.from(customMask).sort().join('|'),
+    [customMask],
+  );
+
   const customPatternDemoFrames = useMemo(() => {
-    if (pattern !== 'custom' || !customMask || customMask.size === 0) return [];
-    return customPatternMaskVariants(Array.from(customMask), {
+    if (pattern !== 'custom' || !customMaskKey) return [];
+    return buildCustomPatternProjectorDemoFrames(customMaskKey.split('|'), {
       matchReverse: customMatchReverse,
       matchAllowRotation: customMatchAllowRotation,
       matchAllowMirror: customMatchAllowMirror,
       matchAnywhere: customMatchAnywhere,
     });
-  }, [pattern, customMask, customMatchReverse, customMatchAllowRotation, customMatchAllowMirror, customMatchAnywhere]);
+  }, [pattern, customMaskKey, customMatchReverse, customMatchAllowRotation, customMatchAllowMirror, customMatchAnywhere]);
+
+  /** ~1.3s like multi-line demos; slightly slower when Anywhere yields many placements. */
+  const customDemoCycleMs = useMemo(() => {
+    const n = customPatternDemoFrames.length;
+    if (n < 2) return 1300;
+    return Math.min(1600, Math.max(1300, 1180 + n * 10));
+  }, [customPatternDemoFrames.length]);
 
   /** Combined-pattern projector demos — line/full clauses expand into concrete examples; dedupe shared shapes. */
   const compositeDemoSequences = useMemo(() => {
@@ -2115,9 +2156,10 @@ const PublicDisplay: React.FC = () => {
           }
 
           if (Array.isArray(payload.customMask)) {
-            setCustomMask(new Set(payload.customMask));
+            const list = payload.customMask.map((p: unknown) => String(p));
+            setCustomMask((prev) => (samePosSet(prev, list) ? prev : new Set(list)));
           } else if (payload.pattern && payload.pattern !== 'custom') {
-            setCustomMask(new Set());
+            setCustomMask((prev) => (prev.size === 0 ? prev : new Set()));
           }
           
           // Update total played count for display sync
@@ -2614,9 +2656,10 @@ const PublicDisplay: React.FC = () => {
           }
         }
         if (Array.isArray(data?.customMask)) {
-          setCustomMask(new Set(data.customMask));
+          const list = (data.customMask as unknown[]).map((x) => String(x));
+          setCustomMask((prev) => (samePosSet(prev, list) ? prev : new Set(list)));
         } else if (p && p !== 'custom') {
-          setCustomMask(new Set());
+          setCustomMask((prev) => (prev.size === 0 ? prev : new Set()));
         }
       } catch {}
     });
@@ -2896,10 +2939,11 @@ const PublicDisplay: React.FC = () => {
           }
           if (Array.isArray(data?.customMask)) {
             try {
-              setCustomMask(new Set<string>(data.customMask as string[]));
+              const list = (data.customMask as unknown[]).map((x) => String(x));
+              setCustomMask((prev) => (samePosSet(prev, list) ? prev : new Set(list)));
             } catch {}
           } else {
-            setCustomMask(new Set());
+            setCustomMask((prev) => (prev.size === 0 ? prev : new Set()));
           }
           // Emit pattern to header
           window.dispatchEvent(new CustomEvent('display-pattern', { detail: { pattern: data.pattern } }));
@@ -4240,8 +4284,10 @@ const PublicDisplay: React.FC = () => {
         return 'U';
       case 'plus':
         return 'Plus';
-      case 'custom':
-        return (customPatternName || '').trim() || 'Custom';
+      case 'custom': {
+        const name = (customPatternName || '').trim() || 'Custom';
+        return customMatchAnywhere ? `${name} (anywhere)` : name;
+      }
       case 'composite':
         return patternComposite
           ? `Combined (${patternComposite.op.toUpperCase()})`
@@ -4306,15 +4352,16 @@ const PublicDisplay: React.FC = () => {
       return unionCompositeHighlightPositions(patternComposite).includes(`${row}-${col}`);
     }
     if (pattern === 'custom' && customMask && customMask.size > 0) {
-      if (customPatternDemoFrames.length > 1) {
+      // Anywhere / orientation demos: light one concrete placement at a time (never union).
+      if (customPatternDemoFrames.length >= 1 && (customMatchAnywhere || customPatternDemoFrames.length > 1)) {
         const idx = customPatternDemoIndex % customPatternDemoFrames.length;
-        return customPatternDemoFrames[idx].includes(`${row}-${col}`);
+        return customPatternDemoFrames[idx]?.includes(`${row}-${col}`) ?? false;
       }
       const hi = customMaskHighlightPositions(Array.from(customMask), {
         matchReverse: customMatchReverse,
         matchAllowRotation: customMatchAllowRotation,
         matchAllowMirror: customMatchAllowMirror,
-      matchAnywhere: customMatchAnywhere,
+        matchAnywhere: false,
       });
       return hi.includes(`${row}-${col}`);
     }
@@ -4378,7 +4425,7 @@ const PublicDisplay: React.FC = () => {
 
   useEffect(() => {
     setCustomPatternDemoIndex(0);
-  }, [pattern, customMask, customMatchReverse, customMatchAllowRotation, customMatchAllowMirror, customMatchAnywhere]);
+  }, [pattern, customMaskKey, customMatchReverse, customMatchAllowRotation, customMatchAllowMirror, customMatchAnywhere]);
 
   useEffect(() => {
     if (customDemoIntervalRef.current) {
@@ -4389,14 +4436,14 @@ const PublicDisplay: React.FC = () => {
     const len = customPatternDemoFrames.length;
     customDemoIntervalRef.current = setInterval(() => {
       setCustomPatternDemoIndex((prev) => (prev + 1) % len);
-    }, 1000);
+    }, customDemoCycleMs);
     return () => {
       if (customDemoIntervalRef.current) {
         clearInterval(customDemoIntervalRef.current);
         customDemoIntervalRef.current = null;
       }
     };
-  }, [pattern, customPatternDemoFrames]);
+  }, [pattern, customPatternDemoFrames, customDemoCycleMs]);
 
   useEffect(() => {
     setCompositePatternDemoIndex(0);
@@ -6413,6 +6460,15 @@ const PublicDisplay: React.FC = () => {
                         <span className="composite-pattern-chip composite-pattern-chip--c3">ANYWHERE</span>
                       ) : null}
                     </div>
+                    {customPatternDemoFrames.length > 1 ? (
+                      <div className="composite-pattern-spotlight-row" style={{ color: '#a8e6dc', textAlign: 'center' }}>
+                        {customMatchAnywhere ? 'Placement' : 'Orientation'}:{' '}
+                        <span style={{ color: '#ffffff', fontWeight: 800 }}>
+                          {(customPatternDemoIndex % customPatternDemoFrames.length) + 1}/
+                          {customPatternDemoFrames.length}
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
                 {currentRoundPrize ? (

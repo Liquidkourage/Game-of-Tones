@@ -607,6 +607,19 @@ export function customPatternMaskVariants(
   return Array.from(variants.values());
 }
 
+/**
+ * Projector / wall demo frames for a custom mask (one concrete placement per frame).
+ * When Anywhere is on, enumerates every valid translation (and orientations if allowed).
+ * Phone/host mini-previews intentionally stay on the painted base via patternHintCellPositions.
+ */
+export function buildCustomPatternProjectorDemoFrames(
+  positions: readonly string[] | undefined,
+  opts?: CustomMatchOpts,
+): string[][] {
+  if (!positions?.length) return [];
+  return customPatternMaskVariants(positions, opts);
+}
+
 /** Whether this clause type may use extra rotations/reflections at match time. */
 export function clauseSupportsMatchVariants(clause: PatternCompositeClause): boolean {
   if (clause.kind === 'mask') return true;
