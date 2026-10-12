@@ -5111,16 +5111,27 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
           try {
             const state = await spErr.getCurrentPlaybackState();
             const wantMs = room.currentSongStartMs || 0;
-            if (state?.item?.id === nextSong.id) {
-              if (!state.is_playing) {
+            const trackOk = SpotifyService.playbackItemMatchesTrackId(state?.item, nextSong.id);
+            const alreadyAudible = SpotifyService.isAudibleNearEarlyStart(state, wantMs, {
+              trackId: nextSong.id,
+            });
+            // Clip already going on the called track (or mid-Early after our play) — do not
+            // seek/replay/context@Early (that restarts audible audio from the Early spot).
+            if (trackOk || alreadyAudible) {
+              if (trackOk && state && !state.is_playing) {
                 try {
                   await spErr.resumePlayback(resolvedDeviceId);
                 } catch (_) {
                   /* ignore */
                 }
               }
-              const prog = Number(state.progress_ms || 0);
-              if (wantMs > 0 && prog < 2500 && Math.abs(prog - wantMs) > 4000) {
+              const prog = Number(state?.progress_ms || 0);
+              if (
+                trackOk &&
+                wantMs > 0 &&
+                prog < 2500 &&
+                Math.abs(prog - wantMs) > 4000
+              ) {
                 try {
                   await spErr.seekToPosition(wantMs, resolvedDeviceId);
                 } catch (_) {
@@ -5128,10 +5139,14 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
                 }
               }
               room._spotifyNotPlayingSoftRetries = 0;
-              routineServerLog('✅ Soft recover: correct track already on device (no rebind)');
+              routineServerLog(
+                trackOk
+                  ? '✅ Soft recover: correct track already on device (no rebind)'
+                  : `✅ Soft recover: already audible near Early (progress=${prog}ms) — no rebind`,
+              );
               return;
             }
-            // One gentle replay — no bind@0 (avoids audible restart from 0).
+            // Truly silent / wrong item — one gentle replay, no bind@0.
             routineServerLog('🔄 Soft recover: context replay without bind@0…');
             await spErr.startPlayback(
               resolvedDeviceId,
@@ -5142,6 +5157,23 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
             room._spotifyNotPlayingSoftRetries = 0;
             routineServerLog('✅ Soft recover startPlayback completed');
           } catch (recoverErr) {
+            // Last check before skip: if audio started during recover confirm, leave it alone.
+            try {
+              const late = await spErr.getCurrentPlaybackState();
+              const wantMs = room.currentSongStartMs || 0;
+              if (
+                SpotifyService.playbackItemMatchesTrackId(late?.item, nextSong.id) ||
+                SpotifyService.isAudibleNearEarlyStart(late, wantMs, { trackId: nextSong.id })
+              ) {
+                room._spotifyNotPlayingSoftRetries = 0;
+                routineServerLog(
+                  '✅ Soft recover: late check — audio already on called clip (no skip)',
+                );
+                return;
+              }
+            } catch (_) {
+              /* fall through to skip */
+            }
             console.warn(
               '⚠️ Soft recover failed — auto-skipping to keep show moving:',
               showLog.spotifyErrorSummary(recoverErr),
@@ -5152,6 +5184,7 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
               type: 'spotify_not_playing_autoskip',
             });
             if (!roomStillPlaying(roomId) || room._spotifyAdvanceLocked) return;
+            // Advance board: next call's startPlayback replaces transport (no mid-clip Early rewind).
             playNextSongSimple(roomId, resolvedDeviceId);
           }
         }, 2200);
@@ -5179,11 +5212,18 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
           routineServerLog('🔄 Attempting resume/seek recover after song advance failure...');
           try {
             const state = await spErr.getCurrentPlaybackState();
-            if (state?.item?.id === nextSong.id) {
-              if (!state.is_playing) await spErr.resumePlayback(resolvedDeviceId);
-              const wantMs = room.currentSongStartMs || 0;
-              const prog = Number(state.progress_ms || 0);
-              if (wantMs > 0 && prog < 2500 && Math.abs(prog - wantMs) > 4000) {
+            const wantMs = room.currentSongStartMs || 0;
+            const trackOk = SpotifyService.playbackItemMatchesTrackId(state?.item, nextSong.id);
+            const alreadyAudible = SpotifyService.isAudibleNearEarlyStart(state, wantMs, {
+              trackId: nextSong.id,
+            });
+            if (trackOk || alreadyAudible) {
+              if (trackOk && state && !state.is_playing) {
+                await spErr.resumePlayback(resolvedDeviceId);
+              }
+              const prog = Number(state?.progress_ms || 0);
+              // Only seek when stuck near 0 — never rewind a mid-Early clip.
+              if (trackOk && wantMs > 0 && prog < 2500 && Math.abs(prog - wantMs) > 4000) {
                 try {
                   await spErr.seekToPosition(wantMs, resolvedDeviceId);
                 } catch (_) {
@@ -5195,7 +5235,7 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
               await spErr.startPlayback(
                 resolvedDeviceId,
                 [`spotify:track:${nextSong.id}`],
-                room.currentSongStartMs || 0,
+                wantMs,
                 { ...songSpotifyPlaybackContextOptions(nextSong), allowBindAtZero: false },
               );
             }
@@ -13046,16 +13086,25 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           const spSoft = spotifyFor(roomId);
           const state = await spSoft.getCurrentPlaybackState();
           const wantMs = room.currentSongStartMs || 0;
-          if (state?.item?.id === firstSong.id) {
-            if (!state.is_playing) {
+          const trackOk = SpotifyService.playbackItemMatchesTrackId(state?.item, firstSong.id);
+          const alreadyAudible = SpotifyService.isAudibleNearEarlyStart(state, wantMs, {
+            trackId: firstSong.id,
+          });
+          if (trackOk || alreadyAudible) {
+            if (trackOk && state && !state.is_playing) {
               try {
                 await spSoft.resumePlayback(targetDeviceId);
               } catch (_) {
                 /* ignore */
               }
             }
-            const prog = Number(state.progress_ms || 0);
-            if (wantMs > 0 && prog < 2500 && Math.abs(prog - wantMs) > 4000) {
+            const prog = Number(state?.progress_ms || 0);
+            if (
+              trackOk &&
+              wantMs > 0 &&
+              prog < 2500 &&
+              Math.abs(prog - wantMs) > 4000
+            ) {
               try {
                 await spSoft.seekToPosition(wantMs, targetDeviceId);
               } catch (_) {
@@ -13063,7 +13112,11 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
               }
             }
             room._spotifyNotPlayingSoftRetries = 0;
-            routineServerLog('✅ Start Game soft recover: correct track already on device (no rebind)');
+            routineServerLog(
+              trackOk
+                ? '✅ Start Game soft recover: correct track already on device (no rebind)'
+                : `✅ Start Game soft recover: already audible near Early (progress=${prog}ms) — no rebind`,
+            );
             return;
           }
           routineServerLog('🔄 Start Game soft recover: context replay without bind@0…');
@@ -13076,6 +13129,23 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           room._spotifyNotPlayingSoftRetries = 0;
           routineServerLog('✅ Start Game soft recover startPlayback completed');
         } catch (recoverErr) {
+          try {
+            const spSoft = spotifyFor(roomId);
+            const late = await spSoft.getCurrentPlaybackState();
+            const wantMs = room.currentSongStartMs || 0;
+            if (
+              SpotifyService.playbackItemMatchesTrackId(late?.item, firstSong.id) ||
+              SpotifyService.isAudibleNearEarlyStart(late, wantMs, { trackId: firstSong.id })
+            ) {
+              room._spotifyNotPlayingSoftRetries = 0;
+              routineServerLog(
+                '✅ Start Game soft recover: late check — audio already on called clip (no toast)',
+              );
+              return;
+            }
+          } catch (_) {
+            /* fall through */
+          }
           console.warn(
             '⚠️ Start Game soft recover failed — keeping simple progression (host can Skip):',
             showLog.spotifyErrorSummary(recoverErr),

@@ -21,6 +21,46 @@ function isInternalTempoPlaylistId(playlistId) {
   return s.length > 4 && s.startsWith('__') && s.endsWith('__');
 }
 
+/** Normalize a Spotify track id / URI to bare base62 id. */
+function normalizeSpotifyTrackId(idOrUri) {
+  return String(idOrUri || '')
+    .trim()
+    .replace(/^spotify:track:/i, '');
+}
+
+/**
+ * True when playback `item` is the called track — including market/catalog linked ids.
+ * Connect often returns item.id ≠ requested URI while linked_from.id (or vice versa) matches.
+ */
+function playbackItemMatchesTrackId(item, trackId) {
+  const want = normalizeSpotifyTrackId(trackId);
+  if (!want || !item) return false;
+  const candidates = [
+    item.id,
+    item.linked_from?.id,
+    item.linkedFrom?.id,
+  ]
+    .filter(Boolean)
+    .map(normalizeSpotifyTrackId);
+  return candidates.includes(want);
+}
+
+/**
+ * After a context play, audio may already be mid-Early on a linked/market id.
+ * Soft-recover must not re-fire context@Early (audible restart) when this is true.
+ * Window is tight (~snippet length) so a previous track still playing far past its own
+ * position is not mistaken for "already on Early".
+ */
+function isAudibleNearEarlyStart(state, wantMs, { trackId = null } = {}) {
+  if (!state?.is_playing) return false;
+  if (trackId && playbackItemMatchesTrackId(state.item, trackId)) return true;
+  const prog = Number(state.progress_ms || 0);
+  const early = Math.max(0, Math.floor(Number(wantMs) || 0));
+  if (!(early > 0) || !Number.isFinite(prog)) return false;
+  // Mid-clip after Early only — previous-song progress far from this Early must not match.
+  return prog >= early - 5000 && prog <= early + 35000;
+}
+
 /**
  * Spotify sends Retry-After from seconds (often 1) up to 86400+ when rate-limiting.
  * Capping quarantine too low (historically 8 min) caused TEMPO to resume Web API calls while Spotify
@@ -1533,13 +1573,16 @@ class SpotifyService {
       }
       const playing = !!state?.is_playing;
       const itemId = state?.item?.id || null;
+      const linkedFromId =
+        state?.item?.linked_from?.id || state?.item?.linkedFrom?.id || null;
       const progressMs = Number(state?.progress_ms || 0);
-      return { playing, itemId, progressMs, state };
+      const matchesTrack = !trackId || playbackItemMatchesTrackId(state?.item, trackId);
+      return { playing, itemId, linkedFromId, progressMs, matchesTrack, state };
     };
 
     /** If the called track is already bound, resume/seek — never wipe with bind@0. */
     const settleBoundTrack = async (snap, label) => {
-      if (!trackId || snap.itemId !== trackId) return false;
+      if (!trackId || !snap.matchesTrack) return false;
       if (!snap.playing) {
         try {
           await this.resumePlayback(deviceId);
@@ -1550,6 +1593,7 @@ class SpotifyService {
         snap = await readSnap();
       }
       // Early start already audible but stuck near 0 after a bad bind — nudge to Early.
+      // Never seek when already mid-Early (would rewind a playing clip).
       if (
         positionMs > 0 &&
         Number.isFinite(snap.progressMs) &&
@@ -1563,8 +1607,11 @@ class SpotifyService {
           /* keep whatever is playing */
         }
       }
+      const linkNote = snap.linkedFromId && snap.linkedFromId !== snap.itemId
+        ? ` linked_from=${snap.linkedFromId}`
+        : '';
       routineSpotifyLog(
-        `🔎 startPlayback ${label}: item bound (is_playing=${snap.playing} progress=${snap.progressMs}ms) — success without rebind`,
+        `🔎 startPlayback ${label}: item bound (is_playing=${snap.playing} item=${snap.itemId || 'none'}${linkNote} progress=${snap.progressMs}ms) — success without rebind`,
       );
       return true;
     };
@@ -1575,7 +1622,7 @@ class SpotifyService {
         await new Promise((r) => setTimeout(r, attempt === 1 ? 450 : 400));
         let snap = await readSnap();
         // Correct item loaded but paused — nudge resume (common right after context bind).
-        if (trackId && snap.itemId === trackId && !snap.playing) {
+        if (trackId && snap.matchesTrack && !snap.playing) {
           try {
             await this.resumePlayback(deviceId);
           } catch (_) {
@@ -1584,13 +1631,28 @@ class SpotifyService {
           await new Promise((r) => setTimeout(r, 300));
           snap = await readSnap();
         }
-        const ok = snap.playing && (!trackId || snap.itemId === trackId);
+        const ok = snap.playing && snap.matchesTrack;
+        const linkNote = snap.linkedFromId && snap.linkedFromId !== snap.itemId
+          ? ` linked_from=${snap.linkedFromId}`
+          : '';
         routineSpotifyLog(
-          `🔎 startPlayback ${label}#${attempt}: is_playing=${snap.playing} item=${snap.itemId || 'none'} progress=${snap.progressMs}ms ok=${ok}`,
+          `🔎 startPlayback ${label}#${attempt}: is_playing=${snap.playing} item=${snap.itemId || 'none'}${linkNote} progress=${snap.progressMs}ms ok=${ok}`,
         );
         if (ok) return true;
         // Bound with correct item even if is_playing flickers — don't destroy the session.
         if (await settleBoundTrack(snap, `${label}#${attempt}`)) return true;
+        // Context play already started mid-Early audio (linked/market id may not match yet) —
+        // treat as success; never fall through to soft-recover context replay.
+        if (
+          snap.playing &&
+          positionMs > 0 &&
+          isAudibleNearEarlyStart(snap.state, positionMs, { trackId })
+        ) {
+          routineSpotifyLog(
+            `✅ startPlayback ${label}#${attempt}: already audible near Early (progress=${snap.progressMs}ms) — success without rebind`,
+          );
+          return true;
+        }
       }
       return false;
     };
@@ -2510,5 +2572,8 @@ Object.assign(SpotifyService, {
   clampSearchLimit,
   normalizeSearchOffset,
   NON_ESSENTIAL_WEB_API_CALLERS,
+  playbackItemMatchesTrackId,
+  isAudibleNearEarlyStart,
+  normalizeSpotifyTrackId,
 });
 module.exports = SpotifyService; 
