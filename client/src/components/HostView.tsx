@@ -5216,21 +5216,16 @@ const HostView: React.FC = () => {
       setSpotifyError(msg);
       addLog(`Playback error: ${msg}`, 'error');
 
-      // Confirm flakiness / fail-open paths — never block the round with alert().
-      const softBlockTypes = new Set([
+      // Confirm flakiness / fail-open — non-blocking toast (not HostAck modal / alert).
+      const softToastTypes = new Set([
         'spotify_not_playing',
         'spotify_not_playing_autoskip',
         'advance_exhausted',
         'advance_exhausted_autoskip',
         'audio_unconfirmed',
       ]);
-      if (softBlockTypes.has(type)) {
-        showHostAckNotificationSocketRef.current({
-          id: `playback-soft-${type}`,
-          title: 'Playback notice',
-          variant: 'warning',
-          message: msg,
-        });
+      if (softToastTypes.has(type)) {
+        pushHostDomToast(msg, 'warn', 5500);
         return;
       }
       
@@ -5292,14 +5287,24 @@ const HostView: React.FC = () => {
       console.warn('Playback warning:', msg);
       addLog(`Playback warning: ${msg}`, 'warn');
 
-      showHostAckNotificationSocketRef.current({
-        id: `playback-warning-${type}`,
-        title: type === 'spotify_not_playing_autoskip' || type === 'advance_exhausted_autoskip'
-          ? 'Skipped track'
-          : 'Playback notice',
-        variant: 'warning',
-        message: msg,
-      });
+      // Mid-show confirm flakiness — toast only (do not block host with HostAck modal).
+      const softToastTypes = new Set([
+        'spotify_not_playing',
+        'spotify_not_playing_autoskip',
+        'advance_exhausted',
+        'advance_exhausted_autoskip',
+        'audio_unconfirmed',
+      ]);
+      if (softToastTypes.has(type)) {
+        pushHostDomToast(msg, 'warn', 5500);
+      } else {
+        showHostAckNotificationSocketRef.current({
+          id: `playback-warning-${type}`,
+          title: 'Playback notice',
+          variant: 'warning',
+          message: msg,
+        });
+      }
       
       // Show helpful suggestions for restriction warnings
       if (type === 'restriction' && suggestions.length > 0) {

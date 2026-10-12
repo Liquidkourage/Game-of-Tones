@@ -1503,8 +1503,10 @@ class SpotifyService {
         ? `spotify:album:${contextAlbumId}`
         : null;
     const confirm = options.confirm !== false;
-    // bind@0 restarts audible audio from the top — only as last resort when item never bound.
-    const allowBindAtZero = options.allowBindAtZero !== false;
+    // bind@0 restarts audible audio from the top — opt-in only (cold-start escape).
+    // Live Start Game / call-advance must leave this false: if Early audio already started,
+    // a bind@0 wipe is worse than a longer poll / resume / fail-open.
+    const allowBindAtZero = options.allowBindAtZero === true;
 
     const playViaContext = async (ms) => {
       await this.spotifyApi.play({
