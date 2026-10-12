@@ -64,7 +64,6 @@ import {
   DEFAULT_COMPOSITE_SPEC,
   normalizePatternComposite,
   normalizeLinesRequired,
-  LINE_PATTERN_MAX_LINES,
   hostPatternLegitProgress,
   clauseSupportsMatchVariants,
   describeCompositePatternAudienceSentence,
@@ -660,7 +659,7 @@ interface EventRound {
   customPatternMask?: string[];
   /** Required when `bingoPattern === 'composite'` (AND/OR clauses). */
   patternComposite?: PatternCompositeSpec;
-  /** When `bingoPattern === 'line'`: how many distinct rows/columns/diagonals must be complete (1–12). */
+  /** When `bingoPattern === 'line'`: how many distinct rows/columns/diagonals must be complete (1–6). */
   linesRequired?: number;
   /** Custom pattern: allow the stored base mask and its logical inverse. */
   customMatchReverse?: boolean;

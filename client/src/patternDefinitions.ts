@@ -373,13 +373,28 @@ export function evaluateCustomPatternStrict(
   return variants.some((m) => everyStrict(card, m, isValid));
 }
 
-/** Max distinct row/column/diagonal lines on a 5×5 card. */
-export const LINE_PATTERN_MAX_LINES = 12;
+/**
+ * Show/UI cap for "Any N lines" (host inputs + normalize).
+ * A 5×5 card has 12 possible lines (5+5+2); we only allow requiring up to 6.
+ */
+export const LINE_PATTERN_MAX_LINES = 6;
 
 export function normalizeLinesRequired(raw: unknown): number {
   const x = typeof raw === 'number' ? raw : parseInt(String(raw ?? ''), 10);
   if (!Number.isFinite(x)) return 1;
   return Math.min(LINE_PATTERN_MAX_LINES, Math.max(1, Math.round(x)));
+}
+
+/** Union cells from complete rows and columns (hint/preview samples only). */
+function hintCellsFromRowsAndCols(rows: readonly number[], cols: readonly number[]): string[] {
+  const set = new Set<string>();
+  for (const r of rows) {
+    for (let c = 0; c < 5; c++) set.add(`${r}-${c}`);
+  }
+  for (const c of cols) {
+    for (let r = 0; r < 5; r++) set.add(`${r}-${c}`);
+  }
+  return Array.from(set);
 }
 
 /** Count complete lines (rows, columns, both diagonals) using mark-only predicate. */
@@ -995,7 +1010,8 @@ export function getPatternHintLabel(
 
 /**
  * Cells to light on a tiny 5×5 hint grid (not win validation).
- * Line uses a sample middle row so players see “complete a line,” not “mark everything.”
+ * Line uses N-aware complete-line samples (clamped 1–6) so phone/host badges
+ * show real bingo lines, not a static plus for every multi-line round.
  */
 export function patternHintCellPositions(opts: {
   pattern: BingoPattern | string;
@@ -1010,9 +1026,22 @@ export function patternHintCellPositions(opts: {
 
   if (pattern === 'line') {
     const need = normalizeLinesRequired(opts.linesRequired ?? 1);
-    if (need <= 1) return ['2-0', '2-1', '2-2', '2-3', '2-4'];
-    // Two sample lines (middle row + middle column) for multi-line rounds.
-    return ['2-0', '2-1', '2-2', '2-3', '2-4', '0-2', '1-2', '3-2', '4-2'];
+    // Exact complete 5-cell lines (r-c), matched to agreed phone badge mocks.
+    switch (need) {
+      case 1:
+        return hintCellsFromRowsAndCols([2], []); // middle row
+      case 2:
+        return hintCellsFromRowsAndCols([2], [2]); // plus
+      case 3:
+        return hintCellsFromRowsAndCols([0, 2, 4], []);
+      case 4:
+        return hintCellsFromRowsAndCols([0, 4], [0, 4]); // edge frame
+      case 5:
+        return hintCellsFromRowsAndCols([0, 2, 4], [0, 4]);
+      case 6:
+      default:
+        return hintCellsFromRowsAndCols([0, 2, 4], [0, 2, 4]);
+    }
   }
 
   if (pattern === 'full_card') {

@@ -78,7 +78,7 @@ interface GameState {
   customPattern?: string[]; // Array of positions like ['0-0', '2-2', '4-4']
   /** Combined AND/OR pattern from server when pattern === 'composite' */
   patternComposite?: PatternCompositeSpec | null;
-  /** When pattern === 'line': distinct complete lines required (1–12). */
+  /** When pattern === 'line': distinct complete lines required (1–6). */
   linesRequired?: number;
   /** Custom pattern orientation (server / host). */
   customMatchReverse?: boolean;

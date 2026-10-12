@@ -13483,10 +13483,13 @@ function checkBingo(card) {
   return diag1Complete || diag2Complete;
 }
 
+/** Show/UI cap for "Any N lines" — keep in sync with client LINE_PATTERN_MAX_LINES. */
+const LINE_PATTERN_MAX_LINES_SRV = 6;
+
 function normalizeLinesRequiredSrv(raw) {
   const x = parseInt(raw, 10);
   if (!Number.isFinite(x)) return 1;
-  return Math.min(12, Math.max(1, Math.round(x)));
+  return Math.min(LINE_PATTERN_MAX_LINES_SRV, Math.max(1, Math.round(x)));
 }
 
 function sanitizeCustomPatternNameSrv(raw) {
