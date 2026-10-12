@@ -2,13 +2,18 @@ import React from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import {
   BINGO_PATTERNS,
+  DEFAULT_PRESET_SHAPE_PATTERN,
+  HOST_PATTERN_CATEGORY_OPTIONS,
   PRESET_SHAPE_PATTERNS,
   LINE_PATTERN_MAX_LINES,
+  hostPatternCategory,
+  isPresetShapePattern,
   normalizeLinesRequired,
   deleteCustomPattern,
   getSavedCustomPatterns,
   renameCustomPattern,
   type BingoPattern,
+  type HostPatternCategory,
   type PatternCompositeSpec,
   type SavedCustomPattern,
 } from '../patternDefinitions';
@@ -65,12 +70,29 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
   onCustomMatchReverseChange,
   getPatternDisplayName,
 }) => {
+  const category = hostPatternCategory(pattern);
   const previewLabel =
     pattern === 'custom' && selectedCustomPattern
       ? selectedCustomPattern.name
       : pattern === 'composite'
         ? `${BINGO_PATTERNS.composite.label} (${patternComposite.op.toUpperCase()})`
         : getPatternDisplayName(pattern);
+
+  const selectCategory = (cat: HostPatternCategory) => {
+    if (cat === 'pattern') {
+      if (!isPresetShapePattern(pattern)) {
+        onSelectPattern(DEFAULT_PRESET_SHAPE_PATTERN);
+      }
+      return;
+    }
+    if (cat === 'composite') {
+      onSelectPattern('composite');
+      onOpenCompositeModal();
+      return;
+    }
+    // New (custom): surface saved shapes in-panel — do not force the draw editor open.
+    onSelectPattern(cat);
+  };
 
   const handleRename = () => {
     if (!selectedCustomPattern) return;
@@ -97,32 +119,16 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
       <p className="host-round-hub-pattern__lead">Pattern for {targetRoundLabel}</p>
     ) : null}
     <div className="host-round-hub-pattern__main">
-      {(['line', 'full_card', 'composite', 'custom'] as const).map((key) => {
-        const def = BINGO_PATTERNS[key];
-        const active =
-          key === 'line'
-            ? pattern === 'line'
-            : key === 'full_card'
-              ? pattern === 'full_card' || pattern === 'blackout'
-              : key === 'composite'
-                ? pattern === 'composite'
-                : pattern === 'custom';
+      {HOST_PATTERN_CATEGORY_OPTIONS.map((opt) => {
+        const active = category === opt.value;
         return (
           <button
-            key={key}
+            key={opt.value}
             type="button"
             className={`host-round-hub-pattern__opt${active ? ' host-round-hub-pattern__opt--active' : ''}`}
-            onClick={() => {
-              if (key === 'composite') {
-                onSelectPattern('composite');
-                onOpenCompositeModal();
-              } else {
-                // Custom: surface saved shapes in-panel — do not force the draw editor open.
-                onSelectPattern(key);
-              }
-            }}
+            onClick={() => selectCategory(opt.value)}
           >
-            <span className="host-round-hub-pattern__opt-label">{def.label}</span>
+            <span className="host-round-hub-pattern__opt-label">{opt.label}</span>
           </button>
         );
       })}
@@ -153,23 +159,25 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
       </div>
     ) : null}
 
-    <div className="host-round-hub-pattern__shapes">
-      {PRESET_SHAPE_PATTERNS.map((shapeKey) => {
-        const def = BINGO_PATTERNS[shapeKey];
-        const active = pattern === shapeKey;
-        return (
-          <button
-            key={shapeKey}
-            type="button"
-            className={`host-round-hub-pattern__shape${active ? ' host-round-hub-pattern__shape--active' : ''}`}
-            title={def.description}
-            onClick={() => onSelectPattern(shapeKey)}
-          >
-            {def.label}
-          </button>
-        );
-      })}
-    </div>
+    {category === 'pattern' ? (
+      <div className="host-round-hub-pattern__shapes">
+        {PRESET_SHAPE_PATTERNS.map((shapeKey) => {
+          const def = BINGO_PATTERNS[shapeKey];
+          const active = pattern === shapeKey;
+          return (
+            <button
+              key={shapeKey}
+              type="button"
+              className={`host-round-hub-pattern__shape${active ? ' host-round-hub-pattern__shape--active' : ''}`}
+              title={def.description}
+              onClick={() => onSelectPattern(shapeKey)}
+            >
+              {def.label}
+            </button>
+          );
+        })}
+      </div>
+    ) : null}
 
     <div className="host-round-hub-pattern__preview-row">
       <HostPatternMiniPreview

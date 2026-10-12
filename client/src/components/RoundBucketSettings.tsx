@@ -2,14 +2,18 @@ import React from 'react';
 import { ListMusic, Pencil, Plus, Printer, Save, Trash2 } from 'lucide-react';
 import {
   BINGO_PATTERNS,
-  PATTERN_OPTIONS,
+  DEFAULT_PRESET_SHAPE_PATTERN,
+  HOST_PATTERN_CATEGORY_OPTIONS,
   PRESET_SHAPE_PATTERNS,
   LINE_PATTERN_MAX_LINES,
+  hostPatternCategory,
+  isPresetShapePattern,
   normalizeLinesRequired,
   deleteCustomPattern,
   getSavedCustomPatterns,
   renameCustomPattern,
   type BingoPattern,
+  type HostPatternCategory,
   type PatternCompositeSpec,
   type SavedCustomPattern,
 } from '../patternDefinitions';
@@ -106,6 +110,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
   tracksLikelyLoading = false,
 }) => {
   const pattern = round.bingoPattern ?? 'line';
+  const category = hostPatternCategory(pattern);
   const hasPlaylists = (round.playlistIds || []).length > 0;
   const freeCenter =
     round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : hostDefaultFreeSpace;
@@ -150,7 +155,17 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
     if (v === 'composite') {
       window.setTimeout(() => openCombinedEditor(), 0);
     }
-    // Custom: show saved shapes in-panel — do not force the draw editor open.
+    // New (custom): show saved shapes in-panel — do not force the draw editor open.
+  };
+
+  const selectCategory = (cat: HostPatternCategory) => {
+    if (cat === 'pattern') {
+      if (!isPresetShapePattern(pattern)) {
+        selectPattern(DEFAULT_PRESET_SHAPE_PATTERN);
+      }
+      return;
+    }
+    selectPattern(cat);
   };
 
   const applySavedCustom = (sp: SavedCustomPattern) => {
@@ -217,10 +232,10 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
           <span className="round-bucket-settings__label">Pattern</span>
           <select
             className="round-bucket-settings__select"
-            value={pattern}
-            onChange={(e) => selectPattern(e.target.value as BingoPattern)}
+            value={category}
+            onChange={(e) => selectCategory(e.target.value as HostPatternCategory)}
           >
-            {PATTERN_OPTIONS.filter((opt) => opt.value !== 'blackout').map((opt) => (
+            {HOST_PATTERN_CATEGORY_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
@@ -257,26 +272,28 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
         </label>
       </div>
 
-      <div className="round-bucket-settings__shapes" role="group" aria-label="Pattern presets">
-        {PRESET_SHAPE_PATTERNS.map((shapeKey) => {
-          const active = pattern === shapeKey;
-          return (
-            <button
-              key={shapeKey}
-              type="button"
-              className={
-                active
-                  ? 'round-bucket-settings__shape round-bucket-settings__shape--active'
-                  : 'round-bucket-settings__shape'
-              }
-              title={BINGO_PATTERNS[shapeKey].description}
-              onClick={() => selectPattern(shapeKey)}
-            >
-              {BINGO_PATTERNS[shapeKey].label}
-            </button>
-          );
-        })}
-      </div>
+      {category === 'pattern' ? (
+        <div className="round-bucket-settings__shapes" role="group" aria-label="Pattern presets">
+          {PRESET_SHAPE_PATTERNS.map((shapeKey) => {
+            const active = pattern === shapeKey;
+            return (
+              <button
+                key={shapeKey}
+                type="button"
+                className={
+                  active
+                    ? 'round-bucket-settings__shape round-bucket-settings__shape--active'
+                    : 'round-bucket-settings__shape'
+                }
+                title={BINGO_PATTERNS[shapeKey].description}
+                onClick={() => selectPattern(shapeKey)}
+              >
+                {BINGO_PATTERNS[shapeKey].label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       <div className="round-bucket-settings__preview-row">
         <HostPatternMiniPreview

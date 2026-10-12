@@ -158,6 +158,37 @@ export const PATTERN_OPTIONS = Object.values(BINGO_PATTERNS);
 /** Shape presets (not line / cover-all / custom). */
 export const PRESET_SHAPE_PATTERNS: readonly BingoPattern[] = ['four_corners', 'x', 't', 'l', 'u', 'plus'];
 
+/** Default preset when the host picks the Pattern category without one already active. */
+export const DEFAULT_PRESET_SHAPE_PATTERN: BingoPattern = 'four_corners';
+
+/**
+ * Top-level Host Setup pattern categories (UI only).
+ * Win-check ids stay: line | four_corners | x | … | custom | composite | full_card.
+ */
+export type HostPatternCategory = 'line' | 'pattern' | 'full_card' | 'custom' | 'composite';
+
+export const HOST_PATTERN_CATEGORY_OPTIONS: readonly { value: HostPatternCategory; label: string }[] = [
+  { value: 'line', label: 'Line' },
+  { value: 'pattern', label: 'Pattern' },
+  { value: 'full_card', label: 'Full Card' },
+  { value: 'custom', label: 'New' },
+  { value: 'composite', label: 'Combined' },
+] as const;
+
+export function isPresetShapePattern(pattern: BingoPattern | string): boolean {
+  return (PRESET_SHAPE_PATTERNS as readonly string[]).includes(pattern);
+}
+
+/** Map a stored bingoPattern id to the Host Setup top-level category. */
+export function hostPatternCategory(pattern: BingoPattern): HostPatternCategory {
+  if (pattern === 'line') return 'line';
+  if (isPresetShapePattern(pattern)) return 'pattern';
+  if (pattern === 'full_card' || pattern === 'blackout') return 'full_card';
+  if (pattern === 'custom') return 'custom';
+  if (pattern === 'composite') return 'composite';
+  return 'line';
+}
+
 /** Full grid win modes (identical validation on server). */
 export function isCoverAllWinPattern(pattern: BingoPattern): boolean {
   return pattern === 'full_card' || pattern === 'blackout';
