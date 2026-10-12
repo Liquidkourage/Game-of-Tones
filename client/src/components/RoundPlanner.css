@@ -800,6 +800,84 @@
   margin-top: 4px;
 }
 
+.round-bucket-settings__saved-shapes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.round-bucket-settings__saved-empty {
+  margin: 0;
+  font-size: 0.72rem;
+  color: rgba(200, 247, 228, 0.55);
+  line-height: 1.35;
+}
+
+.round-bucket-settings__shape-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.round-bucket-settings__shape-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 64px;
+  max-width: 88px;
+  padding: 6px 6px 5px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 255, 136, 0.28);
+  background: rgba(0, 0, 0, 0.35);
+  color: #c8f7e4;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.round-bucket-settings__shape-chip:hover {
+  background: rgba(0, 255, 136, 0.1);
+  border-color: rgba(0, 255, 180, 0.45);
+}
+
+.round-bucket-settings__shape-chip--active {
+  border-color: rgba(0, 255, 180, 0.65);
+  background: rgba(0, 255, 136, 0.18);
+  color: #00ff88;
+  box-shadow: 0 0 0 1px rgba(0, 255, 136, 0.25);
+}
+
+.round-bucket-settings__shape-chip-name {
+  display: block;
+  width: 100%;
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.round-bucket-settings__custom-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+}
+
+.round-bucket-settings__draw-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
 .round-bucket-settings__link-btn {
   display: inline-flex;
   align-items: center;

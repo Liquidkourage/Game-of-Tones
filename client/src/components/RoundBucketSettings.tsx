@@ -1,5 +1,5 @@
 import React from 'react';
-import { ListMusic, Pencil, Printer, Save, Trash2 } from 'lucide-react';
+import { ListMusic, Pencil, Plus, Printer, Save, Trash2 } from 'lucide-react';
 import {
   BINGO_PATTERNS,
   PATTERN_OPTIONS,
@@ -150,7 +150,17 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
     if (v === 'composite') {
       window.setTimeout(() => openCombinedEditor(), 0);
     }
-    if (v === 'custom') onNewCustomPattern?.(roundIndex);
+    // Custom: show saved shapes in-panel — do not force the draw editor open.
+  };
+
+  const applySavedCustom = (sp: SavedCustomPattern) => {
+    onUpdateBingo(roundIndex, {
+      bingoPattern: 'custom',
+      customPatternMask: [...sp.positions],
+      customMatchReverse: sp.matchReverse === true,
+      customMatchAllowRotation: sp.matchAllowRotation === true,
+      customMatchAllowMirror: sp.matchAllowMirror === true,
+    });
   };
 
   const previewLabel =
@@ -279,70 +289,65 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
         <span className="round-bucket-settings__preview-label">{previewLabel}</span>
       </div>
 
-      {(pattern === 'composite' || pattern === 'custom') && (onOpenComposite || onNewCustomPattern) ? (
+      {pattern === 'composite' && onOpenComposite ? (
         <div className="round-bucket-settings__pattern-editor">
-          {pattern === 'composite' && onOpenComposite ? (
-            <button
-              type="button"
-              className="round-bucket-settings__pattern-editor-btn round-bucket-settings__pattern-editor-btn--primary"
-              onClick={openCombinedEditor}
-            >
-              Edit combined pattern…
-            </button>
-          ) : null}
-          {pattern === 'custom' && selectedSavedCustom && onEditCustomPattern ? (
-            <button
-              type="button"
-              className="round-bucket-settings__pattern-editor-btn round-bucket-settings__pattern-editor-btn--primary"
-              onClick={handleEditSavedCustom}
-            >
-              Edit saved shape…
-            </button>
-          ) : pattern === 'custom' && onNewCustomPattern ? (
-            <button
-              type="button"
-              className="round-bucket-settings__pattern-editor-btn round-bucket-settings__pattern-editor-btn--primary"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onNewCustomPattern(roundIndex);
-              }}
-            >
-              Draw custom pattern…
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="round-bucket-settings__pattern-editor-btn round-bucket-settings__pattern-editor-btn--primary"
+            onClick={openCombinedEditor}
+          >
+            Edit combined pattern…
+          </button>
         </div>
       ) : null}
 
       {pattern === 'custom' ? (
         <div className="round-bucket-settings__custom">
-          <label className="round-bucket-settings__field">
-            <span className="round-bucket-settings__label">Saved shape</span>
-            <select
-              className="round-bucket-settings__select"
-              value={selectedSavedCustom?.id ?? ''}
-              onChange={(e) => {
-                const id = e.target.value;
-                const sp = savedCustomPatterns.find((p) => p.id === id);
-                if (sp) {
-                  onUpdateBingo(roundIndex, {
-                    bingoPattern: 'custom',
-                    customPatternMask: [...sp.positions],
-                    customMatchReverse: sp.matchReverse === true,
-                    customMatchAllowRotation: sp.matchAllowRotation === true,
-                    customMatchAllowMirror: sp.matchAllowMirror === true,
-                  });
-                }
-              }}
-            >
-              <option value="">Pick saved shape…</option>
-              {savedCustomPatterns.map((sp) => (
-                <option key={sp.id} value={sp.id}>
-                  {sp.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="round-bucket-settings__saved-shapes">
+            <span className="round-bucket-settings__label">Saved shapes</span>
+            {savedCustomPatterns.length === 0 ? (
+              <p className="round-bucket-settings__saved-empty">
+                No saved shapes yet. Draw one to get started.
+              </p>
+            ) : (
+              <div className="round-bucket-settings__shape-grid" role="list">
+                {savedCustomPatterns.map((sp) => {
+                  const active = selectedSavedCustom?.id === sp.id;
+                  return (
+                    <button
+                      key={sp.id}
+                      type="button"
+                      role="listitem"
+                      className={
+                        active
+                          ? 'round-bucket-settings__shape-chip round-bucket-settings__shape-chip--active'
+                          : 'round-bucket-settings__shape-chip'
+                      }
+                      aria-pressed={active}
+                      title={sp.name}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        applySavedCustom(sp);
+                      }}
+                    >
+                      <HostPatternMiniPreview
+                        pattern="custom"
+                        customPattern={sp.positions}
+                        customMatchReverse={sp.matchReverse === true}
+                        customMatchAllowRotation={sp.matchAllowRotation === true}
+                        customMatchAllowMirror={sp.matchAllowMirror === true}
+                        className="host-pattern-mini-preview--chip"
+                        label={sp.name}
+                      />
+                      <span className="round-bucket-settings__shape-chip-name">{sp.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {selectedSavedCustom ? (
             <div className="round-bucket-settings__library-actions">
               {onEditCustomPattern ? (
@@ -381,64 +386,69 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
               </button>
             </div>
           ) : null}
+
           {onNewCustomPattern ? (
             <button
               type="button"
-              className="round-bucket-settings__link-btn"
+              className="round-bucket-settings__pattern-editor-btn round-bucket-settings__pattern-editor-btn--primary round-bucket-settings__draw-btn"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 onNewCustomPattern(roundIndex);
               }}
             >
-              New custom
+              <Plus className="w-3.5 h-3.5" aria-hidden />
+              Draw custom pattern…
             </button>
           ) : null}
-          <label className="round-bucket-settings__field round-bucket-settings__field--check">
-            <input
-              type="checkbox"
-              className="host-control-checkbox"
-              checked={round.customMatchReverse === true}
-              onChange={(e) =>
-                onUpdateBingo(roundIndex, {
-                  bingoPattern: 'custom',
-                  customPatternMask: round.customPatternMask,
-                  customMatchReverse: e.target.checked,
-                })
-              }
-            />
-            <span className="round-bucket-settings__label">Reverse</span>
-          </label>
-          <label className="round-bucket-settings__field round-bucket-settings__field--check">
-            <input
-              type="checkbox"
-              className="host-control-checkbox"
-              checked={round.customMatchAllowRotation === true}
-              onChange={(e) =>
-                onUpdateBingo(roundIndex, {
-                  bingoPattern: 'custom',
-                  customPatternMask: round.customPatternMask,
-                  customMatchAllowRotation: e.target.checked,
-                })
-              }
-            />
-            <span className="round-bucket-settings__label">Rotations</span>
-          </label>
-          <label className="round-bucket-settings__field round-bucket-settings__field--check">
-            <input
-              type="checkbox"
-              className="host-control-checkbox"
-              checked={round.customMatchAllowMirror === true}
-              onChange={(e) =>
-                onUpdateBingo(roundIndex, {
-                  bingoPattern: 'custom',
-                  customPatternMask: round.customPatternMask,
-                  customMatchAllowMirror: e.target.checked,
-                })
-              }
-            />
-            <span className="round-bucket-settings__label">Mirrors</span>
-          </label>
+
+          <div className="round-bucket-settings__custom-rules">
+            <label className="round-bucket-settings__field round-bucket-settings__field--check">
+              <input
+                type="checkbox"
+                className="host-control-checkbox"
+                checked={round.customMatchReverse === true}
+                onChange={(e) =>
+                  onUpdateBingo(roundIndex, {
+                    bingoPattern: 'custom',
+                    customPatternMask: round.customPatternMask,
+                    customMatchReverse: e.target.checked,
+                  })
+                }
+              />
+              <span className="round-bucket-settings__label">Reverse</span>
+            </label>
+            <label className="round-bucket-settings__field round-bucket-settings__field--check">
+              <input
+                type="checkbox"
+                className="host-control-checkbox"
+                checked={round.customMatchAllowRotation === true}
+                onChange={(e) =>
+                  onUpdateBingo(roundIndex, {
+                    bingoPattern: 'custom',
+                    customPatternMask: round.customPatternMask,
+                    customMatchAllowRotation: e.target.checked,
+                  })
+                }
+              />
+              <span className="round-bucket-settings__label">Rotations</span>
+            </label>
+            <label className="round-bucket-settings__field round-bucket-settings__field--check">
+              <input
+                type="checkbox"
+                className="host-control-checkbox"
+                checked={round.customMatchAllowMirror === true}
+                onChange={(e) =>
+                  onUpdateBingo(roundIndex, {
+                    bingoPattern: 'custom',
+                    customPatternMask: round.customPatternMask,
+                    customMatchAllowMirror: e.target.checked,
+                  })
+                }
+              />
+              <span className="round-bucket-settings__label">Mirrors</span>
+            </label>
+          </div>
         </div>
       ) : null}
 

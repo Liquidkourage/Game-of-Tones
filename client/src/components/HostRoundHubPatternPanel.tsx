@@ -97,14 +97,16 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
       <p className="host-round-hub-pattern__lead">Pattern for {targetRoundLabel}</p>
     ) : null}
     <div className="host-round-hub-pattern__main">
-      {(['line', 'full_card', 'composite'] as const).map((key) => {
+      {(['line', 'full_card', 'composite', 'custom'] as const).map((key) => {
         const def = BINGO_PATTERNS[key];
         const active =
           key === 'line'
             ? pattern === 'line'
             : key === 'full_card'
               ? pattern === 'full_card' || pattern === 'blackout'
-              : pattern === 'composite';
+              : key === 'composite'
+                ? pattern === 'composite'
+                : pattern === 'custom';
         return (
           <button
             key={key}
@@ -115,6 +117,7 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
                 onSelectPattern('composite');
                 onOpenCompositeModal();
               } else {
+                // Custom: surface saved shapes in-panel — do not force the draw editor open.
                 onSelectPattern(key);
               }
             }}
@@ -184,72 +187,97 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
       Free center (counts without that song playing)
     </label>
 
-    <div className="host-round-hub-pattern__custom">
-      <select
-        value={selectedCustomPattern?.id || ''}
-        onChange={(e) => {
-          const sp = savedCustomPatterns.find((p) => p.id === e.target.value);
-          if (sp) onSelectSavedCustom(sp);
-        }}
-      >
-        <option value="">Custom saved shape…</option>
-        {savedCustomPatterns.map((sp) => (
-          <option key={sp.id} value={sp.id}>
-            {sp.name}
-          </option>
-        ))}
-      </select>
-      <button type="button" className="btn-secondary" onClick={onNewCustomPattern}>
-        <Plus className="w-4 h-4" aria-hidden />
-        New custom
-      </button>
-    </div>
+    {pattern === 'custom' ? (
+      <div className="host-round-hub-pattern__custom">
+        <div className="host-round-hub-pattern__saved-shapes">
+          <span className="host-round-hub-pattern__saved-label">Saved shapes</span>
+          {savedCustomPatterns.length === 0 ? (
+            <p className="host-round-hub-pattern__saved-empty">
+              No saved shapes yet. Draw one to get started.
+            </p>
+          ) : (
+            <div className="host-round-hub-pattern__shape-grid" role="list">
+              {savedCustomPatterns.map((sp) => {
+                const active = selectedCustomPattern?.id === sp.id;
+                return (
+                  <button
+                    key={sp.id}
+                    type="button"
+                    role="listitem"
+                    className={`host-round-hub-pattern__shape-chip${active ? ' host-round-hub-pattern__shape-chip--active' : ''}`}
+                    aria-pressed={active}
+                    title={sp.name}
+                    onClick={() => onSelectSavedCustom(sp)}
+                  >
+                    <HostPatternMiniPreview
+                      pattern="custom"
+                      customPattern={sp.positions}
+                      customMatchReverse={sp.matchReverse === true}
+                      customMatchAllowRotation={sp.matchAllowRotation === true}
+                      customMatchAllowMirror={sp.matchAllowMirror === true}
+                      className="host-pattern-mini-preview--chip"
+                      label={sp.name}
+                    />
+                    <span className="host-round-hub-pattern__shape-chip-name">{sp.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
-    {selectedCustomPattern ? (
-      <div className="host-round-hub-pattern__library-actions">
-        {onEditCustomPattern ? (
-          <button type="button" className="host-round-hub-pattern__link" onClick={() => onEditCustomPattern(selectedCustomPattern)}>
-            <Pencil className="w-3.5 h-3.5" aria-hidden />
-            Edit
-          </button>
+        {selectedCustomPattern ? (
+          <div className="host-round-hub-pattern__library-actions">
+            {onEditCustomPattern ? (
+              <button type="button" className="host-round-hub-pattern__link" onClick={() => onEditCustomPattern(selectedCustomPattern)}>
+                <Pencil className="w-3.5 h-3.5" aria-hidden />
+                Edit
+              </button>
+            ) : null}
+            <button type="button" className="host-round-hub-pattern__link" onClick={handleRename}>
+              <Pencil className="w-3.5 h-3.5" aria-hidden />
+              Rename
+            </button>
+            <button type="button" className="host-round-hub-pattern__link host-round-hub-pattern__link--danger" onClick={handleDelete}>
+              <Trash2 className="w-3.5 h-3.5" aria-hidden />
+              Delete
+            </button>
+          </div>
         ) : null}
-        <button type="button" className="host-round-hub-pattern__link" onClick={handleRename}>
-          <Pencil className="w-3.5 h-3.5" aria-hidden />
-          Rename
-        </button>
-        <button type="button" className="host-round-hub-pattern__link host-round-hub-pattern__link--danger" onClick={handleDelete}>
-          <Trash2 className="w-3.5 h-3.5" aria-hidden />
-          Delete
-        </button>
-      </div>
-    ) : null}
 
-    {pattern === 'custom' && customMask.length > 0 ? (
-      <div className="host-round-hub-pattern__custom-rules">
-        <label>
-          <input
-            type="checkbox"
-            checked={customMatchReverse}
-            onChange={(e) => onCustomMatchReverseChange(e.target.checked)}
-          />
-          Reverse
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={customMatchAllowRotation}
-            onChange={(e) => onCustomMatchRotationChange(e.target.checked)}
-          />
-          Allow rotations
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={customMatchAllowMirror}
-            onChange={(e) => onCustomMatchMirrorChange(e.target.checked)}
-          />
-          Allow mirrors
-        </label>
+        <button type="button" className="btn-secondary host-round-hub-pattern__draw-btn" onClick={onNewCustomPattern}>
+          <Plus className="w-4 h-4" aria-hidden />
+          Draw custom pattern…
+        </button>
+
+        {customMask.length > 0 ? (
+          <div className="host-round-hub-pattern__custom-rules">
+            <label>
+              <input
+                type="checkbox"
+                checked={customMatchReverse}
+                onChange={(e) => onCustomMatchReverseChange(e.target.checked)}
+              />
+              Reverse
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={customMatchAllowRotation}
+                onChange={(e) => onCustomMatchRotationChange(e.target.checked)}
+              />
+              Allow rotations
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={customMatchAllowMirror}
+                onChange={(e) => onCustomMatchMirrorChange(e.target.checked)}
+              />
+              Allow mirrors
+            </label>
+          </div>
+        ) : null}
       </div>
     ) : null}
 
