@@ -32,6 +32,7 @@ function customPatternFingerprint(row) {
     matchReverse: !!s.matchReverse,
     matchAllowRotation: !!s.matchAllowRotation,
     matchAllowMirror: !!s.matchAllowMirror,
+    matchAnywhere: !!s.matchAnywhere,
   });
 }
 
@@ -57,6 +58,7 @@ function sanitizeCustomPatternRow(raw) {
     matchReverse: raw.matchReverse === true,
     matchAllowRotation: raw.matchAllowRotation === true,
     matchAllowMirror: raw.matchAllowMirror === true,
+    matchAnywhere: raw.matchAnywhere === true,
     createdAt: typeof raw.createdAt === 'number' && Number.isFinite(raw.createdAt) ? raw.createdAt : 0,
   };
 }
@@ -498,12 +500,14 @@ function patternsFromPrepRounds(rounds) {
             matchReverse: round.customMatchReverse === true,
             matchAllowRotation: round.customMatchAllowRotation === true,
             matchAllowMirror: round.customMatchAllowMirror === true,
+            matchAnywhere: round.customMatchAnywhere === true,
           })}`,
           name: `${roundName} (custom)`.slice(0, 80),
           positions: mask,
           matchReverse: round.customMatchReverse === true,
           matchAllowRotation: round.customMatchAllowRotation === true,
           matchAllowMirror: round.customMatchAllowMirror === true,
+          matchAnywhere: round.customMatchAnywhere === true,
         },
         createdAt,
       );
@@ -533,6 +537,7 @@ function patternsFromPrepRounds(rounds) {
               positions,
               ...(c.matchAllowRotation === true ? { matchAllowRotation: true } : {}),
               ...(c.matchAllowMirror === true ? { matchAllowMirror: true } : {}),
+              ...(c.matchAnywhere === true ? { matchAnywhere: true } : {}),
             });
             // Painted sub-shapes also become Saved shape entries.
             pushCustom(
@@ -542,11 +547,13 @@ function patternsFromPrepRounds(rounds) {
                   matchReverse: false,
                   matchAllowRotation: c.matchAllowRotation === true,
                   matchAllowMirror: c.matchAllowMirror === true,
+                  matchAnywhere: c.matchAnywhere === true,
                 })}`,
                 name: `${roundName} (shape)`.slice(0, 80),
                 positions,
                 matchAllowRotation: c.matchAllowRotation === true,
                 matchAllowMirror: c.matchAllowMirror === true,
+                matchAnywhere: c.matchAnywhere === true,
               },
               createdAt,
             );

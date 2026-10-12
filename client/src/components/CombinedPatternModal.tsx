@@ -429,6 +429,7 @@ const CombinedPatternModal: React.FC<CombinedPatternModalProps> = (props) => {
                                           positions: prev.positions,
                                           ...(checked ? { matchAllowRotation: true } : {}),
                                           ...(prev.matchAllowMirror ? { matchAllowMirror: true } : {}),
+                                          ...(prev.matchAnywhere ? { matchAnywhere: true } : {}),
                                         };
                                       } else {
                                         const lrPreset =
@@ -473,6 +474,7 @@ const CombinedPatternModal: React.FC<CombinedPatternModalProps> = (props) => {
                                           positions: prev.positions,
                                           ...(prev.matchAllowRotation ? { matchAllowRotation: true } : {}),
                                           ...(checked ? { matchAllowMirror: true } : {}),
+                                          ...(prev.matchAnywhere ? { matchAnywhere: true } : {}),
                                         };
                                       } else {
                                         const lrPreset =
@@ -501,6 +503,32 @@ const CombinedPatternModal: React.FC<CombinedPatternModalProps> = (props) => {
                                     vertical flip.
                                   </span>
                                 </label>
+                                {clause.kind === 'mask' ? (
+                                  <label className="host-check-row">
+                                    <input
+                                      type="checkbox"
+                                      className="host-control-checkbox"
+                                      checked={clause.matchAnywhere === true}
+                                      onChange={(e) => {
+                                        const clauses = [...patternComposite.clauses];
+                                        const prev = clauses[idx];
+                                        if (prev.kind !== 'mask') return;
+                                        const checked = e.target.checked;
+                                        clauses[idx] = {
+                                          kind: 'mask',
+                                          positions: prev.positions,
+                                          ...(prev.matchAllowRotation ? { matchAllowRotation: true } : {}),
+                                          ...(prev.matchAllowMirror ? { matchAllowMirror: true } : {}),
+                                          ...(checked ? { matchAnywhere: true } : {}),
+                                        };
+                                        commitPatternComposite({ ...patternComposite, clauses });
+                                      }}
+                                    />
+                                    <span>
+                                      <strong>Anywhere</strong> — same painted shape can win in any position on the card.
+                                    </span>
+                                  </label>
+                                ) : null}
                               </div>
                             )}
                           </div>
@@ -575,6 +603,7 @@ const CombinedPatternModal: React.FC<CombinedPatternModalProps> = (props) => {
                                     ? {
                                         ...(prevClause.matchAllowRotation ? { matchAllowRotation: true as const } : {}),
                                         ...(prevClause.matchAllowMirror ? { matchAllowMirror: true as const } : {}),
+                                        ...(prevClause.matchAnywhere ? { matchAnywhere: true as const } : {}),
                                       }
                                     : {};
                                 clauses[i] = {

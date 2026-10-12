@@ -666,6 +666,8 @@ interface EventRound {
   customMatchAllowRotation?: boolean;
   /** Custom pattern: allow mirrored placements when matching (stored per round). */
   customMatchAllowMirror?: boolean;
+  /** Custom pattern: painted shape may win at any translated placement on the 5×5. */
+  customMatchAnywhere?: boolean;
   /** When set, overrides host-wide free-space for this round; omit to inherit the Bingo Pattern checkbox. */
   freeSpaceEnabled?: boolean;
   /** Frozen finalized subset for this round (tracks + gameplay knobs at save time). Enables offline PDF from snapshot. */
@@ -1764,6 +1766,7 @@ const HostView: React.FC = () => {
   const [customMatchReverse, setCustomMatchReverse] = useState(false);
   const [customMatchAllowRotation, setCustomMatchAllowRotation] = useState(false);
   const [customMatchAllowMirror, setCustomMatchAllowMirror] = useState(false);
+  const [customMatchAnywhere, setCustomMatchAnywhere] = useState(false);
   const [freeSpaceEnabled, setFreeSpaceEnabled] = useState<boolean>(() => {
     try {
       return localStorage.getItem('bingo-free-space') === '1';
@@ -4720,11 +4723,13 @@ const HostView: React.FC = () => {
           setCustomMatchReverse(!!data.customMatchReverse);
           setCustomMatchAllowRotation(!!data.customMatchAllowRotation);
           setCustomMatchAllowMirror(!!data.customMatchAllowMirror);
+          setCustomMatchAnywhere(!!data.customMatchAnywhere);
         }
         if (incomingPat !== 'custom') {
           setCustomMatchReverse(false);
           setCustomMatchAllowRotation(false);
           setCustomMatchAllowMirror(false);
+          setCustomMatchAnywhere(false);
         }
         addLog(`Pattern updated to ${incomingPat}`, 'info');
       }
@@ -4866,6 +4871,7 @@ const HostView: React.FC = () => {
           setCustomMatchReverse(!!payload.customMatchReverse);
           setCustomMatchAllowRotation(!!payload.customMatchAllowRotation);
           setCustomMatchAllowMirror(!!payload.customMatchAllowMirror);
+          setCustomMatchAnywhere(!!payload.customMatchAnywhere);
           if (Array.isArray(payload.customMask)) {
             const nextMask = payload.customMask.map((pos: any) => String(pos));
             setCustomMask(nextMask);
@@ -4875,6 +4881,7 @@ const HostView: React.FC = () => {
           setCustomMatchReverse(false);
           setCustomMatchAllowRotation(false);
           setCustomMatchAllowMirror(false);
+          setCustomMatchAnywhere(false);
           setCustomMask([]);
         }
       }
@@ -6579,6 +6586,7 @@ const HostView: React.FC = () => {
           customMatchReverse: !!(roundForStart?.customMatchReverse ?? customMatchReverse),
           customMatchAllowRotation: !!(roundForStart?.customMatchAllowRotation ?? customMatchAllowRotation),
           customMatchAllowMirror: !!(roundForStart?.customMatchAllowMirror ?? customMatchAllowMirror),
+          customMatchAnywhere: !!(roundForStart?.customMatchAnywhere ?? customMatchAnywhere),
           customPatternName:
             customPatternDisplayNameForEmit(maskForStart, selectedCustomPattern, savedCustomPatterns) ?? '',
         });
@@ -6629,6 +6637,7 @@ const HostView: React.FC = () => {
         customMatchReverse: !!(roundForStart?.customMatchReverse ?? customMatchReverse),
         customMatchAllowRotation: !!(roundForStart?.customMatchAllowRotation ?? customMatchAllowRotation),
         customMatchAllowMirror: !!(roundForStart?.customMatchAllowMirror ?? customMatchAllowMirror),
+        customMatchAnywhere: !!(roundForStart?.customMatchAnywhere ?? customMatchAnywhere),
         ...(patternForStart === 'custom'
           ? {
               customPatternName:
@@ -6703,6 +6712,7 @@ const HostView: React.FC = () => {
       customMatchReverse,
       customMatchAllowRotation,
       customMatchAllowMirror,
+      customMatchAnywhere,
       patternComposite: currentPattern === 'composite' ? compositeSpec : undefined,
     });
 
@@ -7153,6 +7163,7 @@ const HostView: React.FC = () => {
           | 'customMatchReverse'
           | 'customMatchAllowRotation'
           | 'customMatchAllowMirror'
+          | 'customMatchAnywhere'
         >
       >,
     ) => {
@@ -7174,6 +7185,7 @@ const HostView: React.FC = () => {
             customMatchReverse: undefined,
             customMatchAllowRotation: undefined,
             customMatchAllowMirror: undefined,
+            customMatchAnywhere: undefined,
           };
         }
         if (patch.bingoPattern === 'custom') {
@@ -7234,6 +7246,7 @@ const HostView: React.FC = () => {
         setCustomMatchReverse(false);
         setCustomMatchAllowRotation(false);
         setCustomMatchAllowMirror(false);
+        setCustomMatchAnywhere(false);
       } else if (p === 'custom' && mask.length > 0) {
         const norm = (arr: string[]) => [...arr].sort().join(',');
         const key = norm(mask);
@@ -7242,14 +7255,17 @@ const HostView: React.FC = () => {
         const rev = !!(round.customMatchReverse ?? matchedSaved?.matchReverse);
         const rot = !!(round.customMatchAllowRotation ?? matchedSaved?.matchAllowRotation);
         const mir = !!(round.customMatchAllowMirror ?? matchedSaved?.matchAllowMirror);
+        const anyw = !!(round.customMatchAnywhere ?? matchedSaved?.matchAnywhere);
         setCustomMatchReverse(rev);
         setCustomMatchAllowRotation(rot);
         setCustomMatchAllowMirror(mir);
+        setCustomMatchAnywhere(anyw);
       } else {
         setSelectedCustomPattern(null);
         setCustomMatchReverse(false);
         setCustomMatchAllowRotation(false);
         setCustomMatchAllowMirror(false);
+        setCustomMatchAnywhere(false);
       }
 
       if (round.freeSpaceEnabled !== undefined) {
@@ -7294,6 +7310,7 @@ const HostView: React.FC = () => {
             customMatchReverse: !!(round.customMatchReverse ?? matchedSaved?.matchReverse),
             customMatchAllowRotation: !!(round.customMatchAllowRotation ?? matchedSaved?.matchAllowRotation),
             customMatchAllowMirror: !!(round.customMatchAllowMirror ?? matchedSaved?.matchAllowMirror),
+            customMatchAnywhere: !!(round.customMatchAnywhere ?? matchedSaved?.matchAnywhere),
             customPatternName:
               customPatternDisplayNameForEmit(mask, matchedSaved ?? null, savedCustomPatterns) ?? '',
           });
@@ -7468,6 +7485,7 @@ const HostView: React.FC = () => {
       setCustomMatchReverse(false);
       setCustomMatchAllowRotation(false);
       setCustomMatchAllowMirror(false);
+      setCustomMatchAnywhere(false);
       patchActiveRoundBingo({
         bingoPattern: 'composite',
         patternComposite: spec,
@@ -7488,6 +7506,7 @@ const HostView: React.FC = () => {
       setCustomMatchReverse(false);
       setCustomMatchAllowRotation(false);
       setCustomMatchAllowMirror(false);
+      setCustomMatchAnywhere(false);
     }
     patchActiveRoundBingo({
       bingoPattern: next,
@@ -7499,6 +7518,7 @@ const HostView: React.FC = () => {
             customMatchReverse,
             customMatchAllowRotation,
             customMatchAllowMirror,
+            customMatchAnywhere,
           }
         : {}),
     });
@@ -7513,6 +7533,7 @@ const HostView: React.FC = () => {
               customMatchReverse,
               customMatchAllowRotation,
               customMatchAllowMirror,
+              customMatchAnywhere,
               customPatternName:
                 customPatternDisplayNameForEmit(customMask, selectedCustomPattern, savedCustomPatterns) ?? '',
             }
@@ -7530,9 +7551,11 @@ const HostView: React.FC = () => {
     const rev = customPatternObj.matchReverse === true;
     const rot = customPatternObj.matchAllowRotation === true;
     const mir = customPatternObj.matchAllowMirror === true;
+    const anyw = customPatternObj.matchAnywhere === true;
     setCustomMatchReverse(rev);
     setCustomMatchAllowRotation(rot);
     setCustomMatchAllowMirror(mir);
+    setCustomMatchAnywhere(anyw);
     patchActiveRoundBingo({
       bingoPattern: 'custom',
       customPatternMask: customPatternObj.positions,
@@ -7540,6 +7563,7 @@ const HostView: React.FC = () => {
       customMatchReverse: rev,
       customMatchAllowRotation: rot,
       customMatchAllowMirror: mir,
+      customMatchAnywhere: anyw,
     });
     if (socket && roomId) {
       socket.emit('set-pattern', {
@@ -7549,6 +7573,7 @@ const HostView: React.FC = () => {
         customMatchReverse: rev,
         customMatchAllowRotation: rot,
         customMatchAllowMirror: mir,
+        customMatchAnywhere: anyw,
         customPatternName:
           customPatternDisplayNameForEmit(customPatternObj.positions, customPatternObj, savedCustomPatterns) ?? '',
       });
@@ -7571,6 +7596,7 @@ const HostView: React.FC = () => {
       ...(pattern.matchReverse === true ? { matchReverse: true as const } : {}),
       ...(pattern.matchAllowRotation === true ? { matchAllowRotation: true as const } : {}),
       ...(pattern.matchAllowMirror === true ? { matchAllowMirror: true as const } : {}),
+      ...(pattern.matchAnywhere === true ? { matchAnywhere: true as const } : {}),
     });
     setShowCustomPatternModal(true);
   }, []);
@@ -7598,6 +7624,7 @@ const HostView: React.FC = () => {
     const rev = savedPattern.matchReverse === true;
     const rot = savedPattern.matchAllowRotation === true;
     const mir = savedPattern.matchAllowMirror === true;
+    const anyw = savedPattern.matchAnywhere === true;
     handleUpdateRoundBingoFields(idx, {
       bingoPattern: 'custom',
       customPatternMask: [...savedPattern.positions],
@@ -7605,6 +7632,7 @@ const HostView: React.FC = () => {
       customMatchReverse: rev,
       customMatchAllowRotation: rot,
       customMatchAllowMirror: mir,
+      customMatchAnywhere: anyw,
     });
     if (idx === currentRoundIndexRef.current) {
       setSelectedCustomPattern(savedPattern);
@@ -7614,6 +7642,7 @@ const HostView: React.FC = () => {
       setCustomMatchReverse(rev);
       setCustomMatchAllowRotation(rot);
       setCustomMatchAllowMirror(mir);
+      setCustomMatchAnywhere(anyw);
       if (socket && roomId) {
         socket.emit('set-pattern', {
           roomId,
@@ -7622,6 +7651,7 @@ const HostView: React.FC = () => {
           customMatchReverse: rev,
           customMatchAllowRotation: rot,
           customMatchAllowMirror: mir,
+          customMatchAnywhere: anyw,
           customPatternName:
             customPatternDisplayNameForEmit(savedPattern.positions, savedPattern, getSavedCustomPatterns()) ??
             '',
@@ -9769,6 +9799,7 @@ const HostView: React.FC = () => {
           | 'customMatchReverse'
           | 'customMatchAllowRotation'
           | 'customMatchAllowMirror'
+          | 'customMatchAnywhere'
           | 'prize'
         >
       >,
@@ -9795,6 +9826,7 @@ const HostView: React.FC = () => {
             customMatchReverse: undefined,
             customMatchAllowRotation: undefined,
             customMatchAllowMirror: undefined,
+            customMatchAnywhere: undefined,
           };
         }
         if (patch.bingoPattern === 'custom') {

@@ -75,6 +75,7 @@ export interface RoundPlannerRound {
   customMatchReverse?: boolean;
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
+  customMatchAnywhere?: boolean;
   linesRequired?: number;
   savedMixSnapshot?: {
     savedAt: number;

@@ -40,9 +40,11 @@ export interface HostRoundHubPatternPanelProps {
   customMatchReverse: boolean;
   customMatchAllowRotation: boolean;
   customMatchAllowMirror: boolean;
+  customMatchAnywhere: boolean;
   onCustomMatchRotationChange: (v: boolean) => void;
   onCustomMatchMirrorChange: (v: boolean) => void;
   onCustomMatchReverseChange: (v: boolean) => void;
+  onCustomMatchAnywhereChange: (v: boolean) => void;
   getPatternDisplayName: (p: BingoPattern) => string;
 }
 
@@ -66,9 +68,11 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
   customMatchReverse,
   customMatchAllowRotation,
   customMatchAllowMirror,
+  customMatchAnywhere,
   onCustomMatchRotationChange,
   onCustomMatchMirrorChange,
   onCustomMatchReverseChange,
+  onCustomMatchAnywhereChange,
   getPatternDisplayName,
 }) => {
   const category = hostPatternCategory(pattern);
@@ -280,6 +284,14 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
                 onChange={(e) => onCustomMatchMirrorChange(e.target.checked)}
               />
               Allow mirrors
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={customMatchAnywhere}
+                onChange={(e) => onCustomMatchAnywhereChange(e.target.checked)}
+              />
+              Anywhere
             </label>
           </div>
         ) : null}

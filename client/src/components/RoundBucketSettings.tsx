@@ -31,6 +31,7 @@ export interface RoundBucketSettingsRound {
   customMatchReverse?: boolean;
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
+  customMatchAnywhere?: boolean;
   savedMixSnapshot?: { songs: { length: number }; mixGeometry: string; savedAt: number };
   /** Optional prize shown on projector + night winners board. */
   prize?: string;
@@ -45,6 +46,7 @@ export interface RoundBucketBingoPatch {
   customMatchReverse?: boolean;
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
+  customMatchAnywhere?: boolean;
   prize?: string;
 }
 
@@ -150,7 +152,12 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
       ...(v !== 'custom' ? { customPatternMask: undefined } : {}),
       ...(v !== 'composite' ? { patternComposite: undefined } : {}),
       ...(v !== 'custom'
-        ? { customMatchReverse: undefined, customMatchAllowRotation: undefined, customMatchAllowMirror: undefined }
+        ? {
+            customMatchReverse: undefined,
+            customMatchAllowRotation: undefined,
+            customMatchAllowMirror: undefined,
+            customMatchAnywhere: undefined,
+          }
         : {}),
     });
     if (v === 'composite') {
@@ -180,6 +187,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
       customMatchReverse: sp.matchReverse === true,
       customMatchAllowRotation: sp.matchAllowRotation === true,
       customMatchAllowMirror: sp.matchAllowMirror === true,
+      customMatchAnywhere: sp.matchAnywhere === true,
     });
   };
 
@@ -452,6 +460,21 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
                 }
               />
               <span className="round-bucket-settings__label">Mirrors</span>
+            </label>
+            <label className="round-bucket-settings__field round-bucket-settings__field--check">
+              <input
+                type="checkbox"
+                className="host-control-checkbox"
+                checked={round.customMatchAnywhere === true}
+                onChange={(e) =>
+                  onUpdateBingo(roundIndex, {
+                    bingoPattern: 'custom',
+                    customPatternMask: round.customPatternMask,
+                    customMatchAnywhere: e.target.checked,
+                  })
+                }
+              />
+              <span className="round-bucket-settings__label">Anywhere</span>
             </label>
           </div>
         </div>

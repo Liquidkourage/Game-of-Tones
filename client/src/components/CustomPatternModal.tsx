@@ -10,6 +10,7 @@ export interface CustomPatternSavePayload {
   matchReverse?: boolean;
   matchAllowRotation?: boolean;
   matchAllowMirror?: boolean;
+  matchAnywhere?: boolean;
 }
 
 export type CustomPatternSaveMode = 'create' | 'update';
@@ -33,6 +34,7 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
   const [matchReverse, setMatchReverse] = useState(false);
   const [matchAllowRotation, setMatchAllowRotation] = useState(false);
   const [matchAllowMirror, setMatchAllowMirror] = useState(false);
+  const [matchAnywhere, setMatchAnywhere] = useState(false);
   const [isValid, setIsValid] = useState(false);
 
   const editingId = initialPattern?.id?.trim() || '';
@@ -46,12 +48,14 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
         setMatchReverse(initialPattern.matchReverse === true);
         setMatchAllowRotation(initialPattern.matchAllowRotation === true);
         setMatchAllowMirror(initialPattern.matchAllowMirror === true);
+        setMatchAnywhere(initialPattern.matchAnywhere === true);
       } else {
         setPatternName('');
         setSelectedPositions([]);
         setMatchReverse(false);
         setMatchAllowRotation(false);
         setMatchAllowMirror(false);
+        setMatchAnywhere(false);
       }
     }
   }, [isOpen, initialPattern]);
@@ -79,6 +83,7 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
     ...(matchReverse ? { matchReverse: true as const } : {}),
     ...(matchAllowRotation ? { matchAllowRotation: true as const } : {}),
     ...(matchAllowMirror ? { matchAllowMirror: true as const } : {}),
+    ...(matchAnywhere ? { matchAnywhere: true as const } : {}),
   });
 
   const handleSave = (mode: CustomPatternSaveMode) => {
@@ -163,6 +168,17 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
               />
               <span>
                 <strong>Allow mirrors</strong> (horizontal / vertical)
+              </span>
+            </label>
+            <label className="host-check-row">
+              <input
+                type="checkbox"
+                className="host-control-checkbox"
+                checked={matchAnywhere}
+                onChange={(e) => setMatchAnywhere(e.target.checked)}
+              />
+              <span>
+                <strong>Anywhere</strong> (same shape can win in any position on the card)
               </span>
             </label>
           </div>

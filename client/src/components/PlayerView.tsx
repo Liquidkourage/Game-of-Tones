@@ -84,6 +84,7 @@ interface GameState {
   customMatchReverse?: boolean;
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
+  customMatchAnywhere?: boolean;
   /** Audience label for custom shapes (server / host). */
   customPatternName?: string;
 }
@@ -154,6 +155,7 @@ function patternFieldsFromServerPayload(
     | 'customMatchReverse'
     | 'customMatchAllowRotation'
     | 'customMatchAllowMirror'
+    | 'customMatchAnywhere'
     | 'customPatternName'
   >,
 ): Pick<
@@ -165,6 +167,7 @@ function patternFieldsFromServerPayload(
   | 'customMatchReverse'
   | 'customMatchAllowRotation'
   | 'customMatchAllowMirror'
+  | 'customMatchAnywhere'
   | 'customPatternName'
 > {
   const raw =
@@ -203,6 +206,7 @@ function patternFieldsFromServerPayload(
       customMatchReverse: !!data?.customMatchReverse,
       customMatchAllowRotation: !!data?.customMatchAllowRotation,
       customMatchAllowMirror: !!data?.customMatchAllowMirror,
+      customMatchAnywhere: !!data?.customMatchAnywhere,
       customPatternName: nameFromServer != null ? nameFromServer : prev?.customPatternName || '',
     };
   }
@@ -215,6 +219,7 @@ function patternFieldsFromServerPayload(
     customMatchReverse: false,
     customMatchAllowRotation: false,
     customMatchAllowMirror: false,
+    customMatchAnywhere: false,
     customPatternName: undefined,
   };
 }
@@ -1069,6 +1074,7 @@ const PlayerView: React.FC = () => {
                   patternFields.customMatchReverse === !!prev.customMatchReverse &&
                   patternFields.customMatchAllowRotation === !!prev.customMatchAllowRotation &&
                   patternFields.customMatchAllowMirror === !!prev.customMatchAllowMirror &&
+                  patternFields.customMatchAnywhere === !!prev.customMatchAnywhere &&
                   patternFields.customPatternName === prev.customPatternName))
             ) {
               return prev;
@@ -2064,6 +2070,7 @@ const PlayerView: React.FC = () => {
     gameState.customMatchReverse,
     gameState.customMatchAllowRotation,
     gameState.customMatchAllowMirror,
+    gameState.customMatchAnywhere,
   ]);
 
   // Check if a visual pattern is complete (only checks if squares are marked, not if songs played)
@@ -2162,6 +2169,7 @@ const PlayerView: React.FC = () => {
         matchReverse: gameState.customMatchReverse,
         matchAllowRotation: gameState.customMatchAllowRotation,
         matchAllowMirror: gameState.customMatchAllowMirror,
+        matchAnywhere: gameState.customMatchAnywhere,
       });
     }
 
@@ -2186,6 +2194,7 @@ const PlayerView: React.FC = () => {
         matchReverse: gameState.customMatchReverse,
         matchAllowRotation: gameState.customMatchAllowRotation,
         matchAllowMirror: gameState.customMatchAllowMirror,
+        matchAnywhere: gameState.customMatchAnywhere,
       }).includes(position);
     }
     
@@ -2447,6 +2456,7 @@ const PlayerView: React.FC = () => {
               customMatchReverse={gameState.customMatchReverse}
               customMatchAllowRotation={gameState.customMatchAllowRotation}
               customMatchAllowMirror={gameState.customMatchAllowMirror}
+              customMatchAnywhere={gameState.customMatchAnywhere}
               customPatternName={gameState.customPatternName}
               patternComposite={gameState.patternComposite}
             />
@@ -2807,6 +2817,7 @@ const PlayerView: React.FC = () => {
                       customMatchReverse={gameState.customMatchReverse}
                       customMatchAllowRotation={gameState.customMatchAllowRotation}
                       customMatchAllowMirror={gameState.customMatchAllowMirror}
+              customMatchAnywhere={gameState.customMatchAnywhere}
                       customPatternName={gameState.customPatternName}
                       patternComposite={gameState.patternComposite}
                     />

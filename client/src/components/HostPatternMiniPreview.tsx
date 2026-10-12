@@ -13,6 +13,7 @@ export type HostPatternMiniPreviewProps = {
   customMatchReverse?: boolean;
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
+  customMatchAnywhere?: boolean;
   patternComposite?: PatternCompositeSpec | null;
   /** Accessible name for the preview grid. */
   label?: string;
@@ -27,6 +28,7 @@ const HostPatternMiniPreview: React.FC<HostPatternMiniPreviewProps> = ({
   customMatchReverse,
   customMatchAllowRotation,
   customMatchAllowMirror,
+  customMatchAnywhere,
   patternComposite,
   label = 'Pattern preview',
   className,
@@ -39,6 +41,7 @@ const HostPatternMiniPreview: React.FC<HostPatternMiniPreviewProps> = ({
       customMatchReverse,
       customMatchAllowRotation,
       customMatchAllowMirror,
+      customMatchAnywhere,
       patternComposite,
     });
     return new Set(positions);
@@ -49,6 +52,7 @@ const HostPatternMiniPreview: React.FC<HostPatternMiniPreviewProps> = ({
     customMatchReverse,
     customMatchAllowRotation,
     customMatchAllowMirror,
+    customMatchAnywhere,
     patternComposite,
   ]);
 

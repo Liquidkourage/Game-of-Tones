@@ -41,7 +41,18 @@ export type PatternCompositeClause =
       positions: string[];
       matchAllowRotation?: boolean;
       matchAllowMirror?: boolean;
+      /** When set, the painted shape may win at any translated placement on the 5×5. */
+      matchAnywhere?: boolean;
     };
+
+/** Shared orientation / placement flags for standalone custom patterns. */
+export type CustomMatchOpts = {
+  matchReverse?: boolean;
+  matchAllowRotation?: boolean;
+  matchAllowMirror?: boolean;
+  /** Relative shape may appear anywhere on the 5×5 (translations). */
+  matchAnywhere?: boolean;
+};
 
 export interface PatternCompositeSpec {
   op: 'and' | 'or';
@@ -81,6 +92,8 @@ export interface SavedCustomPattern {
   matchAllowRotation?: boolean;
   /** When set, horizontal and/or vertical mirror of the painted shape counts as a win. */
   matchAllowMirror?: boolean;
+  /** When set, the painted shape may win at any translated placement on the 5×5. */
+  matchAnywhere?: boolean;
   createdAt: number;
 }
 
@@ -334,13 +347,14 @@ export function unionMaskVariantsPositions(
   return Array.from(u).sort();
 }
 
-/** Highlight cells for a custom saved pattern including optional orientation allowances. */
+/** Highlight cells for a custom saved pattern including optional orientation allowances.
+ * Anywhere translations are omitted so the preview stays the painted base / orientations. */
 export function customMaskHighlightPositions(
   positions: readonly string[] | undefined,
-  opts?: { matchReverse?: boolean; matchAllowRotation?: boolean; matchAllowMirror?: boolean },
+  opts?: CustomMatchOpts,
 ): string[] {
   if (!positions) return [];
-  const variants = customPatternMaskVariants(positions, opts);
+  const variants = customPatternMaskVariants(positions, { ...opts, matchAnywhere: false });
   const union = new Set<string>();
   for (const mask of variants) {
     for (const pos of mask) union.add(pos);
@@ -379,23 +393,23 @@ function everyStrict(
   });
 }
 
-/** Visual win check for standalone custom pattern (marks only), honoring orientation flags. */
+/** Visual win check for standalone custom pattern (marks only), honoring orientation / anywhere flags. */
 export function evaluateCustomPatternVisual(
   card: { squares: CardSqLite[] } | null | undefined,
   basePositions: readonly string[] | null | undefined,
-  opts?: { matchReverse?: boolean; matchAllowRotation?: boolean; matchAllowMirror?: boolean },
+  opts?: CustomMatchOpts,
 ): boolean {
   if (!card?.squares?.length || !basePositions) return false;
   const variants = customPatternMaskVariants(basePositions, opts);
   return variants.some((m) => everyMarked(card, m));
 }
 
-/** Strict win check for standalone custom pattern (played songs / free space), honoring orientation flags. */
+/** Strict win check for standalone custom pattern (played songs / free space), honoring orientation / anywhere flags. */
 export function evaluateCustomPatternStrict(
   card: { squares: CardSqLite[] } | null | undefined,
   basePositions: readonly string[] | null | undefined,
   playedSongIds: readonly string[],
-  opts?: { matchReverse?: boolean; matchAllowRotation?: boolean; matchAllowMirror?: boolean },
+  opts?: CustomMatchOpts,
 ): boolean {
   if (!card?.squares?.length || !basePositions) return false;
   const cur = playedSongIds;
@@ -503,21 +517,89 @@ export function expandMaskOrientations(base: readonly string[], extras?: GridTra
 }
 
 /**
+ * All translations of a painted mask that fit on the 5×5.
+ * Treats the mask as a relative shape (normalized to its bounding box).
+ */
+export function translateMaskPlacements(positions: readonly string[]): string[][] {
+  const cells: [number, number][] = [];
+  for (const pos of positions) {
+    if (!POS_RE.test(pos)) continue;
+    cells.push(parseRC(pos));
+  }
+  if (!cells.length) return [];
+  let minR = 4;
+  let minC = 4;
+  let maxR = 0;
+  let maxC = 0;
+  for (const [r, c] of cells) {
+    if (r < minR) minR = r;
+    if (c < minC) minC = c;
+    if (r > maxR) maxR = r;
+    if (c > maxC) maxC = c;
+  }
+  const offsets = cells.map(([r, c]) => [r - minR, c - minC] as [number, number]);
+  const h = maxR - minR;
+  const w = maxC - minC;
+  const out: string[][] = [];
+  const seen = new Set<string>();
+  for (let dr = 0; dr + h <= 4; dr++) {
+    for (let dc = 0; dc + w <= 4; dc++) {
+      const placed = offsets.map(([r, c]) => `${r + dr}-${c + dc}`).sort();
+      const key = placed.join('|');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(placed);
+    }
+  }
+  return out;
+}
+
+/** Orientations (and optional translations) for a base mask. */
+export function expandMaskMatchVariants(
+  base: readonly string[],
+  opts?: {
+    matchAllowRotation?: boolean;
+    matchAllowMirror?: boolean;
+    matchAnywhere?: boolean;
+    matchVariants?: GridTransform[];
+  },
+): string[][] {
+  if (!base.length) return [];
+  const oriented = expandMaskOrientations(base, hostOrientationTransforms(opts || {}));
+  if (!readOrientationBool(opts?.matchAnywhere)) return oriented;
+  const maps = new Map<string, string[]>();
+  for (const mask of oriented) {
+    for (const placed of translateMaskPlacements(mask)) {
+      maps.set(placed.join('|'), placed);
+    }
+  }
+  return Array.from(maps.values());
+}
+
+/**
  * All allowed standalone custom-pattern masks. Reverse adds the complemented
  * shape alongside the original; orientation flags apply to both shapes.
+ * Anywhere expands each oriented mask to every valid translation on the 5×5.
  */
 export function customPatternMaskVariants(
   positions: readonly string[],
-  opts?: { matchReverse?: boolean; matchAllowRotation?: boolean; matchAllowMirror?: boolean },
+  opts?: CustomMatchOpts,
 ): string[][] {
   const base = resolveCustomPatternMask(positions);
   if (!base.length) return [];
   const transforms = hostOrientationTransforms(opts || {});
+  const anywhere = readOrientationBool(opts?.matchAnywhere);
   const variants = new Map<string, string[]>();
   const addShape = (shape: readonly string[]) => {
     if (!shape.length) return;
     for (const mask of expandMaskOrientations(shape, transforms)) {
-      variants.set(mask.join('|'), mask);
+      if (!anywhere) {
+        variants.set(mask.join('|'), mask);
+        continue;
+      }
+      for (const placed of translateMaskPlacements(mask)) {
+        variants.set(placed.join('|'), placed);
+      }
     }
   };
   addShape(base);
@@ -585,11 +667,13 @@ export function normalizePatternComposite(raw: unknown): PatternCompositeSpec | 
       );
       if (mask.length === 0) continue;
       const { rot, mir } = deriveOrientationFlags(cl as unknown as Record<string, unknown>);
+      const anywhere = readOrientationBool((cl as { matchAnywhere?: unknown }).matchAnywhere);
       clauses.push({
         kind: 'mask',
         positions: mask.sort(),
         ...(rot ? { matchAllowRotation: true } : {}),
         ...(mir ? { matchAllowMirror: true } : {}),
+        ...(anywhere ? { matchAnywhere: true } : {}),
       });
     }
   }
@@ -645,6 +729,7 @@ export function maskClauseFromSavedCustom(sp: SavedCustomPattern): PatternCompos
     positions: [...sp.positions].sort(),
     ...(sp.matchAllowRotation ? { matchAllowRotation: true } : {}),
     ...(sp.matchAllowMirror ? { matchAllowMirror: true } : {}),
+    ...(sp.matchAnywhere ? { matchAnywhere: true } : {}),
   };
 }
 
@@ -676,13 +761,17 @@ export function describeCompositeClauseBrief(
 /** Readable combined rule with shape-orientation hints where relevant. */
 export function describeCompositeClauseAudience(clause: PatternCompositeClause): string {
   const base = describeCompositeClauseBrief(clause);
-  if (!clauseSupportsMatchVariants(clause)) return base;
-  const tf = clauseOrientationTransforms(clause);
-  const rot = tf.some((t) => t === 'rotateCw' || t === 'rotateCcw' || t === 'rotate180');
-  const mir = tf.some((t) => t === 'flipH' || t === 'flipV');
   const bits: string[] = [];
-  if (rot) bits.push('rotations OK');
-  if (mir) bits.push('mirrors OK');
+  if (clauseSupportsMatchVariants(clause)) {
+    const tf = clauseOrientationTransforms(clause);
+    const rot = tf.some((t) => t === 'rotateCw' || t === 'rotateCcw' || t === 'rotate180');
+    const mir = tf.some((t) => t === 'flipH' || t === 'flipV');
+    if (rot) bits.push('rotations OK');
+    if (mir) bits.push('mirrors OK');
+  }
+  if (clause.kind === 'mask' && readOrientationBool(clause.matchAnywhere)) {
+    bits.push('anywhere');
+  }
   if (!bits.length) return base;
   return `${base} (${bits.join(', ')})`;
 }
@@ -762,7 +851,7 @@ function clauseVisualComplete(card: { squares: SquareLite[] }, clause: PatternCo
     const variants = expandMaskOrientations(pts, clauseOrientationTransforms(clause));
     return variants.some((m) => maskVisualComplete(card, m));
   }
-  const variants = expandMaskOrientations(clause.positions, clauseOrientationTransforms(clause));
+  const variants = expandMaskMatchVariants(clause.positions, clause);
   return variants.some((m) => maskVisualComplete(card, m));
 }
 
@@ -789,7 +878,7 @@ function clauseStrictComplete(
     const variants = expandMaskOrientations(pts, clauseOrientationTransforms(clause));
     return variants.some((m) => maskStrictComplete(card, m, isValid));
   }
-  const variants = expandMaskOrientations(clause.positions, clauseOrientationTransforms(clause));
+  const variants = expandMaskMatchVariants(clause.positions, clause);
   return variants.some((m) => maskStrictComplete(card, m, isValid));
 }
 
@@ -862,7 +951,7 @@ export function compositeLegitProgressPct(
       const variants = expandMaskOrientations(pts, clauseOrientationTransforms(clause));
       return Math.max(...variants.map((m) => ratioMask(m)));
     }
-    const variants = expandMaskOrientations(clause.positions, clauseOrientationTransforms(clause));
+    const variants = expandMaskMatchVariants(clause.positions, clause);
     return Math.max(...variants.map((m) => ratioMask(m)));
   };
 
@@ -877,6 +966,7 @@ export type HostPatternProgressOpts = {
   customMatchReverse?: boolean;
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
+  customMatchAnywhere?: boolean;
   patternComposite?: PatternCompositeSpec | null;
 };
 
@@ -963,6 +1053,7 @@ export function hostPatternLegitProgress(
       matchReverse: opts.customMatchReverse,
       matchAllowRotation: opts.customMatchAllowRotation,
       matchAllowMirror: opts.customMatchAllowMirror,
+      matchAnywhere: opts.customMatchAnywhere,
     });
     let best = { hit: 0, total: variants[0]?.length ?? 0, pct: 0 };
     for (const mask of variants) {
@@ -1024,6 +1115,7 @@ export function getPatternHintLabel(
     linesRequired?: number;
     patternComposite?: PatternCompositeSpec | null;
     customPatternName?: string;
+    customMatchAnywhere?: boolean;
   },
 ): string {
   const p = pattern === 'blackout' ? 'full_card' : pattern;
@@ -1033,8 +1125,8 @@ export function getPatternHintLabel(
   }
   if (p === 'full_card') return 'Full card';
   if (p === 'custom') {
-    const name = opts?.customPatternName?.trim();
-    return name || 'Custom shape';
+    const name = opts?.customPatternName?.trim() || 'Custom shape';
+    return opts?.customMatchAnywhere ? `${name} (anywhere)` : name;
   }
   if (p === 'composite' && opts?.patternComposite) {
     return describeCompositePatternAudienceSentence(opts.patternComposite) || 'Combined';
@@ -1054,6 +1146,7 @@ export function patternHintCellPositions(opts: {
   customMatchReverse?: boolean;
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
+  customMatchAnywhere?: boolean;
   patternComposite?: PatternCompositeSpec | null;
 }): string[] {
   const pattern = opts.pattern === 'blackout' ? 'full_card' : opts.pattern;
@@ -1084,7 +1177,8 @@ export function patternHintCellPositions(opts: {
 
   if (pattern === 'custom' && opts.customPattern?.length) {
     // Preview/hint shows the painted shape only. Do not union reverse / rotation /
-    // mirror win variants — Reverse ∪ complement lights every cell (looks like full card).
+    // mirror / anywhere win variants — Reverse ∪ complement lights every cell
+    // (looks like full card); Anywhere would union every placement.
     return resolveCustomPatternMask([...opts.customPattern], false);
   }
 
@@ -1154,6 +1248,7 @@ export function updateCustomPattern(
     ...(pattern.matchReverse === true ? { matchReverse: true as const } : {}),
     ...(pattern.matchAllowRotation === true ? { matchAllowRotation: true as const } : {}),
     ...(pattern.matchAllowMirror === true ? { matchAllowMirror: true as const } : {}),
+    ...(pattern.matchAnywhere === true ? { matchAnywhere: true as const } : {}),
   };
   existing[idx] = updated;
   try {
@@ -1210,6 +1305,7 @@ export function mergeSavedCustomPatterns(remote: SavedCustomPattern[]): SavedCus
       matchReverse: raw.matchReverse === true,
       matchAllowRotation: raw.matchAllowRotation === true,
       matchAllowMirror: raw.matchAllowMirror === true,
+      matchAnywhere: raw.matchAnywhere === true,
       createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0,
     });
   }

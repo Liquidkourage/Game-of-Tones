@@ -6007,6 +6007,7 @@ io.on('connection', (socket) => {
         customPatternReverse: false,
         customPatternAllowRotation: false,
         customPatternAllowMirror: false,
+        customPatternAnywhere: false,
         patternComposite: undefined,
         letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
         publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
@@ -7075,6 +7076,7 @@ io.on('connection', (socket) => {
         customMatchReverse,
         customMatchAllowRotation,
         customMatchAllowMirror,
+        customMatchAnywhere,
         customPatternName: incomingCustomPatternName,
       } = data;
       const room = rooms.get(roomId);
@@ -7087,6 +7089,7 @@ io.on('connection', (socket) => {
       room.customPatternReverse = false;
       room.customPatternAllowRotation = false;
       room.customPatternAllowMirror = false;
+      room.customPatternAnywhere = false;
       room.customPatternName = '';
       if (room.pattern === 'custom') {
         const mask = Array.isArray(customMask) ? customMask.filter(p => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p)) : [];
@@ -7095,6 +7098,7 @@ io.on('connection', (socket) => {
         room.customPatternReverse = readOrientationBoolSrv(customMatchReverse);
         room.customPatternAllowRotation = readOrientationBoolSrv(customMatchAllowRotation);
         room.customPatternAllowMirror = readOrientationBoolSrv(customMatchAllowMirror);
+        room.customPatternAnywhere = readOrientationBoolSrv(customMatchAnywhere);
         room.customPatternName = sanitizeCustomPatternNameSrv(incomingCustomPatternName);
       } else if (room.pattern === 'composite') {
         room.customPattern = undefined;
@@ -8540,6 +8544,7 @@ io.on('connection', (socket) => {
     room.customPatternReverse = false;
     room.customPatternAllowRotation = false;
     room.customPatternAllowMirror = false;
+    room.customPatternAnywhere = false;
     room.patternComposite = undefined;
     const preservedSnippetLength =
       typeof room.snippetLength === 'number' && Number.isFinite(room.snippetLength) && room.snippetLength > 0
@@ -8921,7 +8926,7 @@ io.on('connection', (socket) => {
 
   socket.on('start-game', async (data) => {
     routineServerLog('🎮 Start game event received:', data);
-    const { roomId, playlists, snippetLength = 30, deviceId, songList, lockedPlayOrder, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchReverse: incomingCustomReverse, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, customPatternName: incomingCustomPatternName, freeSpace, savedRoundPlayback, savedRoundId, roundName: incomingRoundName, prize: incomingRoundPrize } = data;
+    const { roomId, playlists, snippetLength = 30, deviceId, songList, lockedPlayOrder, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchReverse: incomingCustomReverse, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, customMatchAnywhere: incomingCustomAnywhere, customPatternName: incomingCustomPatternName, freeSpace, savedRoundPlayback, savedRoundId, roundName: incomingRoundName, prize: incomingRoundPrize } = data;
     const room = rooms.get(roomId);
     
     routineServerLog('🔍 Room found:', !!room);
@@ -9037,10 +9042,12 @@ io.on('connection', (socket) => {
           room.customPatternReverse = readOrientationBoolSrv(incomingCustomReverse);
           room.customPatternAllowRotation = readOrientationBoolSrv(incomingCustomRot);
           room.customPatternAllowMirror = readOrientationBoolSrv(incomingCustomMir);
+          room.customPatternAnywhere = readOrientationBoolSrv(incomingCustomAnywhere);
         } else {
           room.customPatternReverse = false;
           room.customPatternAllowRotation = false;
           room.customPatternAllowMirror = false;
+          room.customPatternAnywhere = false;
         }
 
         const savedRoundSongs =
@@ -9377,6 +9384,7 @@ io.on('connection', (socket) => {
           customPatternReverse: false,
           customPatternAllowRotation: false,
           customPatternAllowMirror: false,
+          customPatternAnywhere: false,
           patternComposite: undefined,
           letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
           publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
@@ -13508,6 +13516,7 @@ function patternExtrasForClient(room) {
       customMatchReverse: !!room.customPatternReverse,
       customMatchAllowRotation: !!room.customPatternAllowRotation,
       customMatchAllowMirror: !!room.customPatternAllowMirror,
+      customMatchAnywhere: !!room.customPatternAnywhere,
       customPatternName: room.customPatternName || '',
     };
   }
@@ -13713,13 +13722,55 @@ function resolveCustomPatternMaskSrv(room, reverse = false) {
   return out;
 }
 
+/** All translations of a painted mask that fit on the 5×5 (relative shape preserved). */
+function translateMaskPlacementsSrv(positions) {
+  const cells = [];
+  for (const pos of positions) {
+    if (!/^[0-4]-[0-4]$/.test(pos)) continue;
+    cells.push(parseRcComposite(pos));
+  }
+  if (!cells.length) return [];
+  let minR = 4;
+  let minC = 4;
+  let maxR = 0;
+  let maxC = 0;
+  for (const [r, c] of cells) {
+    if (r < minR) minR = r;
+    if (c < minC) minC = c;
+    if (r > maxR) maxR = r;
+    if (c > maxC) maxC = c;
+  }
+  const offsets = cells.map(([r, c]) => [r - minR, c - minC]);
+  const h = maxR - minR;
+  const w = maxC - minC;
+  const out = [];
+  const seen = new Set();
+  for (let dr = 0; dr + h <= 4; dr++) {
+    for (let dc = 0; dc + w <= 4; dc++) {
+      const placed = offsets.map(([r, c]) => `${r + dr}-${c + dc}`).sort();
+      const key = placed.join('|');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(placed);
+    }
+  }
+  return out;
+}
+
 function customPatternMaskVariantsSrv(room) {
   const transforms = customPatternOrientationTransformsSrv(room);
+  const anywhere = readOrientationBoolSrv(room && room.customPatternAnywhere);
   const variants = new Map();
   const addShape = (shape) => {
     if (!shape.length) return;
     for (const mask of expandCompositeShapeVariants(shape, transforms)) {
-      variants.set(mask.join('|'), mask);
+      if (!anywhere) {
+        variants.set(mask.join('|'), mask);
+        continue;
+      }
+      for (const placed of translateMaskPlacementsSrv(mask)) {
+        variants.set(placed.join('|'), placed);
+      }
     }
   };
   addShape(resolveCustomPatternMaskSrv(room));
@@ -13769,11 +13820,13 @@ function normalizePatternComposite(raw) {
       ];
       if (mask.length === 0) continue;
       const { rot, mir } = deriveCompositeOrientationFlags(c);
+      const anywhere = readOrientationBoolSrv(c.matchAnywhere);
       clauses.push({
         kind: 'mask',
         positions: mask.sort(),
         ...(rot ? { matchAllowRotation: true } : {}),
         ...(mir ? { matchAllowMirror: true } : {}),
+        ...(anywhere ? { matchAnywhere: true } : {}),
       });
     }
   }
@@ -13827,8 +13880,17 @@ function validateCompositeClauseResult(card, playedSongIds, clause, isMarkedSqua
     return { valid: false, reason: 'Invalid clause', positions: [] };
   }
 
-  function tryMaskVariants(baseSorted, transforms, okReason, failReason) {
-    const variants = expandCompositeShapeVariants(baseSorted, transforms);
+  function tryMaskVariants(baseSorted, transforms, okReason, failReason, anywhere) {
+    let variants = expandCompositeShapeVariants(baseSorted, transforms);
+    if (anywhere) {
+      const placed = new Map();
+      for (const mask of variants) {
+        for (const p of translateMaskPlacementsSrv(mask)) {
+          placed.set(p.join('|'), p);
+        }
+      }
+      variants = [...placed.values()];
+    }
     for (const mask of variants) {
       const invalid = [];
       for (const pos of mask) {
@@ -13843,7 +13905,8 @@ function validateCompositeClauseResult(card, playedSongIds, clause, isMarkedSqua
   if (clause.kind === 'mask' && Array.isArray(clause.positions)) {
     const base = [...clause.positions].sort();
     const transforms = compositeClauseTransformsFromClause(clause);
-    if (transforms.length === 0) {
+    const anywhere = readOrientationBoolSrv(clause.matchAnywhere);
+    if (transforms.length === 0 && !anywhere) {
       const invalid = [];
       for (const pos of base) {
         const sq = card.squares.find((s) => s.position === pos);
@@ -13862,7 +13925,10 @@ function validateCompositeClauseResult(card, playedSongIds, clause, isMarkedSqua
       base,
       transforms,
       'Painted shape complete',
-      'Painted shape incomplete — no chosen orientation fully marked with played songs yet',
+      anywhere
+        ? 'Painted shape incomplete — no allowed placement fully marked with played songs yet'
+        : 'Painted shape incomplete — no chosen orientation fully marked with played songs yet',
+      anywhere,
     );
   }
 
@@ -13939,6 +14005,7 @@ function validateCompositeClauseResult(card, playedSongIds, clause, isMarkedSqua
     transforms,
     `${shapeLabel} complete`,
     `${shapeLabel} incomplete — no matching orientation yet`,
+    false,
   );
 }
 
@@ -14060,12 +14127,15 @@ function validateBingoForPattern(card, room) {
         };
       }
     }
+    const anywhere = readOrientationBoolSrv(room && room.customPatternAnywhere);
     return {
       valid: false,
       reason:
-        transforms.length > 0
-          ? 'Custom pattern incomplete — no allowed orientation fully marked with played songs.'
-          : 'Custom pattern incomplete. Need more squares marked with played songs.',
+        anywhere
+          ? 'Custom pattern incomplete — no allowed placement fully marked with played songs.'
+          : transforms.length > 0
+            ? 'Custom pattern incomplete — no allowed orientation fully marked with played songs.'
+            : 'Custom pattern incomplete. Need more squares marked with played songs.',
       type: null,
       customWinningMask: null,
     };

@@ -13,6 +13,7 @@ export type PlayerPatternHintProps = {
   customMatchReverse?: boolean;
   customMatchAllowRotation?: boolean;
   customMatchAllowMirror?: boolean;
+  customMatchAnywhere?: boolean;
   customPatternName?: string;
   patternComposite?: PatternCompositeSpec | null;
 };
@@ -25,6 +26,7 @@ const PlayerPatternHint: React.FC<PlayerPatternHintProps> = ({
   customMatchReverse,
   customMatchAllowRotation,
   customMatchAllowMirror,
+  customMatchAnywhere,
   customPatternName,
   patternComposite,
 }) => {
@@ -34,8 +36,9 @@ const PlayerPatternHint: React.FC<PlayerPatternHintProps> = ({
         linesRequired,
         patternComposite,
         customPatternName,
+        customMatchAnywhere,
       }),
-    [pattern, linesRequired, patternComposite, customPatternName],
+    [pattern, linesRequired, patternComposite, customPatternName, customMatchAnywhere],
   );
 
   const lit = useMemo(() => {
@@ -46,6 +49,7 @@ const PlayerPatternHint: React.FC<PlayerPatternHintProps> = ({
       customMatchReverse,
       customMatchAllowRotation,
       customMatchAllowMirror,
+      customMatchAnywhere,
       patternComposite,
     });
     return new Set(positions);
@@ -56,6 +60,7 @@ const PlayerPatternHint: React.FC<PlayerPatternHintProps> = ({
     customMatchReverse,
     customMatchAllowRotation,
     customMatchAllowMirror,
+    customMatchAnywhere,
     patternComposite,
   ]);
 
