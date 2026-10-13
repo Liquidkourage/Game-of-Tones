@@ -29,6 +29,10 @@ Detailed rules: `.cursor/rules/spotify-connect-playback.mdc` (always applied).
 
 Working path: play via track **source playlist** `context_uri` + Early/Random `position_ms`; poll until bound; **never** URI-fallback after context; no `transfer(play=false)` / ensuring-active thrash; no mid-show wake playlists. Verify with Railway `startPlayback` confirm lines + sustained audio — not typecheck alone.
 
+### Org shelf — never auto-hit Spotify for track counts
+
+Background shelf hydrate caused the Oct 2026 app **429**. `/api/org/shared-host-assets` and org-shelf UI must fill counts from **DB/cache only**. Do not reintroduce Spotify probes for zero-count shelf rows. Guard: `npm run check:spotify-shelf`. Rule: `.cursor/rules/spotify-org-shelf-no-auto-hydrate.mdc`.
+
 ## Repo layout
 
 - **UI:** `client/src/` (React, `PlayerView`, `HostView`, etc.)

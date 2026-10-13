@@ -1,0 +1,25 @@
+---
+description: Never auto-hit Spotify to fill org-shelf playlist track counts (429 root cause)
+alwaysApply: true
+---
+
+# Org shelf — no Spotify auto-hydrate (hard ban)
+
+**Oct 2026 incident:** Background enrichment of org shared playlist refs (zero-count shelf rows) called Spotify Web API in bulk (`enrichPlaylistRefsWithSpotifyLookups` + HostView zero-count batch hydrate). That burned app quota → **429** / multi-hour `Retry-After` on the Spotify Developer app — mid-show risk.
+
+## Forbidden
+
+- Reintroducing `enrichPlaylistRefsWithSpotifyLookups` or any equivalent.
+- Calling `getPlaylistMetadataBrief` / `getPlaylistTracks` / `fetchHostPlaylistTracksForApi` / `spotifyForRequest` from **`GET`/`PUT` `/api/org/shared-host-assets`** (or helpers only used for shelf list enrichment).
+- Host UI that, on shelf load / org assets hydrate, **batch-fetches Spotify** for every `tracks: 0` org-shared playlist.
+- “Helpful” background jobs that walk the org shelf and probe Spotify for missing counts.
+
+## Allowed (DB / host action only)
+
+- Fill shelf counts from **`host_spotify_playlist_tracks_cache`** / org prep snapshots (`enrichPlaylistRefsWithOrgTrackCacheCounts`, admin any-host cache).
+- Host **explicitly** opens/assigns a playlist or Refresh library / finalize — those paths may call Spotify for **selected** playlists.
+- Showing `0` on the shelf when cache has no rows is correct; do not “fix” it via Spotify at list time.
+
+## Guardrail
+
+Run `npm run check:spotify-shelf` before claiming shelf/org-share work is done. Do not delete or weaken that check to land a feature.

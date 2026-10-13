@@ -11401,7 +11401,11 @@ const HostView: React.FC = () => {
     void pushOrgSharedHostAssets({ mode: 'merge', playlistRefs: refs, includePatterns: false });
   }, [eventRounds, prepCloudHydrated, orgSharedAssetsReady, hostAccount?.id]);
 
-  /** Inject org playlist refs into the visible library without waiting for another Spotify list fetch. */
+  /**
+   * Inject org playlist refs into the visible library without waiting for another Spotify list fetch.
+   * HARD BAN: do not batch-fetch Spotify here for tracks:0 shelf rows (Oct 2026 429).
+   * Counts stay DB/snapshot; live Spotify only when the host selects/refreshes a playlist.
+   */
   useEffect(() => {
     if (orgSharedPlaylistRefs.length === 0) return;
     // Prefer counts from this room's saved-round snapshots when shelf still says 0.

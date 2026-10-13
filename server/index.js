@@ -15994,6 +15994,10 @@ app.delete('/api/host/rooms/:roomId/prep', async (req, res) => {
 /**
  * Org team library: custom patterns, combined recipes, and Spotify playlist refs
  * shared by every host in the caller's organization.
+ *
+ * HARD BAN (Oct 2026 429): this route and its helpers must stay Spotify-free.
+ * Counts come only from Postgres caches / prep. Never reintroduce live
+ * getPlaylist* / fetchHostPlaylistTracksForApi here — see npm run check:spotify-shelf.
  */
 app.get('/api/org/shared-host-assets', async (req, res) => {
   try {
