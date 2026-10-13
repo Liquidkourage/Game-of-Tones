@@ -9,7 +9,7 @@ Branch work for reducing wasted `api.spotify.com` traffic without changing show 
 | Area | Change | Risk |
 |------|--------|------|
 | Meter | 30s / 5m / 60m windows; clientId + label + status; `QUOTA_EXCEEDED` vs other 429 | Low |
-| Failsafe | Soft-quarantines hottest Client ID hosts — **no token/cache wipe** | Low–medium (opt-in env) |
+| Failsafe | Suppresses **nonessential** API for hottest Client ID — **no** playback quarantine, **no** token/cache wipe | Low (opt-in env) |
 | Search replacement | Dev Mode max 10/request — keep dual page offset 0+10 | Restored |
 | Playlist tracks | Trust fresh in-memory cache ≤2m without snapshot GET (`TEMPO_PLAYLIST_TRACKS_TRUST_CACHE_MS`) | Low |
 | `/v1/me` | 30m cache on `getCurrentUserProfileBrief` | Low |

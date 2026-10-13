@@ -441,6 +441,12 @@ class SpotifyService {
     this._playbackNullDueToRateLimit = false;
     /** When > Date.now(), skip Spotify Web API calls (429 with Retry-After, often 24h for restricted apps). */
     this._spotifyQuarantineUntil = 0;
+    /**
+     * Proactive TEMPO meter protection: suppress NON_ESSENTIAL_WEB_API_CALLERS only.
+     * Does NOT set _spotifyQuarantineUntil — live playback/transport stays allowed.
+     */
+    this._nonEssentialSuppressedUntil = 0;
+    this._nonEssentialSuppressionSource = null;
     this._lastGlobal429LogAt = 0;
     /** Last 429: which API path / label, Spotify Retry-After (seconds), effective cooldown (seconds, capped), uncapped. */
     this._quarantineSource = null;
@@ -520,9 +526,19 @@ class SpotifyService {
     this._nonEssentialBlockedChecker = typeof fn === 'function' ? fn : null;
   }
 
-  /** Quarantine or live-show lock — non-essential library/playlist traffic must not hit the wire. */
+  /** True while TEMPO traffic-burst protection is suppressing library/background Web API only. */
+  isNonEssentialSuppressed() {
+    return Date.now() < (this._nonEssentialSuppressedUntil || 0);
+  }
+
+  getNonEssentialSuppressionRemainingSec() {
+    return Math.max(0, Math.ceil(((this._nonEssentialSuppressedUntil || 0) - Date.now()) / 1000));
+  }
+
+  /** Quarantine, traffic-burst suppression, or live-show lock — non-essential must not hit the wire. */
   isNonEssentialTrafficBlocked() {
     if (this.isQuarantined()) return true;
+    if (this.isNonEssentialSuppressed()) return true;
     try {
       return typeof this._nonEssentialBlockedChecker === 'function' && !!this._nonEssentialBlockedChecker();
     } catch {
@@ -539,20 +555,29 @@ class SpotifyService {
       typeof this._nonEssentialBlockedChecker === 'function' && !!this._nonEssentialBlockedChecker();
     const reason = this.isQuarantined()
       ? 'spotify_quarantine'
-      : live
-        ? 'live_show_api_locked'
-        : 'non_essential_blocked';
+      : this.isNonEssentialSuppressed()
+        ? 'traffic_burst_nonessential_suppressed'
+        : live
+          ? 'live_show_api_locked'
+          : 'non_essential_blocked';
     const err = new Error(
       reason === 'live_show_api_locked'
         ? `Spotify non-essential API blocked during live show (${caller})`
+          : reason === 'traffic_burst_nonessential_suppressed'
+            ? `Spotify non-essential API deferred (TEMPO traffic protection) (${caller})`
         : `Spotify non-essential API blocked (${caller}): ${reason}`,
     );
     err.statusCode = reason === 'spotify_quarantine' ? 429 : 503;
     err.code = reason;
-    err.headers =
-      reason === 'spotify_quarantine'
-        ? { 'retry-after': String(Math.max(1, this.getQuarantineRemainingSec())) }
-        : {};
+    if (reason === 'spotify_quarantine') {
+      err.headers = { 'retry-after': String(Math.max(1, this.getQuarantineRemainingSec())) };
+    } else if (reason === 'traffic_burst_nonessential_suppressed') {
+      err.headers = {
+        'retry-after': String(Math.max(1, this.getNonEssentialSuppressionRemainingSec())),
+      };
+    } else {
+      err.headers = {};
+    }
     return err;
   }
 
@@ -749,9 +774,16 @@ class SpotifyService {
     this._quarantineCapped = false;
   }
 
+  clearNonEssentialSuppression() {
+    this._nonEssentialSuppressedUntil = 0;
+    this._nonEssentialSuppressionSource = null;
+  }
+
   /**
-   * Soft quarantine from TEMPO traffic failsafe — does NOT clear tokens or DB caches.
-   * Blocks non-essential Web API (and playback until cooldown) via existing isQuarantined().
+   * PROACTIVE TEMPO traffic-burst protection — NOT a Spotify HTTP 429 quarantine.
+   * Suppresses NON_ESSENTIAL_WEB_API_CALLERS only (library, catalog-style prep, search, etc.).
+   * Does NOT set isQuarantined(), does NOT lock live playback, does NOT clear tokens/caches.
+   * Essential transport (startPlayback, pause, seek, transfer, devices, player state) remains allowed.
    * @param {number} durationMs
    * @param {string} [source]
    */
@@ -762,41 +794,24 @@ class SpotifyService {
       SPOTIFY_QUARANTINE_MAX_MS,
       Math.max(15_000, Number.isFinite(raw) && raw > 0 ? raw : 120_000)
     );
-    const effectiveSec = Math.max(1, Math.round(waitMs / 1000));
-    this._quarantineSource = String(source);
-    this._quarantineSpotifyRetryAfterSec = effectiveSec;
-    this._quarantineEffectiveCooldownSec = effectiveSec;
-    this._quarantineCapped = waitMs >= SPOTIFY_QUARANTINE_MAX_MS;
-    this._spotifyQuarantineUntil = Math.max(this._spotifyQuarantineUntil || 0, now + waitMs);
-    this._playbackStateBackoffUntil = Math.max(this._playbackStateBackoffUntil || 0, now + waitMs);
-    this._pacingBoostUntil = Math.max(this._pacingBoostUntil || 0, now + SPOTIFY_POST_429_PACING_BOOST_MS);
-    this._last429Incident = {
-      occurredAtIso: new Date().toISOString(),
-      sourceLabel: String(source),
-      routeHint: 'TEMPO traffic failsafe (no Spotify 429 body)',
-      httpMethod: null,
-      httpPath: null,
-      retryAfterSecFromHeader: effectiveSec,
-      effectiveCooldownSec: effectiveSec,
-      quarantineCappedToEnvMax: this._quarantineCapped,
-      spotifyErrorMessage: 'TEMPO failsafe burst protection',
-      spotifyErrorReason: 'TEMPO_TRAFFIC_BURST',
-      quotaExceeded: false,
-      spotifyErrorStatus: null,
-      responseHeadersDiagnostic: {},
-      clientIdPrefix: this._pipelineClientIdPrefix,
-      credentialMode: this._pipelineCredentialMode,
-      humanReadableSource: 'Tempo API traffic failsafe (sessions preserved)',
-      why:
-        'Outgoing api.spotify.com volume crossed TEMPO_SPOTIFY_FAILSAFE_30S_MAX. Soft quarantine applied; tokens and playlist caches are kept.',
-    };
-    if (typeof this._onQuarantineApplied === 'function') {
-      try {
-        this._onQuarantineApplied(this);
-      } catch (e) {
-        console.warn('⚠️ onQuarantineApplied hook failed:', e?.message || e);
-      }
+    this._nonEssentialSuppressionSource = String(source);
+    this._nonEssentialSuppressedUntil = Math.max(this._nonEssentialSuppressedUntil || 0, now + waitMs);
+    // Mild pacing boost only — do not raise full 429 quarantine or fire _onQuarantineApplied.
+    this._pacingBoostUntil = Math.max(this._pacingBoostUntil || 0, now + Math.min(waitMs, SPOTIFY_POST_429_PACING_BOOST_MS));
+  }
+
+  /** Diagnostics for proactive nonessential suppression (distinct from getWebApiQuarantineInfo). */
+  getNonEssentialSuppressionInfo() {
+    if (!this.isNonEssentialSuppressed()) {
+      return { active: false, source: this._nonEssentialSuppressionSource || null };
     }
+    return {
+      active: true,
+      remainingSec: this.getNonEssentialSuppressionRemainingSec(),
+      source: this._nonEssentialSuppressionSource || 'tempo_failsafe_burst',
+      blocksPlayback: false,
+      blocksNonEssential: true,
+    };
   }
 
   _makeQuarantineError(caller) {

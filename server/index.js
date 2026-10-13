@@ -2924,10 +2924,11 @@ let spotifyTokens = multiTenantSpotify.getTokens('DEFAULT');
 
 const spotifyWebApiMeter = require('./spotifyWebApiMeter');
 /**
- * Failsafe (opt-in TEMPO_SPOTIFY_FAILSAFE): NON-DESTRUCTIVE.
- * Soft-quarantines SpotifyService instances for hosts on the hottest developer Client ID
- * prefix (sessions, tokens, and playlist caches are preserved). Non-essential Web API is
- * suppressed via existing isQuarantined() / live-show locks until cooldown ends.
+ * Failsafe (opt-in TEMPO_SPOTIFY_FAILSAFE): NON-DESTRUCTIVE + PLAYBACK-SAFE.
+ * For hosts on the hottest developer Client ID prefix, suppress NONESSENTIAL Spotify Web API
+ * only (library / prep / search). Does NOT apply real 429 quarantine, does NOT lock live rooms,
+ * does NOT clear tokens or playlist caches. Essential playback stays allowed until Spotify
+ * itself returns a 429 (applyRateLimitQuarantine).
  * Duration: TEMPO_SPOTIFY_FAILSAFE_QUARANTINE_MS (default 120s, capped by SPOTIFY_QUARANTINE_MAX_MS).
  */
 spotifyWebApiMeter.setFailsafeHandler(async (info) => {
@@ -2955,38 +2956,40 @@ spotifyWebApiMeter.setFailsafeHandler(async (info) => {
 
   console.error(
     `🛡️ TEMPO_SPOTIFY_FAILSAFE: ~${info.count30s} Spotify Web API calls in the last 30s (threshold ${info.max}). ` +
-      `Soft-quarantining ${affected.length}/${orgIds.length} host org(s) for ~${Math.round(quarantineMs / 1000)}s` +
+      `Suppressing nonessential Spotify API for ${affected.length}/${orgIds.length} host org(s) for ~${Math.round(quarantineMs / 1000)}s` +
       (targetPrefix ? ` (developer client_id prefix ${targetPrefix})` : '') +
-      ' — tokens and playlist caches kept.'
+      ' — live playback NOT quarantined; tokens/caches kept.'
   );
 
-  let quarantined = 0;
+  let suppressed = 0;
   for (const orgId of affected) {
     try {
       const svc = multiTenantSpotify.getService(orgId);
       if (svc && typeof svc.applyTrafficBurstQuarantine === 'function') {
         svc.applyTrafficBurstQuarantine(quarantineMs, 'tempo_failsafe_burst');
-        quarantined += 1;
+        suppressed += 1;
       }
-      lockAllLiveRoomsForSpotifyOrg(orgId, 'tempo_failsafe_burst');
+      // Do NOT lockAllLiveRoomsForSpotifyOrg — that is reserved for real Spotify 429 quarantine.
     } catch (e) {
-      console.error('TEMPO_SPOTIFY_FAILSAFE quarantine org', orgId, e);
+      console.error('TEMPO_SPOTIFY_FAILSAFE suppress org', orgId, e);
     }
   }
 
   try {
     io.emit('spotify-failsafe', {
       message:
-        'Tempo paused extra Spotify API traffic after a high-volume burst. Your Spotify connection and caches are intact — wait for the cooldown, then continue. Prefer Refresh only when needed.',
+        'Tempo deferred nonessential Spotify API traffic after a high-volume burst. Live playback continues; library refresh may wait until the cooldown ends.',
       count30s: info.count30s,
       max: info.max,
-      reason: 'web_api_30s_burst_quarantine',
+      reason: 'web_api_30s_burst_nonessential_suppress',
       dominantClientIdPrefix: targetPrefix,
-      quarantinedOrgCount: quarantined,
+      suppressedOrgCount: suppressed,
       quarantineMs,
       disconnected: false,
       tokensCleared: false,
       cachesCleared: false,
+      blocksPlayback: false,
+      blocksNonEssential: true,
     });
   } catch (e) {
     console.error('TEMPO_SPOTIFY_FAILSAFE socket emit', e);
