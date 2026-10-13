@@ -2924,10 +2924,11 @@ let spotifyTokens = multiTenantSpotify.getTokens('DEFAULT');
 
 const spotifyWebApiMeter = require('./spotifyWebApiMeter');
 /**
- * Failsafe (opt-in TEMPO_SPOTIFY_FAILSAFE): clear tokens only for hosts whose Spotify
- * Developer Client ID matches the hottest prefix in the 30s window. Unrelated developer
- * apps on the same server are left alone. Still deletes playlist list/track caches for
- * those affected hosts only — documented safety behavior, not silent.
+ * Failsafe (opt-in TEMPO_SPOTIFY_FAILSAFE): NON-DESTRUCTIVE.
+ * Soft-quarantines SpotifyService instances for hosts on the hottest developer Client ID
+ * prefix (sessions, tokens, and playlist caches are preserved). Non-essential Web API is
+ * suppressed via existing isQuarantined() / live-show locks until cooldown ends.
+ * Duration: TEMPO_SPOTIFY_FAILSAFE_QUARANTINE_MS (default 120s, capped by SPOTIFY_QUARANTINE_MAX_MS).
  */
 spotifyWebApiMeter.setFailsafeHandler(async (info) => {
   const orgIds = multiTenantSpotify.getOrganizationIdsWithStoredTokens();
@@ -2936,6 +2937,8 @@ spotifyWebApiMeter.setFailsafeHandler(async (info) => {
       ? String(info.dominantClientIdPrefix).trim()
       : null;
   const envPrefix = spotifyPipelineLog.clientIdPrefix(process.env.SPOTIFY_CLIENT_ID);
+  const qRaw = parseInt(process.env.TEMPO_SPOTIFY_FAILSAFE_QUARANTINE_MS || '120000', 10);
+  const quarantineMs = Number.isFinite(qRaw) && qRaw >= 15_000 ? qRaw : 120_000;
 
   const affected = [];
   for (const orgId of orgIds) {
@@ -2952,48 +2955,38 @@ spotifyWebApiMeter.setFailsafeHandler(async (info) => {
 
   console.error(
     `🛡️ TEMPO_SPOTIFY_FAILSAFE: ~${info.count30s} Spotify Web API calls in the last 30s (threshold ${info.max}). ` +
-      `Clearing tokens for ${affected.length}/${orgIds.length} host org(s)` +
-      (targetPrefix ? ` on developer client_id prefix ${targetPrefix}` : ' (no dominant prefix — scoped to env / unmatched)') +
-      '.'
+      `Soft-quarantining ${affected.length}/${orgIds.length} host org(s) for ~${Math.round(quarantineMs / 1000)}s` +
+      (targetPrefix ? ` (developer client_id prefix ${targetPrefix})` : '') +
+      ' — tokens and playlist caches kept.'
   );
 
+  let quarantined = 0;
   for (const orgId of affected) {
     try {
-      await multiTenantSpotify.clearOrgTokens(orgId);
-      if (db && orgId.startsWith('user_')) {
-        try {
-          await db.query('DELETE FROM host_spotify_playlist_list_cache WHERE organization_id = $1', [orgId]);
-          await deleteHostPlaylistTracksCacheForOrg(orgId);
-        } catch (e) {
-          console.error('TEMPO_SPOTIFY_FAILSAFE playlist list cache delete:', e?.message || e);
-        }
+      const svc = multiTenantSpotify.getService(orgId);
+      if (svc && typeof svc.applyTrafficBurstQuarantine === 'function') {
+        svc.applyTrafficBurstQuarantine(quarantineMs, 'tempo_failsafe_burst');
+        quarantined += 1;
       }
-      const u = parseUserIdFromSpotifyOrgKey(orgId);
-      if (u != null) {
-        try {
-          const f = deviceFileForUserId(u);
-          if (fs.existsSync(f)) fs.unlinkSync(f);
-        } catch (_) {}
-      }
+      lockAllLiveRoomsForSpotifyOrg(orgId, 'tempo_failsafe_burst');
     } catch (e) {
-      console.error('TEMPO_SPOTIFY_FAILSAFE clear org', orgId, e);
+      console.error('TEMPO_SPOTIFY_FAILSAFE quarantine org', orgId, e);
     }
   }
-  if (affected.includes('DEFAULT')) {
-    try {
-      if (fs.existsSync(TOKEN_FILE)) fs.unlinkSync(TOKEN_FILE);
-    } catch (_) {}
-    spotifyTokens = multiTenantSpotify.getTokens('DEFAULT');
-  }
+
   try {
     io.emit('spotify-failsafe', {
       message:
-        'Spotify was disconnected automatically: very high API traffic in the last 30 seconds. Reconnect Spotify from the host when you are ready.',
+        'Tempo paused extra Spotify API traffic after a high-volume burst. Your Spotify connection and caches are intact — wait for the cooldown, then continue. Prefer Refresh only when needed.',
       count30s: info.count30s,
       max: info.max,
-      reason: 'web_api_30s_burst',
+      reason: 'web_api_30s_burst_quarantine',
       dominantClientIdPrefix: targetPrefix,
-      clearedOrgCount: affected.length,
+      quarantinedOrgCount: quarantined,
+      quarantineMs,
+      disconnected: false,
+      tokensCleared: false,
+      cachesCleared: false,
     });
   } catch (e) {
     console.error('TEMPO_SPOTIFY_FAILSAFE socket emit', e);

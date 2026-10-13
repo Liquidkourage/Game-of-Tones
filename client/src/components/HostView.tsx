@@ -5247,21 +5247,26 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('spotify-failsafe', (data: any) => {
+      const disconnected = data?.disconnected === true || data?.tokensCleared === true;
       const msg =
         data?.message ||
-        'Spotify was disconnected due to very high API traffic. Reconnect from the host when you are ready.';
+        (disconnected
+          ? 'Spotify was disconnected due to very high API traffic. Reconnect from the host when you are ready.'
+          : 'Tempo paused extra Spotify API traffic after a high-volume burst. Your connection is still intact.');
       console.warn('Spotify failsafe (server):', data);
-      setIsSpotifyConnected(false);
-      setSpotifyError(msg);
-      addLog(`Spotify failsafe: ${msg}`, 'error');
+      if (disconnected) {
+        setIsSpotifyConnected(false);
+        setSpotifyError(msg);
+      }
+      addLog(`Spotify failsafe: ${msg}`, disconnected ? 'error' : 'info');
       const detail =
         typeof data?.count30s === 'number' && data?.max != null
-          ? `\n\n(Approx. ${data.count30s} Spotify API calls in 30s; automatic disconnect threshold is ${data.max}.)`
+          ? `\n\n(Approx. ${data.count30s} Spotify API calls in 30s; protection threshold is ${data.max}.)`
           : '';
       showHostAckNotificationSocketRef.current({
         id: 'server-spotify-failsafe',
-        title: 'Spotify disconnected (API protection)',
-        variant: 'error',
+        title: disconnected ? 'Spotify disconnected (API protection)' : 'Spotify API cooling down',
+        variant: disconnected ? 'error' : 'warning',
         message: `${msg}${detail}`,
       });
     });

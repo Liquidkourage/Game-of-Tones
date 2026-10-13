@@ -73,17 +73,20 @@ const SongReplacementModal: React.FC<SongReplacementModalProps> = ({
 
     setIsSearching(true);
     try {
-      // One search (limit=20) — previously fired two parallel offset pages for the same query.
-      const url = `${process.env.REACT_APP_API_BASE || ''}/api/spotify/search-tracks?q=${encodeURIComponent(query)}&limit=20&offset=0`;
-      const r0 = await fetch(url);
+      // Dev Mode search max is 10 per request — two pages (offset 0 + 10) yield 20 distinct results.
+      const base = `${process.env.REACT_APP_API_BASE || ''}/api/spotify/search-tracks?q=${encodeURIComponent(query)}&limit=10`;
+      const [r0, r1] = await Promise.all([fetch(`${base}&offset=0`), fetch(`${base}&offset=10`)]);
       const d0 = await r0.json();
+      const d1 = await r1.json();
       const byId = new Map<string, Song>();
-      if (d0.success && Array.isArray(d0.tracks)) {
-        for (const t of d0.tracks) {
-          if (t && t.id) byId.set(t.id, t);
+      for (const data of [d0, d1]) {
+        if (data.success && Array.isArray(data.tracks)) {
+          for (const t of data.tracks) {
+            if (t && t.id) byId.set(t.id, t);
+          }
+        } else if (!data.success) {
+          console.error('Search failed:', data.error);
         }
-      } else if (!d0.success) {
-        console.error('Search failed:', d0.error);
       }
       setSearchResults(Array.from(byId.values()).slice(0, 20));
     } catch (error) {

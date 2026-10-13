@@ -4,8 +4,8 @@
  *  - each spotify-web-api-node method call (except auth/token/redirect helpers)
  *  - _webApiGet / _webApiRequest / _transferPlaybackDirect in spotify.js
  *
- * TEMPO_SPOTIFY_FAILSAFE=1|true|on  — opt-in: disconnect hosts on the hottest developer
- *   Client ID when estimate ≥ threshold (not every tenant on the server)
+ * TEMPO_SPOTIFY_FAILSAFE=1|true|on  — opt-in: soft-quarantine hosts on the hottest developer
+ *   Client ID when estimate ≥ threshold (tokens/caches preserved; not every tenant)
  * TEMPO_SPOTIFY_FAILSAFE_30S_MAX=N  — trip when estimate in the last 30s ≥ N (default 220)
  * TEMPO_SPOTIFY_FAILSAFE_TRIP_COOLDOWN_MS — min ms between automatic trips (default 5m)
  * TEMPO_SPOTIFY_METER=0 — disable counting (failsafe never trips; GET estimate stays 0)

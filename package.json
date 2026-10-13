@@ -22,7 +22,9 @@
     "check:spotify-shelf": "node scripts/check-no-org-shelf-spotify-hydrate.js",
     "test:spotify-meter": "node server/spotifyWebApiMeter.test.js",
     "test:spotify-playlist-cache": "node server/spotifyPlaylistTracksCache.test.js",
-    "test:spotify-efficiency": "npm run test:spotify-meter && npm run test:spotify-playlist-cache && npm run check:spotify-shelf"
+    "test:spotify-search-limit": "node server/spotifySearchLimit.test.js",
+    "test:spotify-failsafe": "node server/spotifyFailsafeQuarantine.test.js",
+    "test:spotify-efficiency": "npm run test:spotify-meter && npm run test:spotify-playlist-cache && npm run test:spotify-search-limit && npm run test:spotify-failsafe && npm run check:spotify-shelf"
   },
   "keywords": [
     "music",

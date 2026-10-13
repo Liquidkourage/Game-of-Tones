@@ -107,6 +107,43 @@ function readPlaylistTracksTrustCacheMs() {
   return 2 * 60 * 1000;
 }
 
+/**
+ * Pure cache decision for getPlaylistTracks (unit-tested).
+ * Callers that pass forceRefresh=true must delete the cache entry before evaluating.
+ * @returns {'force_miss'|'trust_cache'|'snapshot_match'|'ttl_or_5xx_cache'|'fetch'}
+ */
+function resolvePlaylistTracksCacheAction({
+  forceRefresh,
+  cached,
+  now,
+  trustMs,
+  snapshotId,
+  snapshotUpstream5xx,
+  ttlMs,
+}) {
+  if (forceRefresh) return 'force_miss';
+  const hasTracks =
+    cached && Array.isArray(cached.tracks) && cached.tracks.length > 0;
+  if (
+    trustMs > 0 &&
+    hasTracks &&
+    now - cached.at < trustMs
+  ) {
+    return 'trust_cache';
+  }
+  if (snapshotId && hasTracks && cached.snapshotId === snapshotId) {
+    return 'snapshot_match';
+  }
+  if (
+    !snapshotId &&
+    hasTracks &&
+    (now - cached.at < ttlMs || snapshotUpstream5xx)
+  ) {
+    return 'ttl_or_5xx_cache';
+  }
+  return 'fetch';
+}
+
 /** Cache GET /v1/me (country / display) per SpotifyService — invalidate on setTokens. */
 const ME_PROFILE_BRIEF_TTL_MS = 30 * 60 * 1000;
 
@@ -224,8 +261,11 @@ const PLAYLIST_ITEMS_PAGE_GAP_MS = readPlaylistItemsPageGapMs();
  * @see https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide
  */
 const SPOTIFY_SEARCH_LIMIT_DEFAULT = 5;
-/** Spotify Search `limit` max is 50; Tempo previously used two pages of 10 for replacement UI. */
-const SPOTIFY_SEARCH_LIMIT_MAX = 50;
+/**
+ * Spotify Search `limit` — Development Mode apps are capped at 10 results per request.
+ * Replacement UI fetches two pages (offset 0 + 10) to surface 20 distinct tracks.
+ */
+const SPOTIFY_SEARCH_LIMIT_MAX = 10;
 
 function clampSearchLimit(n) {
   if (n == null || n === '' || Number.isNaN(Number(n))) return SPOTIFY_SEARCH_LIMIT_DEFAULT;
@@ -707,6 +747,56 @@ class SpotifyService {
     this._quarantineSpotifyRetryAfterSec = null;
     this._quarantineEffectiveCooldownSec = null;
     this._quarantineCapped = false;
+  }
+
+  /**
+   * Soft quarantine from TEMPO traffic failsafe — does NOT clear tokens or DB caches.
+   * Blocks non-essential Web API (and playback until cooldown) via existing isQuarantined().
+   * @param {number} durationMs
+   * @param {string} [source]
+   */
+  applyTrafficBurstQuarantine(durationMs, source = 'tempo_failsafe_burst') {
+    const now = Date.now();
+    const raw = Number(durationMs);
+    const waitMs = Math.min(
+      SPOTIFY_QUARANTINE_MAX_MS,
+      Math.max(15_000, Number.isFinite(raw) && raw > 0 ? raw : 120_000)
+    );
+    const effectiveSec = Math.max(1, Math.round(waitMs / 1000));
+    this._quarantineSource = String(source);
+    this._quarantineSpotifyRetryAfterSec = effectiveSec;
+    this._quarantineEffectiveCooldownSec = effectiveSec;
+    this._quarantineCapped = waitMs >= SPOTIFY_QUARANTINE_MAX_MS;
+    this._spotifyQuarantineUntil = Math.max(this._spotifyQuarantineUntil || 0, now + waitMs);
+    this._playbackStateBackoffUntil = Math.max(this._playbackStateBackoffUntil || 0, now + waitMs);
+    this._pacingBoostUntil = Math.max(this._pacingBoostUntil || 0, now + SPOTIFY_POST_429_PACING_BOOST_MS);
+    this._last429Incident = {
+      occurredAtIso: new Date().toISOString(),
+      sourceLabel: String(source),
+      routeHint: 'TEMPO traffic failsafe (no Spotify 429 body)',
+      httpMethod: null,
+      httpPath: null,
+      retryAfterSecFromHeader: effectiveSec,
+      effectiveCooldownSec: effectiveSec,
+      quarantineCappedToEnvMax: this._quarantineCapped,
+      spotifyErrorMessage: 'TEMPO failsafe burst protection',
+      spotifyErrorReason: 'TEMPO_TRAFFIC_BURST',
+      quotaExceeded: false,
+      spotifyErrorStatus: null,
+      responseHeadersDiagnostic: {},
+      clientIdPrefix: this._pipelineClientIdPrefix,
+      credentialMode: this._pipelineCredentialMode,
+      humanReadableSource: 'Tempo API traffic failsafe (sessions preserved)',
+      why:
+        'Outgoing api.spotify.com volume crossed TEMPO_SPOTIFY_FAILSAFE_30S_MAX. Soft quarantine applied; tokens and playlist caches are kept.',
+    };
+    if (typeof this._onQuarantineApplied === 'function') {
+      try {
+        this._onQuarantineApplied(this);
+      } catch (e) {
+        console.warn('⚠️ onQuarantineApplied hook failed:', e?.message || e);
+      }
+    }
   }
 
   _makeQuarantineError(caller) {
@@ -1471,7 +1561,9 @@ class SpotifyService {
       return { tracks, loadStats };
     }
     const now = Date.now();
-    if (options && options.forceRefresh === true) {
+    const forceRefresh = options && options.forceRefresh === true;
+    // Explicit Refresh / finalize forceRefresh must never hit the trust window.
+    if (forceRefresh) {
       this._playlistTracksCache.delete(cacheKey);
     }
 
@@ -1482,15 +1574,18 @@ class SpotifyService {
       sourcePlaylistName: playlistInfo?.name || 'Unknown Playlist',
     });
 
-    // Fresh in-memory cache: skip snapshot GET (saves 1 Web API call per playlist load).
     const trustMs = readPlaylistTracksTrustCacheMs();
-    if (
-      trustMs > 0 &&
-      cached &&
-      Array.isArray(cached.tracks) &&
-      cached.tracks.length > 0 &&
-      now - cached.at < trustMs
-    ) {
+    const earlyAction = resolvePlaylistTracksCacheAction({
+      forceRefresh,
+      cached,
+      now,
+      trustMs,
+      snapshotId: null,
+      snapshotUpstream5xx: false,
+      ttlMs: PLAYLIST_TRACKS_CACHE_TTL_MS,
+    });
+    // Fresh in-memory cache: skip snapshot GET (saves 1 Web API call per playlist load).
+    if (earlyAction === 'trust_cache') {
       return this._playlistTracksPayloadFromCache(cached, playlistId, playlistInfo, mapRow);
     }
 
@@ -1503,24 +1598,16 @@ class SpotifyService {
       snapshotUpstream5xx = this.isTransientUpstreamError(snapErr);
     }
 
-    if (
-      snapshotId &&
-      cached &&
-      cached.snapshotId === snapshotId &&
-      Array.isArray(cached.tracks) &&
-      cached.tracks.length > 0
-    ) {
-      return this._playlistTracksPayloadFromCache(cached, playlistId, playlistInfo, mapRow);
-    }
-
-    if (
-      !snapshotId &&
-      cached &&
-      (now - cached.at < PLAYLIST_TRACKS_CACHE_TTL_MS || snapshotUpstream5xx) &&
-      Array.isArray(cached.tracks) &&
-      cached.tracks.length > 0
-    ) {
-      // Spotify 5xx on the snapshot check alone must not force a full /items refetch when we have tracks.
+    const afterSnap = resolvePlaylistTracksCacheAction({
+      forceRefresh: false,
+      cached,
+      now,
+      trustMs: 0, // trust window already evaluated above
+      snapshotId,
+      snapshotUpstream5xx,
+      ttlMs: PLAYLIST_TRACKS_CACHE_TTL_MS,
+    });
+    if (afterSnap === 'snapshot_match' || afterSnap === 'ttl_or_5xx_cache') {
       return this._playlistTracksPayloadFromCache(cached, playlistId, playlistInfo, mapRow);
     }
 
@@ -2701,6 +2788,9 @@ Object.assign(SpotifyService, {
   SPOTIFY_SEARCH_LIMIT_MAX,
   clampSearchLimit,
   normalizeSearchOffset,
+  PLAYLIST_TRACKS_CACHE_TTL_MS,
+  readPlaylistTracksTrustCacheMs,
+  resolvePlaylistTracksCacheAction,
   NON_ESSENTIAL_WEB_API_CALLERS,
   playbackItemMatchesTrackId,
   isAudibleNearEarlyStart,
