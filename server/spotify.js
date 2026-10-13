@@ -93,6 +93,35 @@ function routineSpotifyLog(...args) {
 /** Full getPlaylistTracks() results, reused when the host loads tracks then finalizes (halves /items load). */
 const PLAYLIST_TRACKS_CACHE_TTL_MS = 25 * 60 * 1000;
 
+/**
+ * When a track-list cache entry is younger than this, skip the live snapshot_id GET and reuse cache.
+ * Explicit forceRefresh still bypasses. Override: TEMPO_PLAYLIST_TRACKS_TRUST_CACHE_MS (0 = always snapshot-check).
+ */
+function readPlaylistTracksTrustCacheMs() {
+  const raw = process.env.TEMPO_PLAYLIST_TRACKS_TRUST_CACHE_MS;
+  if (raw === '0' || raw === 'false' || raw === 'off') return 0;
+  if (raw != null && String(raw).trim() !== '') {
+    const n = parseInt(String(raw), 10);
+    if (Number.isFinite(n) && n >= 0) return Math.min(PLAYLIST_TRACKS_CACHE_TTL_MS, n);
+  }
+  return 2 * 60 * 1000;
+}
+
+/** Cache GET /v1/me (country / display) per SpotifyService — invalidate on setTokens. */
+const ME_PROFILE_BRIEF_TTL_MS = 30 * 60 * 1000;
+
+function meterCategoryForLabel(label) {
+  const s = String(label || '');
+  if (/startPlayback|transferPlayback|pausePlayback|resumePlayback|seek|getCurrentPlayback|getUserDevices|activateDevice|nextTrack|previousTrack|setVolume|shuffle|repeat/i.test(s)) {
+    return 'playback';
+  }
+  if (/getUserPlaylists|getPlaylist|search|getCurrentUserProfile|getGameOfTones|createOutput|createTemporary|addTracks|delete/i.test(s)) {
+    return 'preparation';
+  }
+  if (/KeepAlive|warm|catalog/i.test(s)) return 'background';
+  return 'other';
+}
+
 /** After any 429 quarantine, multiply pacing interval briefly so we ease back into traffic. */
 const SPOTIFY_POST_429_PACING_BOOST_MS = 3 * 60 * 1000;
 const SPOTIFY_POST_429_PACING_MULTIPLIER = 2;
@@ -195,7 +224,8 @@ const PLAYLIST_ITEMS_PAGE_GAP_MS = readPlaylistItemsPageGapMs();
  * @see https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide
  */
 const SPOTIFY_SEARCH_LIMIT_DEFAULT = 5;
-const SPOTIFY_SEARCH_LIMIT_MAX = 10;
+/** Spotify Search `limit` max is 50; Tempo previously used two pages of 10 for replacement UI. */
+const SPOTIFY_SEARCH_LIMIT_MAX = 50;
 
 function clampSearchLimit(n) {
   if (n == null || n === '' || Number.isNaN(Number(n))) return SPOTIFY_SEARCH_LIMIT_DEFAULT;
@@ -392,6 +422,10 @@ class SpotifyService {
     /** Cached GET /v1/me/player/devices — short TTL to collapse parallel host polls. */
     this._userDevicesCache = null;
     this._lastDevicesFromCache = false;
+    /** Cached GET /v1/me brief profile (country for market=). */
+    this._meProfileBriefCache = null;
+    /** Optional host user id string for meter attribution (set by multi-tenant manager). */
+    this._meterHostUserId = null;
     /**
      * Optional () => boolean from MultiTenantSpotifyManager — true when any room for this org
      * is mid-show. Blocks NON_ESSENTIAL_WEB_API_CALLERS before they can burn quota / 429.
@@ -405,6 +439,40 @@ class SpotifyService {
 
   setOnQuarantineApplied(fn) {
     this._onQuarantineApplied = typeof fn === 'function' ? fn : null;
+  }
+
+  /** Attribute Web API meter events to this Tempo host user id (non-secret). */
+  setMeterHostUserId(uid) {
+    this._meterHostUserId = uid != null && Number.isFinite(Number(uid)) ? String(uid) : null;
+  }
+
+  _recordWebApiMeter({ method, path, label, status, headers, body }) {
+    let retryAfterSec = null;
+    if (headers) {
+      const v = headers['retry-after'] ?? headers['Retry-After'];
+      const n = v != null ? Number(v) : NaN;
+      if (Number.isFinite(n) && n >= 0) retryAfterSec = n;
+    }
+    const eb = body && body.error && typeof body.error === 'object' ? body.error : null;
+    const errorMessage =
+      eb && eb.message != null
+        ? String(eb.message)
+        : body && body.error != null && typeof body.error === 'string'
+          ? String(body.error)
+          : null;
+    const errorReason = eb && eb.reason != null ? String(eb.reason) : null;
+    webApi.recordEvent({
+      clientIdPrefix: this._pipelineClientIdPrefix,
+      hostUserId: this._meterHostUserId || undefined,
+      method: method || 'GET',
+      path,
+      label,
+      category: meterCategoryForLabel(label),
+      status: status != null ? Number(status) : undefined,
+      retryAfterSec,
+      errorMessage,
+      errorReason,
+    });
   }
 
   /** Wire from server after construct: () => orgHasAnyLiveRoom(orgKey). */
@@ -498,10 +566,8 @@ class SpotifyService {
     const routeHint = inferSpotify429Route(source, meta);
     const hdrDiag = spotifyPickDiagnosticHeaders(error?.headers);
     const eb = error?.body?.error;
-    const spotifyMsg =
-      eb && (eb.message != null || eb.reason != null)
-        ? String(eb.message != null ? eb.message : eb.reason)
-        : null;
+    const spotifyMsg = eb && eb.message != null ? String(eb.message) : null;
+    const spotifyReason = eb && eb.reason != null ? String(eb.reason) : null;
     const spotifyErrStatus = eb?.status != null ? eb.status : error?.statusCode;
 
     const now = Date.now();
@@ -529,6 +595,8 @@ class SpotifyService {
       effectiveCooldownSec: effectiveSec,
       quarantineCappedToEnvMax: capped,
       spotifyErrorMessage: spotifyMsg,
+      spotifyErrorReason: spotifyReason,
+      quotaExceeded: String(spotifyReason || '').toUpperCase() === 'QUOTA_EXCEEDED',
       spotifyErrorStatus: spotifyErrStatus != null ? Number(spotifyErrStatus) : null,
       responseHeadersDiagnostic: hdrDiag,
       clientIdPrefix: this._pipelineClientIdPrefix,
@@ -551,6 +619,12 @@ class SpotifyService {
           spotifyMsg != null && spotifyMsg !== ''
             ? spotifyMsg.slice(0, 400)
             : '',
+        spotify_error_reason:
+          spotifyReason != null && spotifyReason !== ''
+            ? spotifyReason.slice(0, 80)
+            : '',
+        quota_exceeded:
+          String(spotifyReason || '').toUpperCase() === 'QUOTA_EXCEEDED' ? '1' : '0',
       });
     }
 
@@ -739,7 +813,14 @@ class SpotifyService {
           return v.bind(target);
         }
         return function proxiedSpotifyRequest(...args) {
-          webApi.record(1);
+          // SDK path: count once when invoked (status unknown until response; raw _webApi* records on complete).
+          webApi.recordEvent({
+            clientIdPrefix: self._pipelineClientIdPrefix,
+            hostUserId: self._meterHostUserId || undefined,
+            method: 'SDK',
+            label: String(prop),
+            category: meterCategoryForLabel(String(prop)),
+          });
           return self._paceAndThen(() => v.apply(target, args));
         };
       },
@@ -758,7 +839,6 @@ class SpotifyService {
     }
     await this._paceBeforeWebApiRequest();
     return new Promise((resolve, reject) => {
-      webApi.record(1);
       const req = https.request(
         {
           hostname: 'api.spotify.com',
@@ -781,6 +861,14 @@ class SpotifyService {
               body = { _raw: buf };
             }
             const sc = res.statusCode || 0;
+            this._recordWebApiMeter({
+              method: 'GET',
+              path,
+              label,
+              status: sc,
+              headers: res.headers,
+              body,
+            });
             if (pl.shouldLogWebApiResponseStatus(sc)) {
               const pathOnly = String(path).split('?')[0];
               pl.log('web_api_response', { label, path: pathOnly, status: String(sc) });
@@ -839,7 +927,6 @@ class SpotifyService {
           ? bodyObj
           : JSON.stringify(bodyObj);
     return new Promise((resolve, reject) => {
-      webApi.record(1);
       const headers = {
         Authorization: `Bearer ${this.accessToken}`,
         Accept: 'application/json',
@@ -867,6 +954,14 @@ class SpotifyService {
               body = buf ? { _raw: buf } : null;
             }
             const sc = res.statusCode || 0;
+            this._recordWebApiMeter({
+              method: String(method).toUpperCase(),
+              path,
+              label,
+              status: sc,
+              headers: res.headers,
+              body,
+            });
             if (pl.shouldLogWebApiResponseStatus(sc)) {
               const pathOnly = String(path).split('?')[0];
               pl.log('web_api_response', { label, path: pathOnly, status: String(sc) });
@@ -1044,6 +1139,7 @@ class SpotifyService {
     this.spotifyApi.setRefreshToken(refreshToken);
     // Force a refresh on next use if we don't know the expiry
     this.tokenExpirationTime = Date.now() - 1;
+    this._meProfileBriefCache = null;
   }
 
   // Refresh access token if needed
@@ -1146,17 +1242,23 @@ class SpotifyService {
    * Does not require user-read-email; id + display_name are always present for valid tokens.
    */
   async getCurrentUserProfileBrief() {
+    const cached = this._meProfileBriefCache;
+    if (cached && Date.now() - cached.at < ME_PROFILE_BRIEF_TTL_MS && cached.value) {
+      return cached.value;
+    }
     await this._ensureCanCallWebApi('getCurrentUserProfileBrief');
     const { body } = await this._webApiGet('/v1/me', 'getCurrentUserProfileBrief');
     if (!body || typeof body !== 'object') {
       return { spotifyUserId: null, displayName: null, product: null, country: null };
     }
-    return {
+    const value = {
       spotifyUserId: body.id != null ? String(body.id) : null,
       displayName: body.display_name != null ? String(body.display_name) : null,
       product: body.product != null ? String(body.product) : null,
       country: body.country != null ? String(body.country) : null,
     };
+    this._meProfileBriefCache = { at: Date.now(), value };
+    return value;
   }
 
   /**
@@ -1373,6 +1475,25 @@ class SpotifyService {
       this._playlistTracksCache.delete(cacheKey);
     }
 
+    const cached = this._playlistTracksCache.get(cacheKey);
+    const mapRow = (t) => ({
+      ...t,
+      sourcePlaylistId: playlistId,
+      sourcePlaylistName: playlistInfo?.name || 'Unknown Playlist',
+    });
+
+    // Fresh in-memory cache: skip snapshot GET (saves 1 Web API call per playlist load).
+    const trustMs = readPlaylistTracksTrustCacheMs();
+    if (
+      trustMs > 0 &&
+      cached &&
+      Array.isArray(cached.tracks) &&
+      cached.tracks.length > 0 &&
+      now - cached.at < trustMs
+    ) {
+      return this._playlistTracksPayloadFromCache(cached, playlistId, playlistInfo, mapRow);
+    }
+
     let snapshotId = null;
     let snapshotUpstream5xx = false;
     try {
@@ -1381,13 +1502,6 @@ class SpotifyService {
       /* non-fatal — omit snapshot skip optimization */
       snapshotUpstream5xx = this.isTransientUpstreamError(snapErr);
     }
-
-    const cached = this._playlistTracksCache.get(cacheKey);
-    const mapRow = (t) => ({
-      ...t,
-      sourcePlaylistId: playlistId,
-      sourcePlaylistName: playlistInfo?.name || 'Unknown Playlist',
-    });
 
     if (
       snapshotId &&
@@ -1776,7 +1890,6 @@ class SpotifyService {
     await this._paceBeforeWebApiRequest();
     return new Promise((resolve, reject) => {
       const body = JSON.stringify({ device_ids: [deviceId], play: !!play });
-      webApi.record(1);
       const req = https.request({
         hostname: 'api.spotify.com',
         path: '/v1/me/player',
@@ -1788,22 +1901,39 @@ class SpotifyService {
         }
       }, (res) => {
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          this._recordWebApiMeter({
+            method: 'PUT',
+            path: '/v1/me/player',
+            label: '_transferPlaybackDirect',
+            status: res.statusCode,
+            headers: res.headers,
+            body: null,
+          });
           routineSpotifyLog('✅ Direct transfer success');
           resolve(true);
         } else {
           let data = '';
           res.on('data', chunk => data += chunk);
           res.on('end', () => {
+            let parsed = {};
+            try {
+              parsed = data ? JSON.parse(data) : {};
+            } catch {
+              parsed = { _parseError: true };
+            }
+            this._recordWebApiMeter({
+              method: 'PUT',
+              path: '/v1/me/player',
+              label: '_transferPlaybackDirect',
+              status: res.statusCode,
+              headers: res.headers,
+              body: parsed,
+            });
             if (res.statusCode === 429) {
               const syn = new Error('Direct transfer rate limited');
               syn.statusCode = 429;
               syn.headers = res.headers || {};
-              syn.body = {};
-              try {
-                syn.body = data ? JSON.parse(data) : {};
-              } catch {
-                syn.body = { _parseError: true };
-              }
+              syn.body = parsed;
               this.applyRateLimitQuarantine(syn, '_transferPlaybackDirect', {
                 httpMethod: 'PUT',
                 httpPath: '/v1/me/player',

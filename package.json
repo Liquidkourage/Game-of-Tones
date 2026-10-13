@@ -19,7 +19,10 @@
     "test:youtube-title-parse": "node server/youtubeTrackDisplayParse.test.js",
     "spotify:ping": "node tools/spotify-minimal-ping.js",
     "encrypt-org-secret": "node tools/encrypt-spotify-org-secret.js",
-    "check:spotify-shelf": "node scripts/check-no-org-shelf-spotify-hydrate.js"
+    "check:spotify-shelf": "node scripts/check-no-org-shelf-spotify-hydrate.js",
+    "test:spotify-meter": "node server/spotifyWebApiMeter.test.js",
+    "test:spotify-playlist-cache": "node server/spotifyPlaylistTracksCache.test.js",
+    "test:spotify-efficiency": "npm run test:spotify-meter && npm run test:spotify-playlist-cache && npm run check:spotify-shelf"
   },
   "keywords": [
     "music",

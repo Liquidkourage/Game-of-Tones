@@ -1670,6 +1670,8 @@ const HostView: React.FC = () => {
   const [spotifyMyPlaylistsTotal, setSpotifyMyPlaylistsTotal] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
+  const devicesRef = useRef<Device[]>([]);
+  devicesRef.current = devices;
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const pendingRoomDeviceIdRef = useRef<string | null>(null);
   const connectionModalOpenedByUserRef = useRef(false);
@@ -3698,8 +3700,12 @@ const HostView: React.FC = () => {
           await loadPlaylists();
           await new Promise((r) => setTimeout(r, 1500));
           await loadDevices();
+          // Only force a second devices poll if the first returned empty (Connect cold-start).
           deviceRetryTimer = window.setTimeout(() => {
-            if (!ac.signal.aborted) void loadDevices({ force: true });
+            if (ac.signal.aborted) return;
+            if ((devicesRef.current?.length ?? 0) === 0) {
+              void loadDevices({ force: true });
+            }
           }, 4000);
         } else {
           setSpotifyError(
@@ -5177,8 +5183,8 @@ const HostView: React.FC = () => {
               await new Promise((r) => setTimeout(r, 1200));
               await loadDevicesSocketRef.current();
             }
-            await new Promise((r) => setTimeout(r, 800));
-            await fetchPlaybackState();
+            // No fetchPlaybackState here — lobby poll / live monitors already cover /me/player;
+            // reconnect used to always hit it even though shuffle/repeat sync was removed.
           } else {
             setIsSpotifyConnected(false);
           }

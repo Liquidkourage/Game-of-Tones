@@ -1766,6 +1766,9 @@ class MultiTenantSpotifyManager {
         });
       }
       const service = new SpotifyService(credentialOverride);
+      if (typeof service.setMeterHostUserId === 'function') {
+        service.setMeterHostUserId(uid);
+      }
       service.setNonEssentialBlockedChecker(() => orgHasAnyLiveRoom(organizationId));
       service.setOnQuarantineApplied(() => {
         lockAllLiveRoomsForSpotifyOrg(organizationId, 'spotify_429_quarantine');
@@ -2920,12 +2923,41 @@ const spotifyServiceDefault = multiTenantSpotify.getService('DEFAULT');
 let spotifyTokens = multiTenantSpotify.getTokens('DEFAULT');
 
 const spotifyWebApiMeter = require('./spotifyWebApiMeter');
+/**
+ * Failsafe (opt-in TEMPO_SPOTIFY_FAILSAFE): clear tokens only for hosts whose Spotify
+ * Developer Client ID matches the hottest prefix in the 30s window. Unrelated developer
+ * apps on the same server are left alone. Still deletes playlist list/track caches for
+ * those affected hosts only — documented safety behavior, not silent.
+ */
 spotifyWebApiMeter.setFailsafeHandler(async (info) => {
   const orgIds = multiTenantSpotify.getOrganizationIdsWithStoredTokens();
-  console.error(
-    `🛡️ TEMPO_SPOTIFY_FAILSAFE: ~${info.count30s} Spotify Web API calls in the last 30s (threshold ${info.max}). Clearing all in-memory and stored host tokens to protect the developer app.`
-  );
+  const targetPrefix =
+    info && info.dominantClientIdPrefix != null && String(info.dominantClientIdPrefix).trim()
+      ? String(info.dominantClientIdPrefix).trim()
+      : null;
+  const envPrefix = spotifyPipelineLog.clientIdPrefix(process.env.SPOTIFY_CLIENT_ID);
+
+  const affected = [];
   for (const orgId of orgIds) {
+    const uid = parseUserIdFromSpotifyOrgKey(orgId);
+    let prefix = envPrefix;
+    if (uid != null) {
+      const o = organizationsStore.getCredentialOptionsForUser(uid);
+      if (o && o.clientId) prefix = spotifyPipelineLog.clientIdPrefix(o.clientId);
+    }
+    if (!targetPrefix || prefix === targetPrefix || (!prefix && !targetPrefix)) {
+      affected.push(orgId);
+    }
+  }
+
+  console.error(
+    `🛡️ TEMPO_SPOTIFY_FAILSAFE: ~${info.count30s} Spotify Web API calls in the last 30s (threshold ${info.max}). ` +
+      `Clearing tokens for ${affected.length}/${orgIds.length} host org(s)` +
+      (targetPrefix ? ` on developer client_id prefix ${targetPrefix}` : ' (no dominant prefix — scoped to env / unmatched)') +
+      '.'
+  );
+
+  for (const orgId of affected) {
     try {
       await multiTenantSpotify.clearOrgTokens(orgId);
       if (db && orgId.startsWith('user_')) {
@@ -2947,10 +2979,12 @@ spotifyWebApiMeter.setFailsafeHandler(async (info) => {
       console.error('TEMPO_SPOTIFY_FAILSAFE clear org', orgId, e);
     }
   }
-  try {
-    if (fs.existsSync(TOKEN_FILE)) fs.unlinkSync(TOKEN_FILE);
-  } catch (_) {}
-  spotifyTokens = multiTenantSpotify.getTokens('DEFAULT');
+  if (affected.includes('DEFAULT')) {
+    try {
+      if (fs.existsSync(TOKEN_FILE)) fs.unlinkSync(TOKEN_FILE);
+    } catch (_) {}
+    spotifyTokens = multiTenantSpotify.getTokens('DEFAULT');
+  }
   try {
     io.emit('spotify-failsafe', {
       message:
@@ -2958,6 +2992,8 @@ spotifyWebApiMeter.setFailsafeHandler(async (info) => {
       count30s: info.count30s,
       max: info.max,
       reason: 'web_api_30s_burst',
+      dominantClientIdPrefix: targetPrefix,
+      clearedOrgCount: affected.length,
     });
   } catch (e) {
     console.error('TEMPO_SPOTIFY_FAILSAFE socket emit', e);
@@ -16582,17 +16618,30 @@ app.get('/api/spotify/link-state', async (req, res) => {
   }
 });
 
-/** Rolling estimate of api.spotify.com calls (30s) + current failsafe threshold (no extra Spotify request). */
+/** Rolling estimate of api.spotify.com calls + failsafe threshold (no extra Spotify request). */
 app.get('/api/spotify/web-api-meter', (req, res) => {
   const uid = hostAuth.getHostUserIdFromRequest(req);
   if (uid == null) {
     return res.status(401).json({ error: 'login_required' });
   }
+  const diag =
+    typeof spotifyWebApiMeter.getDiagnostics === 'function'
+      ? spotifyWebApiMeter.getDiagnostics()
+      : null;
   res.json({
     windowMs: 30_000,
     estimate: spotifyWebApiMeter.getEstimateLast30s(),
+    estimate5m:
+      typeof spotifyWebApiMeter.getEstimateLast5m === 'function'
+        ? spotifyWebApiMeter.getEstimateLast5m()
+        : undefined,
+    estimate60m:
+      typeof spotifyWebApiMeter.getEstimateLast60m === 'function'
+        ? spotifyWebApiMeter.getEstimateLast60m()
+        : undefined,
     threshold: spotifyWebApiMeter.getThreshold(),
     failsafeEnabled: spotifyWebApiMeter.isFailsafeEnabled(),
+    diagnostics: diag,
   });
 });
 
@@ -17776,7 +17825,8 @@ app.post('/api/spotify/transfer', async (req, res) => {
     await spotifyForRequest(req).ensureValidToken();
 
     const spTransfer = spotifyForRequest(req);
-    spTransfer.invalidateUserDevicesCache();
+    // One devices list for presence check — host UI force-refreshes after Activate; skip
+    // redundant profile + post-transfer devices + player-state (saved ~3–4 Web API calls).
     const devices = await spTransfer.getUserDevices({ forceRefresh: true });
     const found = devices.find((d) => d.id === deviceId);
     if (!found) {
@@ -17791,16 +17841,12 @@ app.post('/api/spotify/transfer', async (req, res) => {
     spTransfer.invalidateUserDevicesCache();
     routineServerLog(`✅ Transferred playback to ${deviceId}`);
 
-    let profile = null;
-    try { profile = await spTransfer.getCurrentUserProfile(); } catch (_) {}
-    const devicesAfter = await spTransfer.getUserDevices({ forceRefresh: true });
-    const currentPlayback = await spTransfer.getCurrentPlaybackState();
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       deviceId,
-      profile,
-      devices: devicesAfter,
-      currentPlayback
+      profile: null,
+      devices,
+      currentPlayback: null,
     });
   } catch (error) {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
@@ -19301,10 +19347,20 @@ app.post('/api/spotify/resume', async (req, res) => {
   }
 });
 
-// Keep device active with periodic activation
+/**
+ * Legacy DEFAULT-org background device activation. Off by default — burned quota without
+ * helping multi-tenant hosts. Set TEMPO_SPOTIFY_DEVICE_KEEPALIVE=1 to restore.
+ */
 function startDeviceKeepAlive() {
+  const v = String(process.env.TEMPO_SPOTIFY_DEVICE_KEEPALIVE || '').trim().toLowerCase();
+  if (!(v === '1' || v === 'true' || v === 'on' || v === 'yes')) {
+    routineServerLog(
+      '🔋 Device keep-alive disabled (set TEMPO_SPOTIFY_DEVICE_KEEPALIVE=1 to enable legacy DEFAULT activation every 10m)'
+    );
+    return;
+  }
   routineServerLog('🔋 Starting device keep-alive (every 10 minutes)...');
-  
+
   setInterval(async () => {
     try {
       if (spotifyTokens && spotifyTokens.accessToken) {
@@ -19312,11 +19368,10 @@ function startDeviceKeepAlive() {
           return;
         }
         await spotifyServiceDefault.ensureValidToken();
-        
-        // Only activate device if no active games are playing (to avoid interrupting songs)
+
         const hasActiveGames = Array.from(rooms.values()).some((room) => roomIsLiveRound(room));
         if (!hasActiveGames) {
-        await activatePreferredDevice();
+          await activatePreferredDevice();
         } else {
           routineServerLog('🎵 Skipping device activation - games are actively playing');
         }
@@ -19324,7 +19379,7 @@ function startDeviceKeepAlive() {
     } catch (error) {
       routineServerLog('⚠️ Device keep-alive failed (this is normal if no active session)');
     }
-  }, 10 * 60 * 1000); // Every 10 minutes (5 was often enough activation; halves token/device churn)
+  }, 10 * 60 * 1000);
 }
 
 // Start the server only after DB + tenant/catalog Spotify credential maps are primed (avoids accepting HTTP
