@@ -40,9 +40,18 @@ function getCredentialOptionsForUser(uid) {
 async function primeTenantSpotifyCredentials(db, multiTenantSpotify, uid) {
   if (uid == null || !db) return;
   const creds = await getCredentialsForUserId(db, uid);
-  const fp = creds ? `${creds.clientId}:${creds.clientSecret.length}` : 'env';
+  // Fingerprint must include the secret itself (not only length). Spotify client secrets are
+  // usually fixed-length; length-only fingerprints kept a rotated secret stuck in memory
+  // until process restart — OAuth then failed with "Invalid client secret" while fresh
+  // env/DB probes succeeded.
+  const fp = creds ? `${creds.clientId}:${creds.clientSecret}` : 'env';
   const prev = credentialOptionsByUserId.get(uid);
-  const prevFp = prev === null ? 'env' : prev && typeof prev === 'object' ? `${prev.clientId}:${prev.clientSecret.length}` : undefined;
+  const prevFp =
+    prev === null
+      ? 'env'
+      : prev && typeof prev === 'object'
+        ? `${prev.clientId}:${prev.clientSecret}`
+        : undefined;
   if (prevFp === fp && credentialOptionsByUserId.has(uid)) return;
   if (spotifyPipelineLog.isEnabled()) {
     const orgRow = creds
