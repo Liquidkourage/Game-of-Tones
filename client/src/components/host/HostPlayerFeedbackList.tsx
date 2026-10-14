@@ -1,9 +1,11 @@
 import React from 'react';
+import PlayerAvatar from '../PlayerAvatar';
 import './HostPlayerFeedbackList.css';
 
 export type PlayerFeedbackEntry = {
   id: string;
   playerName: string;
+  avatar?: string;
   message: string;
   submittedAt: number;
 };
@@ -27,7 +29,10 @@ const HostPlayerFeedbackList: React.FC<HostPlayerFeedbackListProps> = ({ entries
       {[...entries].reverse().map((entry) => (
         <li key={entry.id} className="host-player-feedback-list__item">
           <div className="host-player-feedback-list__meta">
-            <strong>{entry.playerName}</strong>
+            <strong style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <PlayerAvatar avatar={entry.avatar} name={entry.playerName} size="sm" />
+              {entry.playerName}
+            </strong>
             <time dateTime={new Date(entry.submittedAt).toISOString()}>
               {feedbackTime.format(entry.submittedAt)}
             </time>

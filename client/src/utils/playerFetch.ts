@@ -6,6 +6,7 @@ export type PlayerAccountUser = {
   id: number;
   email: string;
   displayName: string;
+  avatar?: string;
   createdAt?: string;
 };
 
@@ -95,14 +96,28 @@ export async function playerLogout(): Promise<void> {
 export async function updatePlayerDisplayName(displayName: string): Promise<{
   user: PlayerAccountUser;
 }> {
+  return updatePlayerProfile({ displayName });
+}
+
+export async function updatePlayerProfile(patch: {
+  displayName?: string;
+  avatar?: string;
+  dataUrl?: string;
+  imageUrl?: string;
+}): Promise<{ user: PlayerAccountUser }> {
+  const body: Record<string, string> = {};
+  if (patch.displayName != null) body.displayName = patch.displayName.trim();
+  if (patch.avatar !== undefined) body.avatar = patch.avatar;
+  if (patch.dataUrl) body.dataUrl = patch.dataUrl;
+  if (patch.imageUrl) body.imageUrl = patch.imageUrl;
   const res = await playerFetch(`${API_BASE || ''}/api/player/profile`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ displayName: displayName.trim() }),
+    body: JSON.stringify(body),
   });
   const j = (await res.json().catch(() => ({}))) as { user?: PlayerAccountUser; message?: string };
   if (!res.ok || !j.user) {
-    throw new Error(j.message || 'Could not update display name');
+    throw new Error(j.message || 'Could not update profile');
   }
   return { user: j.user };
 }

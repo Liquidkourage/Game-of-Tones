@@ -1,8 +1,10 @@
 import React from 'react';
+import PlayerAvatar from '../PlayerAvatar';
 
 export type NightBoardWinner = {
   roundNumber: number;
   playerName: string;
+  avatar?: string;
   prize?: string;
   roundName?: string;
 };
@@ -42,6 +44,7 @@ const HostNightBoardPanel: React.FC<HostNightBoardPanelProps> = ({
             label: r.name || `Round ${i + 1}`,
             prize: (winner?.prize || r.prize || '').trim() || '—',
             winner: winner?.playerName?.trim() || '—',
+            avatar: winner?.avatar || '',
             done: Boolean(winner),
           };
         })
@@ -50,6 +53,7 @@ const HostNightBoardPanel: React.FC<HostNightBoardPanelProps> = ({
           label: w.roundName || `Round ${w.roundNumber}`,
           prize: (w.prize || '').trim() || '—',
           winner: w.playerName || '—',
+          avatar: w.avatar || '',
           done: true,
         }));
 
@@ -85,7 +89,15 @@ const HostNightBoardPanel: React.FC<HostNightBoardPanelProps> = ({
           >
             <span className="host-night-board__round">{row.label}</span>
             <span className="host-night-board__prize">{row.prize}</span>
-            <span className="host-night-board__winner">{row.winner}</span>
+            <span
+              className="host-night-board__winner"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+            >
+              {row.winner !== '—' ? (
+                <PlayerAvatar avatar={row.avatar} name={row.winner} size="sm" />
+              ) : null}
+              {row.winner}
+            </span>
           </li>
         ))}
       </ul>

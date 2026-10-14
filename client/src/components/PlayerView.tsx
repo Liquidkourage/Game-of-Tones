@@ -13,7 +13,9 @@ import {
   type PlayerRoundHistory,
   type PlayerStats,
 } from '../utils/playerFetch';
+import { readGuestAvatar, writeGuestAvatar } from '../utils/playerAvatars';
 import PlayerAccountGate from './PlayerAccountGate';
+import PlayerAvatarPicker from './PlayerAvatarPicker';
 import PlayerPatternHint from './PlayerPatternHint';
 import {
   clearPlayerJoinIntent,
@@ -275,6 +277,7 @@ const PlayerView: React.FC = () => {
   const [displayNameDraft, setDisplayNameDraft] = useState('');
   const [displayNameBusy, setDisplayNameBusy] = useState(false);
   const [displayNameError, setDisplayNameError] = useState<string | null>(null);
+  const [playerAvatar, setPlayerAvatar] = useState<string>(() => readGuestAvatar());
 
   const [socket, setSocket] = useState<any>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
@@ -712,8 +715,14 @@ const PlayerView: React.FC = () => {
   }, [joinReady, roomId, playerBootstrap.fromIntent]);
 
   useEffect(() => {
-    if (playerAccount) setDisplayNameDraft(playerAccount.displayName);
-  }, [playerAccount?.id, playerAccount?.displayName]);
+    if (playerAccount) {
+      setDisplayNameDraft(playerAccount.displayName);
+      if (playerAccount.avatar) {
+        setPlayerAvatar(playerAccount.avatar);
+        writeGuestAvatar(playerAccount.avatar);
+      }
+    }
+  }, [playerAccount?.id, playerAccount?.displayName, playerAccount?.avatar]);
 
   useEffect(() => {
     if (!optionsOpen || !playerAccount) return;
@@ -728,15 +737,25 @@ const PlayerView: React.FC = () => {
     };
   }, [optionsOpen, playerAccount?.id]);
 
-  const buildJoinPayload = (name: string) => ({
-    roomId,
-    playerName: name,
-    isHost: false,
-    clientId,
-    inPerson: inPersonJoin,
-    playerPreferences: { cardFontPercent, cardTheme },
-    playerToken: getPlayerJwt() || '',
-  });
+  const buildJoinPayload = (name: string, avatarOverride?: string) => {
+    const avatar =
+      avatarOverride !== undefined
+        ? avatarOverride
+        : (playerAccount?.avatar && String(playerAccount.avatar).trim()) ||
+          playerAvatar ||
+          readGuestAvatar() ||
+          '';
+    return {
+      roomId,
+      playerName: name,
+      isHost: false,
+      clientId,
+      inPerson: inPersonJoin,
+      avatar,
+      playerPreferences: { cardFontPercent, cardTheme, ...(avatar ? { avatar } : {}) },
+      playerToken: getPlayerJwt() || '',
+    };
+  };
 
   const finishGuestOrAccountJoin = (
     name: string,
@@ -1417,15 +1436,20 @@ const PlayerView: React.FC = () => {
   useEffect(() => {
     if (!socket?.connected || !joinReady || !playerName?.trim()) return;
     try {
+      const avatar = playerAvatar || readGuestAvatar() || '';
       socket.emit('update-player-preferences', {
         roomId,
         clientId,
-        playerPreferences: { cardFontPercent, cardTheme },
+        playerPreferences: {
+          cardFontPercent,
+          cardTheme,
+          ...(avatar ? { avatar } : {}),
+        },
       });
     } catch {
       /* ignore */
     }
-  }, [socket, joinReady, playerName, roomId, clientId, cardFontPercent, cardTheme]);
+  }, [socket, joinReady, playerName, roomId, clientId, cardFontPercent, cardTheme, playerAvatar]);
 
   useEffect(() => {
     if (!optionsOpen) return undefined;
@@ -2410,21 +2434,33 @@ const PlayerView: React.FC = () => {
           initialMode={accountGateMode}
           initialGuestName={urlNamePrefill || playerName}
           initialError={joinGateError}
-          onGuestContinue={(name) => {
+          onGuestContinue={(name, avatar) => {
+            const nextAvatar = avatar || readGuestAvatar();
+            if (nextAvatar) {
+              setPlayerAvatar(nextAvatar);
+              writeGuestAvatar(nextAvatar);
+            }
             finishGuestOrAccountJoin(name);
             if (socket && socket.connected) {
               try {
-                socket.emit('join-room', buildJoinPayload(name));
+                socket.emit('join-room', buildJoinPayload(name, nextAvatar));
               } catch {
                 /* ignore */
               }
             }
           }}
           onAccountReady={(user, stats, recentRounds) => {
+            if (user.avatar) {
+              setPlayerAvatar(user.avatar);
+              writeGuestAvatar(user.avatar);
+            }
             finishGuestOrAccountJoin(user.displayName, user, stats, recentRounds);
             if (socket && socket.connected) {
               try {
-                socket.emit('join-room', buildJoinPayload(user.displayName));
+                socket.emit(
+                  'join-room',
+                  buildJoinPayload(user.displayName, user.avatar || readGuestAvatar()),
+                );
               } catch {
                 /* ignore */
               }
@@ -3013,6 +3049,33 @@ const PlayerView: React.FC = () => {
                           {displayNameError}
                         </p>
                       ) : null}
+                      <div className="player-v2-profile-name-field" style={{ marginTop: 12 }}>
+                        <span className="player-v2-profile-name-label">Avatar</span>
+                        <PlayerAvatarPicker
+                          value={playerAvatar || playerAccount.avatar || ''}
+                          name={playerAccount.displayName}
+                          signedIn
+                          onChange={(avatar) => {
+                            setPlayerAvatar(avatar);
+                            setPlayerAccount((prev) => (prev ? { ...prev, avatar } : prev));
+                            if (socket?.connected && playerName.trim()) {
+                              try {
+                                socket.emit('join-room', {
+                                  ...buildJoinPayload(playerName.trim()),
+                                  avatar,
+                                  playerPreferences: {
+                                    cardFontPercent,
+                                    cardTheme,
+                                    ...(avatar ? { avatar } : {}),
+                                  },
+                                });
+                              } catch {
+                                /* ignore */
+                              }
+                            }
+                          }}
+                        />
+                      </div>
                     </div>
 
                     {playerStats ? (
@@ -3090,23 +3153,54 @@ const PlayerView: React.FC = () => {
                     </div>
                   </>
                 ) : (
-                  <div className="player-v2-sheet-row">
-                    <div className="player-v2-sheet-copy">
-                      <div className="player-v2-sheet-label">Player account</div>
+                  <>
+                    <div className="player-v2-sheet-row player-v2-sheet-row--stacked">
+                      <div className="player-v2-sheet-copy">
+                        <div className="player-v2-sheet-label">Avatar</div>
+                        <div className="player-v2-sheet-note">Shown to the host and on the projector</div>
+                      </div>
+                      <PlayerAvatarPicker
+                        value={playerAvatar}
+                        name={playerName}
+                        signedIn={false}
+                        onChange={(avatar) => {
+                          setPlayerAvatar(avatar);
+                          if (socket?.connected && playerName.trim()) {
+                            try {
+                              socket.emit('join-room', {
+                                ...buildJoinPayload(playerName.trim()),
+                                avatar,
+                                playerPreferences: {
+                                  cardFontPercent,
+                                  cardTheme,
+                                  ...(avatar ? { avatar } : {}),
+                                },
+                              });
+                            } catch {
+                              /* ignore */
+                            }
+                          }
+                        }}
+                      />
                     </div>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => {
-                        setOptionsOpen(false);
-                        setAccountGateMode('login');
-                        setAccountGateEpoch((n) => n + 1);
-                        setJoinReady(false);
-                      }}
-                    >
-                      Sign in
-                    </button>
-                  </div>
+                    <div className="player-v2-sheet-row">
+                      <div className="player-v2-sheet-copy">
+                        <div className="player-v2-sheet-label">Player account</div>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => {
+                          setOptionsOpen(false);
+                          setAccountGateMode('login');
+                          setAccountGateEpoch((n) => n + 1);
+                          setJoinReady(false);
+                        }}
+                      >
+                        Sign in
+                      </button>
+                    </div>
+                  </>
                 )}
 
                 <div className="player-v2-sheet-row">

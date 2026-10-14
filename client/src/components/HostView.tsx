@@ -177,6 +177,7 @@ import HostNightBoardPanel from './host/HostNightBoardPanel';
 import HostPlayerFeedbackList, {
   type PlayerFeedbackEntry,
 } from './host/HostPlayerFeedbackList';
+import PlayerAvatar from './PlayerAvatar';
 import HostSubmodalPortal from './HostSubmodalPortal';
 import HostSponsorScreenPanel, { type SponsorScreenConfig } from './host/HostSponsorScreenPanel';
 import HostPoolQualityReport from './host/HostPoolQualityReport';
@@ -215,6 +216,7 @@ const HOST_FEEDBACK_LIMIT = 500;
 type SongRequestEntry = {
   id: string;
   playerName: string;
+  avatar?: string;
   title: string;
   artist: string;
   submittedAt: number;
@@ -255,6 +257,7 @@ function normalizeSongRequestEntry(raw: any): SongRequestEntry | null {
     id,
     playerName:
       typeof raw?.playerName === 'string' && raw.playerName.trim() ? raw.playerName.trim() : 'Player',
+    avatar: typeof raw?.avatar === 'string' ? raw.avatar.trim() : '',
     title,
     artist: typeof raw?.artist === 'string' ? raw.artist.trim() : '',
     submittedAt,
@@ -294,6 +297,7 @@ function normalizePlayerFeedbackEntry(raw: any): PlayerFeedbackEntry | null {
         ? raw.id
         : `${submittedAt}-${playerName}-${message}`,
     playerName,
+    avatar: typeof raw?.avatar === 'string' ? raw.avatar.trim() : '',
     message,
     submittedAt,
   };
@@ -1956,7 +1960,7 @@ const HostView: React.FC = () => {
   const [rooms, setRooms] = useState<Array<any>>([]);
   const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
   const [joinedPlayersRoster, setJoinedPlayersRoster] = useState<
-    Map<string, { playerName: string; inPerson: boolean }>
+    Map<string, { playerName: string; inPerson: boolean; avatar?: string }>
   >(new Map());
   const [playerCardsVersion, setPlayerCardsVersion] = useState<number>(0); // Force re-render trigger
   const [playerCardsFullscreen, setPlayerCardsFullscreen] = useState<boolean>(false);
@@ -4013,7 +4017,7 @@ const HostView: React.FC = () => {
 
     // Socket event listeners
     const applyPlayersRoster = (
-      players: Array<{ playerId?: string; playerName?: string; inPerson?: boolean }>,
+      players: Array<{ playerId?: string; playerName?: string; inPerson?: boolean; avatar?: string }>,
     ) => {
       if (!Array.isArray(players)) return;
       setJoinedPlayersRoster(
@@ -4025,6 +4029,7 @@ const HostView: React.FC = () => {
               {
                 playerName: p.playerName || 'Unknown',
                 inPerson: p.inPerson !== false,
+                avatar: typeof p.avatar === 'string' ? p.avatar : '',
               },
             ]),
         ),
@@ -4043,6 +4048,7 @@ const HostView: React.FC = () => {
           next.set(String(data.playerId), {
             playerName: data.playerName || 'Unknown',
             inPerson: data.inPerson !== false,
+            avatar: typeof data.avatar === 'string' ? data.avatar : '',
           });
           return next;
         });
@@ -6789,6 +6795,15 @@ const HostView: React.FC = () => {
                 gap: 4,
               }}
             >
+              <PlayerAvatar
+                avatar={
+                  playerData.avatar ||
+                  joinedPlayersRoster.get(playerId)?.avatar ||
+                  ''
+                }
+                name={playerData.playerName}
+                size="sm"
+              />
               <span>{playerData.playerName}</span>
               {(playerData.inPerson === false ||
                 joinedPlayersRoster.get(playerId)?.inPerson === false) && (
@@ -13666,11 +13681,17 @@ const HostView: React.FC = () => {
   const displaySyncLabel = formatDisplaySyncAge(displayPresence.lastSeenAt);
 
   const hostPlayerRoster = useMemo(() => {
-    const rows: Array<{ playerId: string; playerName: string; inPerson: boolean }> = [];
+    const rows: Array<{ playerId: string; playerName: string; inPerson: boolean; avatar?: string }> =
+      [];
     const seen = new Set<string>();
     for (const [playerId, d] of Array.from(joinedPlayersRoster.entries())) {
       seen.add(playerId);
-      rows.push({ playerId, playerName: d.playerName, inPerson: d.inPerson });
+      rows.push({
+        playerId,
+        playerName: d.playerName,
+        inPerson: d.inPerson,
+        avatar: d.avatar || '',
+      });
     }
     for (const [playerId, card] of Array.from(playerCards.entries())) {
       if (seen.has(playerId)) continue;
@@ -13678,6 +13699,7 @@ const HostView: React.FC = () => {
         playerId,
         playerName: String(card?.playerName || 'Player'),
         inPerson: card?.inPerson !== false,
+        avatar: typeof card?.avatar === 'string' ? card.avatar : '',
       });
     }
     return rows;
@@ -15115,6 +15137,11 @@ const HostView: React.FC = () => {
                   gap: 6,
                 }}
               >
+                <PlayerAvatar
+                  avatar={pendingVerification.avatar}
+                  name={pendingVerification.playerName}
+                  size="md"
+                />
                 <strong>{pendingVerification.playerName}</strong>
                 {pendingVerification.inPerson === false ? <OnlinePlayerBadge /> : null}
                 <span>called BINGO!</span>
@@ -15603,7 +15630,24 @@ const HostView: React.FC = () => {
             </h2>
             
             <div style={{ marginBottom: '24px' }}>
-              <p style={{ fontSize: '1.4rem', color: '#fff', marginBottom: '8px', fontWeight: 'bold' }}>
+              <p
+                style={{
+                  fontSize: '1.4rem',
+                  color: '#fff',
+                  marginBottom: '8px',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <PlayerAvatar
+                  avatar={roundComplete.avatar}
+                  name={roundComplete.playerName}
+                  size="md"
+                />
                 {roundComplete.playerName} Wins Round {roundComplete.roundNumber}!
               </p>
               {roundWinners.length > 0 && (
@@ -15615,9 +15659,22 @@ const HostView: React.FC = () => {
                 }}>
                   <p style={{ color: '#00ff88', fontSize: '0.9rem', marginBottom: '8px' }}>Round Winners:</p>
                   {roundWinners.map((winner: any, idx: number) => (
-                    <div key={idx} style={{ color: '#fff', fontSize: '0.85rem', marginBottom: '4px' }}>
-                      Round {winner.roundNumber}: {winner.playerName}
-                      {winner.prize ? ` — ${winner.prize}` : ''}
+                    <div
+                      key={idx}
+                      style={{
+                        color: '#fff',
+                        fontSize: '0.85rem',
+                        marginBottom: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <PlayerAvatar avatar={winner.avatar} name={winner.playerName} size="sm" />
+                      <span>
+                        Round {winner.roundNumber}: {winner.playerName}
+                        {winner.prize ? ` — ${winner.prize}` : ''}
+                      </span>
                     </div>
                   ))}
                 </div>

@@ -1,10 +1,12 @@
 import React from 'react';
 import { Users, QrCode, Copy } from 'lucide-react';
+import PlayerAvatar from '../PlayerAvatar';
 
 export type HostPlayerRosterRow = {
   playerId: string;
   playerName: string;
   inPerson: boolean;
+  avatar?: string;
 };
 
 type HostPlayersPanelProps = {
@@ -70,7 +72,13 @@ const HostPlayersPanel: React.FC<HostPlayersPanelProps> = ({
           <ul className="host-players-workspace__list">
             {roster.map((p) => (
               <li key={p.playerId} className="host-players-workspace__row">
-                <span className="host-players-workspace__name">{p.playerName}</span>
+                <span
+                  className="host-players-workspace__name"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}
+                >
+                  <PlayerAvatar avatar={p.avatar} name={p.playerName} size="sm" />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.playerName}</span>
+                </span>
                 {p.inPerson ? (
                   <span className="host-players-workspace__badge host-players-workspace__badge--in-person">
                     In person

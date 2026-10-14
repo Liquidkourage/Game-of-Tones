@@ -66,6 +66,15 @@ function sanitizePreferences(raw) {
   if (raw.cardFontPercent != null && Number.isFinite(Number(raw.cardFontPercent))) {
     out.cardFontPercent = Math.min(200, Math.max(50, Math.round(Number(raw.cardFontPercent))));
   }
+  try {
+    const playerAvatarStore = require('./playerAvatarStore');
+    if (raw.avatar != null) {
+      const av = playerAvatarStore.sanitizeAvatarValue(raw.avatar);
+      if (av) out.avatar = av;
+    }
+  } catch {
+    /* optional */
+  }
   return out;
 }
 

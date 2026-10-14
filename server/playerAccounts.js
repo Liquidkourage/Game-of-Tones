@@ -3,6 +3,7 @@
  */
 
 const playerAuth = require('./playerAuth');
+const playerAvatarStore = require('./playerAvatarStore');
 
 const MAX_DISPLAY_NAME_LEN = 80;
 
@@ -62,6 +63,9 @@ async function ensurePlayerAccountTables(db) {
   await db.query(`
     ALTER TABLE player_room_sessions ADD COLUMN IF NOT EXISTS player_user_id INTEGER REFERENCES player_accounts(id) ON DELETE SET NULL
   `);
+  await db.query(`
+    ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS avatar TEXT NOT NULL DEFAULT ''
+  `);
   return true;
 }
 
@@ -89,7 +93,7 @@ async function createAccount(db, { email, password, displayName }) {
     const r = await db.query(
       `INSERT INTO player_accounts (email, password_hash, display_name)
        VALUES ($1, $2, $3)
-       RETURNING id, email, display_name, created_at`,
+       RETURNING id, email, display_name, avatar, created_at`,
       [normalizedEmail, passwordHash, name]
     );
     const row = r.rows[0];
@@ -107,7 +111,7 @@ async function authenticateAccount(db, { email, password }) {
   const normalizedEmail = playerAuth.normalizeEmail(email);
   if (!normalizedEmail || !password) throw new Error('Email and password are required');
   const r = await db.query(
-    'SELECT id, email, password_hash, display_name, created_at FROM player_accounts WHERE email = $1',
+    'SELECT id, email, password_hash, display_name, avatar, created_at FROM player_accounts WHERE email = $1',
     [normalizedEmail]
   );
   if (r.rows.length === 0) throw new Error('Invalid email or password');
@@ -120,6 +124,7 @@ async function authenticateAccount(db, { email, password }) {
     id: row.id,
     email: row.email,
     display_name: row.display_name,
+    avatar: row.avatar || '',
     created_at: row.created_at,
   };
 }
@@ -128,21 +133,38 @@ async function getAccountById(db, id) {
   if (!db || id == null) return null;
   await ensurePlayerAccountTables(db);
   const r = await db.query(
-    'SELECT id, email, display_name, created_at FROM player_accounts WHERE id = $1',
+    'SELECT id, email, display_name, avatar, created_at FROM player_accounts WHERE id = $1',
     [id]
   );
   return r.rows[0] || null;
 }
 
 async function updateDisplayName(db, playerUserId, displayName) {
+  return updateProfile(db, playerUserId, { displayName });
+}
+
+async function updateProfile(db, playerUserId, { displayName, avatar } = {}) {
   if (!db || playerUserId == null) throw new Error('Account not found');
   await ensurePlayerAccountTables(db);
-  const name = normalizeDisplayName(displayName);
+  const sets = [];
+  const params = [playerUserId];
+  if (displayName !== undefined) {
+    params.push(normalizeDisplayName(displayName));
+    sets.push(`display_name = $${params.length}`);
+  }
+  if (avatar !== undefined) {
+    params.push(playerAvatarStore.sanitizeAvatarValue(avatar));
+    sets.push(`avatar = $${params.length}`);
+  }
+  if (sets.length === 0) {
+    return getAccountById(db, playerUserId);
+  }
+  sets.push('updated_at = CURRENT_TIMESTAMP');
   const r = await db.query(
-    `UPDATE player_accounts SET display_name = $2, updated_at = CURRENT_TIMESTAMP
+    `UPDATE player_accounts SET ${sets.join(', ')}
      WHERE id = $1
-     RETURNING id, email, display_name, created_at`,
-    [playerUserId, name]
+     RETURNING id, email, display_name, avatar, created_at`,
+    params
   );
   if (r.rows.length === 0) throw new Error('Account not found');
   return r.rows[0];
@@ -300,6 +322,7 @@ function accountPublicRow(row) {
     id: row.id,
     email: row.email,
     displayName: row.display_name,
+    avatar: row.avatar ? String(row.avatar) : '',
     createdAt: row.created_at,
   };
 }
@@ -338,6 +361,7 @@ module.exports = {
   authenticateAccount,
   getAccountById,
   updateDisplayName,
+  updateProfile,
   getStats,
   listRecentRounds,
   linkClientToAccount,

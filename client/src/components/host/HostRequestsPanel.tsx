@@ -1,9 +1,11 @@
 import React from 'react';
 import { Inbox, Trash2 } from 'lucide-react';
+import PlayerAvatar from '../PlayerAvatar';
 
 export type HostSongRequestRow = {
   id: string;
   playerName: string;
+  avatar?: string;
   title: string;
   artist: string;
   submittedAt: number;
@@ -105,7 +107,13 @@ const HostRequestsPanel: React.FC<HostRequestsPanelProps> = ({
                 <div className="host-requests-workspace__meta">
                   <strong>{request.title}</strong>
                   {request.artist ? <span>— {request.artist}</span> : null}
-                  <span className="host-requests-workspace__from">from {request.playerName}</span>
+                  <span
+                    className="host-requests-workspace__from"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    from <PlayerAvatar avatar={request.avatar} name={request.playerName} size="sm" />
+                    {request.playerName}
+                  </span>
                 </div>
                 <div className="host-requests-workspace__actions">
                   {request.status === 'pending' ? (

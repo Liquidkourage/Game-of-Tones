@@ -18,6 +18,7 @@ import {
   QrCode
 } from 'lucide-react';
 import { API_BASE } from '../config';
+import PlayerAvatar from './PlayerAvatar';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
 import { youtubeBingoSquareDisplay, youtubeTrackDisplayFields } from '../utils/youtubeTrackDisplay';
 import {
@@ -1694,6 +1695,7 @@ const PublicDisplay: React.FC = () => {
   /** Verified winner card (shown full-screen after host accepts bingo). */
   const [winnerCardModal, setWinnerCardModal] = useState<{
     playerName: string;
+    avatar?: string;
     squares: Array<{
       position: string;
       songId: string;
@@ -1716,7 +1718,13 @@ const PublicDisplay: React.FC = () => {
   const [currentRoundPrize, setCurrentRoundPrize] = useState<string | null>(null);
   const [showNightBoard, setShowNightBoard] = useState(false);
   const [roundWinnersBoard, setRoundWinnersBoard] = useState<
-    Array<{ roundNumber: number; playerName: string; prize?: string; roundName?: string }>
+    Array<{
+      roundNumber: number;
+      playerName: string;
+      avatar?: string;
+      prize?: string;
+      roundName?: string;
+    }>
   >([]);
   const [roomPhase, setRoomPhase] = useState<string>('waiting');
   // Winner card stays until the host advances (reveal-winners-board) or keep-playing timeout.
@@ -3061,6 +3069,7 @@ const PublicDisplay: React.FC = () => {
               setWinnerName('');
               setWinnerCardModal({
                 playerName: String(data.playerName),
+                avatar: typeof data.avatar === 'string' ? data.avatar : '',
                 squares: wc.squares,
                 winningPositions: Array.isArray(data.winningPositions) ? data.winningPositions : [],
                 pattern: typeof data.pattern === 'string' ? data.pattern : 'line',
@@ -5331,7 +5340,23 @@ const PublicDisplay: React.FC = () => {
                     }}
                     strokeWidth={2}
                   />
-                  <span style={{ maxWidth: '100%', wordBreak: 'break-word' }}>{winnerCardModal.playerName}</span>
+                  <span
+                    style={{
+                      maxWidth: '100%',
+                      wordBreak: 'break-word',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 'clamp(10px, 2vmin, 18px)',
+                    }}
+                  >
+                    <PlayerAvatar
+                      avatar={winnerCardModal.avatar}
+                      name={winnerCardModal.playerName}
+                      size="lg"
+                    />
+                    {winnerCardModal.playerName}
+                  </span>
                 </div>
                 {winnerCardModal.prize ? (
                   <div
@@ -5793,8 +5818,13 @@ const PublicDisplay: React.FC = () => {
                       lineHeight: 1.12,
                       wordBreak: 'break-word',
                       textShadow: '0 3px 16px rgba(0,0,0,0.5), 0 0 24px rgba(0,255,170,0.18)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'flex-end',
+                      gap: 'clamp(8px, 1.2vmin, 14px)',
                     }}
                   >
+                    <PlayerAvatar avatar={w.avatar} name={w.playerName} size="md" />
                     {w.playerName}
                   </span>
                 </li>

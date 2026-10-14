@@ -6,13 +6,16 @@ import {
   PlayerRoundHistory,
   playerFetch,
   setPlayerJwt,
+  updatePlayerProfile,
 } from '../utils/playerFetch';
+import { readGuestAvatar, writeGuestAvatar } from '../utils/playerAvatars';
+import PlayerAvatarPicker from './PlayerAvatarPicker';
 
 type Mode = 'login' | 'signup' | 'guest';
 export type PlayerUiTheme = 'dark' | 'light';
 
 type Props = {
-  onGuestContinue: (displayName: string) => void;
+  onGuestContinue: (displayName: string, avatar?: string) => void;
   onAccountReady: (user: PlayerAccountUser, stats: PlayerStats | null, recentRounds: PlayerRoundHistory[]) => void;
   initialMode?: Mode;
   theme?: PlayerUiTheme;
@@ -40,6 +43,7 @@ const PlayerAccountGate: React.FC<Props> = ({
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [guestName, setGuestName] = useState(() => initialGuestName.trim());
+  const [avatarDraft, setAvatarDraft] = useState(() => readGuestAvatar());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(() => initialError);
   const light = theme === 'light';
@@ -76,7 +80,22 @@ const PlayerAccountGate: React.FC<Props> = ({
         return;
       }
       if (j.token) setPlayerJwt(String(j.token));
-      if (j.user) onAccountReady(j.user, j.stats ?? null, j.recentRounds ?? []);
+      if (j.user) {
+        const user = j.user as PlayerAccountUser;
+        if (avatarDraft && mode === 'signup') {
+          try {
+            const { user: updated } = await updatePlayerProfile({ avatar: avatarDraft });
+            writeGuestAvatar(updated.avatar || avatarDraft);
+            onAccountReady(updated, j.stats ?? null, j.recentRounds ?? []);
+            return;
+          } catch {
+            /* fall through with signup user */
+          }
+        }
+        if (user.avatar) writeGuestAvatar(user.avatar);
+        else if (avatarDraft) writeGuestAvatar(avatarDraft);
+        onAccountReady(user, j.stats ?? null, j.recentRounds ?? []);
+      }
     } catch (e) {
       setError(String(e));
     } finally {
@@ -192,18 +211,33 @@ const PlayerAccountGate: React.FC<Props> = ({
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   const name = guestName.trim();
-                  if (name) onGuestContinue(name);
+                  if (name) {
+                    writeGuestAvatar(avatarDraft);
+                    onGuestContinue(name, avatarDraft);
+                  }
                 }
               }}
               autoFocus
               style={inputStyle}
             />
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontSize: '0.9rem', marginBottom: 8 }}>Avatar</div>
+              <PlayerAvatarPicker
+                value={avatarDraft}
+                name={guestName}
+                signedIn={false}
+                onChange={setAvatarDraft}
+              />
+            </div>
             <button
               type="button"
               className="btn-primary"
               style={{ width: '100%', marginTop: 14 }}
               disabled={!guestName.trim()}
-              onClick={() => onGuestContinue(guestName.trim())}
+              onClick={() => {
+                writeGuestAvatar(avatarDraft);
+                onGuestContinue(guestName.trim(), avatarDraft);
+              }}
             >
               Continue as guest
             </button>
@@ -220,6 +254,15 @@ const PlayerAccountGate: React.FC<Props> = ({
                   onChange={(e) => setDisplayName(e.target.value)}
                   style={{ ...inputStyle, marginBottom: 12 }}
                 />
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: '0.9rem', marginBottom: 8 }}>Avatar</div>
+                  <PlayerAvatarPicker
+                    value={avatarDraft}
+                    name={displayName}
+                    signedIn={false}
+                    onChange={setAvatarDraft}
+                  />
+                </div>
               </>
             ) : null}
             <label style={{ display: 'block', marginBottom: 8, fontSize: '0.9rem' }}>Email</label>

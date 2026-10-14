@@ -26,6 +26,7 @@ const playerAccountsStore = require('./playerAccounts');
 const songAliasesStore = require('./songAliases');
 const fiveByFifteenAssign = require('./fiveByFifteenAssign');
 const venueLogoCache = require('./venueLogoCache');
+const playerAvatarStore = require('./playerAvatarStore');
 const credentialCrypto = require('./credentialCrypto');
 const spotifyPipelineLog = require('./spotifyPipelineLog');
 const catalogSpotify = require('./catalogSpotify');
@@ -325,6 +326,7 @@ app.use(express.json({ limit: '8mb' }));
 app.use(cookieParser());
 app.use(express.static('public'));
 venueLogoCache.registerVenueLogoRoutes(app);
+playerAvatarStore.registerPlayerAvatarRoutes(app);
 
 // Note: production static serving is registered after API routes below
 
@@ -1323,9 +1325,21 @@ function buildRoomPlayersRoster(room) {
       playerId,
       playerName: p.name,
       inPerson: p.inPerson !== false,
+      avatar: typeof p.avatar === 'string' ? p.avatar : '',
     });
   }
   return roster;
+}
+
+function normalizePlayerAvatarFromJoin(data, accountAvatar) {
+  const fromAccount = playerAvatarStore.sanitizeAvatarValue(accountAvatar);
+  if (fromAccount) return fromAccount;
+  const fromPrefs =
+    data?.playerPreferences && typeof data.playerPreferences === 'object'
+      ? playerAvatarStore.sanitizeAvatarValue(data.playerPreferences.avatar)
+      : '';
+  if (fromPrefs) return fromPrefs;
+  return playerAvatarStore.sanitizeAvatarValue(data?.avatar || data?.playerAvatar || '');
 }
 
 function emitRoomPlayersRosterToHosts(roomId, room) {
@@ -1351,6 +1365,7 @@ function hostPlayerCardEmitPayload(room, playerId, cardsOrCard, playedSongs) {
   const cards = playerBingoCards.asBingoCardList(cardsOrCard);
   return {
     playerName: player?.name || 'Unknown',
+    avatar: typeof player?.avatar === 'string' ? player.avatar : '',
     card: cards[0] || null,
     cards,
     playedSongs,
@@ -6086,8 +6101,21 @@ io.on('connection', (socket) => {
     const joinedPlayerUserId = !effectiveIsHost ? resolvePlayerUserIdFromJoin(socket, data) : null;
     if (joinedPlayerUserId != null) socket.playerUserId = joinedPlayerUserId;
 
+    let accountAvatar = '';
+    if (!effectiveIsHost && joinedPlayerUserId != null && db) {
+      try {
+        const acct = await playerAccountsStore.getAccountById(db, joinedPlayerUserId);
+        accountAvatar = acct?.avatar || '';
+      } catch (e) {
+        console.warn('join-room load account avatar:', e?.message || e);
+      }
+    }
     const priorPlayer =
       !effectiveIsHost && clientId ? findPriorPlayerByClientId(room, clientId, socket.id) : null;
+    const joinedAvatar = !effectiveIsHost
+      ? normalizePlayerAvatarFromJoin(data, accountAvatar) ||
+        (typeof priorPlayer?.avatar === 'string' ? priorPlayer.avatar : '')
+      : '';
 
     // Guest name is not a credential — block joining as another active player's display name.
     if (!effectiveIsHost && typeof playerName === 'string' && playerName.trim()) {
@@ -6134,6 +6162,7 @@ io.on('connection', (socket) => {
       /** false = joined as remote/online when host enables hybrid mode */
       inPerson,
       playerUserId: joinedPlayerUserId,
+      avatar: joinedAvatar || '',
       bingoCard: priorPlayer?.bingoCard || null,
       patternComplete: priorPlayer?.patternComplete === true,
     };
@@ -6197,7 +6226,8 @@ io.on('connection', (socket) => {
       playerName: playerName,
       isHost: effectiveIsHost,
       playerCount: getNonHostPlayerCount(room),
-      inPerson
+      inPerson,
+      avatar: typeof player.avatar === 'string' ? player.avatar : '',
     });
     emitRoomPlayersRosterToHosts(roomId, room);
 
@@ -6341,6 +6371,7 @@ io.on('connection', (socket) => {
       const feedback = {
         id: `${now}-${socket.id}`,
         playerName: player.name || 'Player',
+        avatar: typeof player.avatar === 'string' ? player.avatar : '',
         message,
         submittedAt: now,
       };
@@ -6397,6 +6428,7 @@ io.on('connection', (socket) => {
       const request = {
         id: `${now}-${socket.id}`,
         playerName: player.name || 'Player',
+        avatar: typeof player.avatar === 'string' ? player.avatar : '',
         ...(clientId ? { clientId } : {}),
         title,
         artist,
@@ -7583,7 +7615,12 @@ io.on('connection', (socket) => {
       // No need to add it again here
       
       player.hasBingo = true;
-      const winnerData = { playerId: socket.id, playerName: player.name, timestamp: Date.now() };
+      const winnerData = {
+        playerId: socket.id,
+        playerName: player.name,
+        avatar: typeof player.avatar === 'string' ? player.avatar : '',
+        timestamp: Date.now(),
+      };
       room.winners.push(winnerData);
       if (player.playerUserId != null) {
         void playerAccountsStore.recordBingoCalled(db, player.playerUserId, playerStatsContext(room, player));
@@ -7695,6 +7732,7 @@ io.on('connection', (socket) => {
       const verificationData = {
         playerId: socket.id,
         playerName: player.name,
+        avatar: typeof player.avatar === 'string' ? player.avatar : '',
         inPerson: player.inPerson !== false,
         playerCard: cardToSend, // Use the synchronized card with explicit marked properties
         cardId: sourceCard.cardId || null,
@@ -7990,6 +8028,7 @@ io.on('connection', (socket) => {
       const roundWinnerEntry = {
         roundNumber: room.liveNightBoardRoundNumber,
         playerName: player.name,
+        avatar: typeof player.avatar === 'string' ? player.avatar : '',
         playerId: resolvedPlayerId,
         timestamp: new Date().toISOString(),
         continued: keepPlayingEarly === true,
@@ -8005,7 +8044,8 @@ io.on('connection', (socket) => {
       const keepPlaying = continueRound === true;
       const bingoCalledPayload = { 
         playerId: resolvedPlayerId, 
-        playerName: player.name, 
+        playerName: player.name,
+        avatar: typeof player.avatar === 'string' ? player.avatar : '',
         winners: room.winners,
         totalWinners: room.winners.length,
         isFirstWinner: room.winners.length === 1,
@@ -8049,6 +8089,7 @@ io.on('connection', (socket) => {
         const hostPayload = {
           approved: true,
           playerName: player.name,
+          avatar: typeof player.avatar === 'string' ? player.avatar : '',
           gameEnded: false,
           roundComplete: false,
           continued: true,
@@ -8124,6 +8165,7 @@ io.on('connection', (socket) => {
             hostSocket.emit('bingo-verified', { 
               approved: true, 
               playerName: player.name,
+              avatar: typeof player.avatar === 'string' ? player.avatar : '',
               gameEnded: false,
               roundComplete: true,
               roundNumber: room.roundWinners.length,
@@ -8148,6 +8190,7 @@ io.on('connection', (socket) => {
           fallbackHostSocket.emit('bingo-verified', { 
             approved: true, 
             playerName: player.name,
+            avatar: typeof player.avatar === 'string' ? player.avatar : '',
             gameEnded: false,
             roundComplete: true,
             roundNumber: room.roundWinners.length,
@@ -8165,6 +8208,7 @@ io.on('connection', (socket) => {
           io.to(roomId).emit('bingo-verified', { 
             approved: true, 
             playerName: player.name,
+            avatar: typeof player.avatar === 'string' ? player.avatar : '',
             gameEnded: false,
             roundComplete: true,
             roundNumber: room.roundWinners.length,
@@ -8764,6 +8808,15 @@ io.on('connection', (socket) => {
       const player = room.players.get(socket.id);
       if (!player || player.isHost || player.name === 'Display') return;
       if (clientId && player.clientId && player.clientId !== clientId) return;
+      const nextAvatar = playerAvatarStore.sanitizeAvatarValue(
+        playerPreferences && typeof playerPreferences === 'object'
+          ? playerPreferences.avatar
+          : '',
+      );
+      if (nextAvatar && nextAvatar !== player.avatar) {
+        player.avatar = nextAvatar;
+        emitRoomPlayersRosterToHosts(roomId, room);
+      }
       void recordPlayerDataJoin(room, player, playerPreferences);
     } catch (e) {
       console.error('❌ update-player-preferences:', e?.message || e);
@@ -14671,7 +14724,23 @@ app.patch('/api/player/profile', async (req, res) => {
     if (!uid) return res.status(401).json({ error: 'unauthorized', message: 'Sign in required' });
     if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
     const body = req.body && typeof req.body === 'object' ? req.body : {};
-    const row = await playerAccountsStore.updateDisplayName(db, uid, body.displayName || body.display_name);
+    const patch = {};
+    if (body.displayName != null || body.display_name != null) {
+      patch.displayName = body.displayName || body.display_name;
+    }
+    if (body.avatar !== undefined) {
+      let avatarVal = body.avatar;
+      // Allow profile patch to also accept upload/URL fields (mirrors POST /api/player/avatar).
+      if (body.dataUrl || body.imageBase64 || body.imageUrl || body.url) {
+        avatarVal = await playerAvatarStore.resolveAvatarFromBody(body);
+      } else if (typeof avatarVal === 'string' && /^https?:\/\//i.test(avatarVal.trim())) {
+        avatarVal = await playerAvatarStore.mirrorRemoteUrl(avatarVal);
+      } else {
+        avatarVal = playerAvatarStore.sanitizeAvatarValue(avatarVal);
+      }
+      patch.avatar = avatarVal == null ? '' : avatarVal;
+    }
+    const row = await playerAccountsStore.updateProfile(db, uid, patch);
     return res.json({
       ok: true,
       user: playerAccountsStore.accountPublicRow(row),
@@ -14679,6 +14748,31 @@ app.patch('/api/player/profile', async (req, res) => {
   } catch (e) {
     console.error('PATCH /api/player/profile:', e?.message || e);
     res.status(400).json({ error: 'failed', message: e?.message || 'Could not update profile' });
+  }
+});
+
+/** Upload / paste-URL / preset → stored avatar path (also persists for signed-in players). */
+app.post('/api/player/avatar', async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+  try {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const avatar = await playerAvatarStore.resolveAvatarFromBody(body);
+    if (avatar == null) {
+      return res.status(400).json({ error: 'missing', message: 'Send avatar, dataUrl, imageBase64, or imageUrl.' });
+    }
+    const uid = playerAuth.getPlayerUserIdFromRequest(req);
+    if (uid != null && db) {
+      const row = await playerAccountsStore.updateProfile(db, uid, { avatar });
+      return res.json({
+        ok: true,
+        avatar,
+        user: playerAccountsStore.accountPublicRow(row),
+      });
+    }
+    return res.json({ ok: true, avatar });
+  } catch (e) {
+    console.error('POST /api/player/avatar:', e?.message || e);
+    res.status(400).json({ error: 'failed', message: e?.message || 'Could not save avatar' });
   }
 });
 
