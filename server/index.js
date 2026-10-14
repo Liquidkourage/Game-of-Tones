@@ -450,6 +450,25 @@ function savedRoundCardsForPlayer(room, roundKey, playerId, player) {
   return [];
 }
 
+/** Cards cached under a saved-round identity — reuse on prep hop / Start Game when pool still matches. */
+function collectPreservedSavedRoundCards(room, roundKey) {
+  const preserved = new Map();
+  if (!room?.players || !roundKey) return preserved;
+  for (const [playerId, player] of room.players.entries()) {
+    if (!player || player.isHost || player.name === 'Display' || isDisplayConnectionPlayer(player)) {
+      continue;
+    }
+    const priorCards = savedRoundCardsForPlayer(room, roundKey, playerId, player);
+    if (
+      priorCards.length &&
+      priorCards.every((card) => bingoCardMatchesCurrentRoundPool(room, card))
+    ) {
+      preserved.set(playerId, priorCards);
+    }
+  }
+  return preserved;
+}
+
 function storePlayerBingoCards(room, playerId, player, cardsOrCard, preferredCardId = null) {
   const list = playerBingoCards
     .asBingoCardList(cardsOrCard)
@@ -6566,21 +6585,37 @@ io.on('connection', (socket) => {
       return;
     }
 
-    /** Commit round card identity BEFORE dealing so storePlayerBingoCards caches cards. */
+    /** Commit round card identity BEFORE dealing so storePlayerBingoCards caches cards.
+     * Prefer host snapshot `songList` (+ lockedPlayOrder) so the key matches Start Game. */
     const commitSavedRoundCardKey = (songsForKey) => {
       const rid = savedRoundId != null ? String(savedRoundId).trim() : '';
       if (!rid) {
         room.activeSavedRoundCardKey = null;
         return null;
       }
+      const songsForIdentity =
+        Array.isArray(songList) && songList.length > 0 ? songList : songsForKey;
       const order =
         Array.isArray(lockedPlayOrder) && lockedPlayOrder.length > 0 ? lockedPlayOrder : [];
-      const key = savedRoundCardIdentity(rid, songsForKey, order, !!freeSpace);
+      const key = savedRoundCardIdentity(rid, songsForIdentity, order, !!freeSpace);
       room.activeSavedRoundCardKey = key;
       if (key) {
         routineServerLog(`🃏 Committed saved-round card key at finalize (${rid})`);
       }
       return key;
+    };
+
+    const generateBingoCardsPreservingSavedRound = async (playlistsForCards, songsForCards) => {
+      const roundKey = commitSavedRoundCardKey(songsForCards);
+      const preservedCardsByPlayer = collectPreservedSavedRoundCards(room, roundKey);
+      if (preservedCardsByPlayer.size > 0) {
+        routineServerLog(
+          `♻️ finalize-mix: restoring ${preservedCardsByPlayer.size} player card set(s) for saved-round key`,
+        );
+      }
+      return generateBingoCards(roomId, playlistsForCards, songsForCards, {
+        preservedCardsByPlayer,
+      });
     };
 
     // Enhanced host validation with detailed logging
@@ -6695,8 +6730,7 @@ io.on('connection', (socket) => {
           room.finalizedSongs = rebuiltCapped;
           routineServerLog(`📝 Refinalize rebuild (${rebuiltCapped.length} tracks) — same playlists, build pool (shuffle at Start Game)`);
           if (!(await requireEventCreditGate(room, roomId, socket, 'finalize-mix-failed'))) return;
-          commitSavedRoundCardKey(rebuiltCapped);
-          const bingoOk = await generateBingoCards(roomId, playlists, rebuiltCapped);
+          const bingoOk = await generateBingoCardsPreservingSavedRound(playlists, rebuiltCapped);
           if (!bingoOk) {
             socket.emit('finalize-mix-failed', {
               code: 'bingo_generation_failed',
@@ -6800,8 +6834,7 @@ io.on('connection', (socket) => {
 
       if (!(await requireEventCreditGate(room, roomId, socket, 'finalize-mix-failed'))) return;
 
-      commitSavedRoundCardKey(poolForCards);
-      const bingoOk = await generateBingoCards(roomId, playlists, poolForCards);
+      const bingoOk = await generateBingoCardsPreservingSavedRound(playlists, poolForCards);
       if (
         Array.isArray(playlists) &&
         playlists.length === 1 &&
@@ -9006,22 +9039,10 @@ io.on('connection', (socket) => {
               fsForMin,
             )
           : null;
-        const preservedSavedRoundCards = new Map();
+        const preservedSavedRoundCards = savedRoundCardKey
+          ? collectPreservedSavedRoundCards(room, savedRoundCardKey)
+          : new Map();
         if (savedRoundCardKey) {
-          for (const [playerId, player] of room.players.entries()) {
-            const priorCards = savedRoundCardsForPlayer(
-              room,
-              savedRoundCardKey,
-              playerId,
-              player,
-            );
-            if (
-              priorCards.length &&
-              priorCards.every((card) => bingoCardMatchesCurrentRoundPool(room, card))
-            ) {
-              preservedSavedRoundCards.set(playerId, priorCards);
-            }
-          }
           room.activeSavedRoundCardKey = savedRoundCardKey;
         } else {
           room.activeSavedRoundCardKey = null;

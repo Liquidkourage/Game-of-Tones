@@ -5846,7 +5846,10 @@ const HostView: React.FC = () => {
         let listToSend: Song[];
 
         if (opts?.songListOverride && opts.songListOverride.length > 0) {
-          addLog('Applying saved round snapshot to the room (display + player cards)…', 'info');
+          addLog(
+            'Applying saved round snapshot to the room (display + cards; reuse dealt grids when possible)…',
+            'info',
+          );
           listToSend = opts.songListOverride.map(cloneSongForSnapshot);
         } else if (
           mixFinalized &&
