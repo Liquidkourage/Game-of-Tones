@@ -3055,6 +3055,8 @@ const PlayerView: React.FC = () => {
                           value={playerAvatar || playerAccount.avatar || ''}
                           name={playerAccount.displayName}
                           signedIn
+                          roomId={roomId}
+                          socket={socket}
                           onChange={(avatar) => {
                             setPlayerAvatar(avatar);
                             setPlayerAccount((prev) => (prev ? { ...prev, avatar } : prev));
@@ -3163,6 +3165,8 @@ const PlayerView: React.FC = () => {
                         value={playerAvatar}
                         name={playerName}
                         signedIn={false}
+                        roomId={roomId}
+                        socket={socket}
                         onChange={(avatar) => {
                           setPlayerAvatar(avatar);
                           if (socket?.connected && playerName.trim()) {

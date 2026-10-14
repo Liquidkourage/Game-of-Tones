@@ -4,8 +4,8 @@ import {
   PLAYER_AVATAR_PRESETS,
   compressImageFileToDataUrl,
   parsePresetAvatarId,
+  persistPlayerAvatarValue,
   presetAvatarValue,
-  uploadPlayerAvatar,
   writeGuestAvatar,
 } from '../utils/playerAvatars';
 import { updatePlayerProfile } from '../utils/playerFetch';
@@ -16,6 +16,8 @@ export default function PlayerAvatarPicker({
   signedIn,
   onChange,
   disabled = false,
+  roomId,
+  socket,
 }: {
   value: string;
   name?: string;
@@ -23,6 +25,9 @@ export default function PlayerAvatarPicker({
   signedIn: boolean;
   onChange: (avatar: string) => void;
   disabled?: boolean;
+  /** When seated, prefer socket upload (avoids CORS on POST /api/player/avatar). */
+  roomId?: string;
+  socket?: { emit: (event: string, payload: unknown, ack?: (res: any) => void) => void } | null;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [urlDraft, setUrlDraft] = useState('');
@@ -35,36 +40,29 @@ export default function PlayerAvatarPicker({
       setError(null);
       setBusy(true);
       try {
-        let avatar = next;
-        if (signedIn) {
-          if (next.startsWith('preset:') || next === '') {
-            const { user } = await updatePlayerProfile({ avatar: next });
-            avatar = user.avatar || next;
-          } else if (next.startsWith('data:') || /^https?:\/\//i.test(next)) {
-            const body = next.startsWith('data:')
-              ? { dataUrl: next }
-              : { imageUrl: next };
-            const res = await uploadPlayerAvatar(body);
-            avatar = res.avatar;
-            await updatePlayerProfile({ avatar }).catch(() => undefined);
-          } else {
-            const { user } = await updatePlayerProfile({ avatar: next });
-            avatar = user.avatar || next;
+        let avatar = await persistPlayerAvatarValue(next, { roomId, socket });
+        if (signedIn && avatar !== undefined) {
+          try {
+            const { user } = await updatePlayerProfile({ avatar });
+            avatar = user.avatar || avatar;
+          } catch {
+            /* socket/local already applied; profile sync is best-effort */
           }
-        } else if (next.startsWith('data:') || /^https?:\/\//i.test(next)) {
-          const body = next.startsWith('data:') ? { dataUrl: next } : { imageUrl: next };
-          const res = await uploadPlayerAvatar(body);
-          avatar = res.avatar;
         }
         writeGuestAvatar(avatar);
         onChange(avatar);
       } catch (e: any) {
-        setError(e?.message || 'Could not save avatar');
+        const msg = String(e?.message || 'Could not save avatar');
+        setError(
+          /cors|failed to fetch|network/i.test(msg)
+            ? 'Could not reach the server to save that image. Try a preset, or rejoin the room and paste the URL again.'
+            : msg,
+        );
       } finally {
         setBusy(false);
       }
     },
-    [onChange, signedIn],
+    [onChange, roomId, signedIn, socket],
   );
 
   const onFile = useCallback(

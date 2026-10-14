@@ -220,7 +220,33 @@ function getPublicAppOriginForCors() {
 }
 
 const publicAppOriginForCors = getPublicAppOriginForCors();
-const corsAllowedOrigins = [...new Set([...allowedOrigins, publicAppOriginForCors].filter(Boolean))];
+
+/** www ↔ apex twins so players on either host can POST (avatar paste, login, etc.). */
+function expandCorsOriginAliases(origins) {
+  const out = new Set();
+  for (const raw of origins) {
+    const o = String(raw || '').trim();
+    if (!o) continue;
+    out.add(o);
+    try {
+      const u = new URL(o);
+      if (!u.protocol || !u.hostname) continue;
+      const port = u.port ? `:${u.port}` : '';
+      if (u.hostname.startsWith('www.')) {
+        out.add(`${u.protocol}//${u.hostname.slice(4)}${port}`);
+      } else if (u.hostname.includes('.')) {
+        out.add(`${u.protocol}//www.${u.hostname}${port}`);
+      }
+    } catch {
+      /* ignore bad origin */
+    }
+  }
+  return [...out];
+}
+
+const corsAllowedOrigins = expandCorsOriginAliases(
+  [...allowedOrigins, publicAppOriginForCors].filter(Boolean),
+);
 
 // Log CORS configuration for debugging
 if (isProduction) {
@@ -305,7 +331,9 @@ app.use(cors({
     if (!origin || corsAllowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    callback(new Error('Not allowed by CORS'));
+    // Do not throw — throwing becomes a 500 and hides the real Origin in some clients.
+    console.warn(`🚫 CORS rejected Origin: ${origin}`);
+    return callback(null, false);
   },
   credentials: true
 }));
@@ -1340,6 +1368,24 @@ function normalizePlayerAvatarFromJoin(data, accountAvatar) {
       : '';
   if (fromPrefs) return fromPrefs;
   return playerAvatarStore.sanitizeAvatarValue(data?.avatar || data?.playerAvatar || '');
+}
+
+/** Prefer same-origin mirrored path when join/prefs still carry a remote https URL. */
+async function resolvePlayerAvatarValue(raw) {
+  const sanitized = playerAvatarStore.sanitizeAvatarValue(raw);
+  if (!sanitized) return '';
+  if (playerAvatarStore.isPresetAvatar(sanitized) || playerAvatarStore.isLocalAvatarPath(sanitized)) {
+    return sanitized;
+  }
+  if (/^https?:\/\//i.test(sanitized)) {
+    try {
+      return (await playerAvatarStore.mirrorRemoteUrl(sanitized)) || sanitized;
+    } catch (e) {
+      console.warn('resolvePlayerAvatarValue mirror failed:', e?.message || e);
+      return sanitized;
+    }
+  }
+  return sanitized;
 }
 
 function emitRoomPlayersRosterToHosts(roomId, room) {
@@ -6112,10 +6158,13 @@ io.on('connection', (socket) => {
     }
     const priorPlayer =
       !effectiveIsHost && clientId ? findPriorPlayerByClientId(room, clientId, socket.id) : null;
-    const joinedAvatar = !effectiveIsHost
-      ? normalizePlayerAvatarFromJoin(data, accountAvatar) ||
-        (typeof priorPlayer?.avatar === 'string' ? priorPlayer.avatar : '')
-      : '';
+    let joinedAvatar = '';
+    if (!effectiveIsHost) {
+      const rawJoinAvatar =
+        normalizePlayerAvatarFromJoin(data, accountAvatar) ||
+        (typeof priorPlayer?.avatar === 'string' ? priorPlayer.avatar : '');
+      joinedAvatar = rawJoinAvatar ? await resolvePlayerAvatarValue(rawJoinAvatar) : '';
+    }
 
     // Guest name is not a credential — block joining as another active player's display name.
     if (!effectiveIsHost && typeof playerName === 'string' && playerName.trim()) {
@@ -8816,10 +8865,66 @@ io.on('connection', (socket) => {
       if (nextAvatar && nextAvatar !== player.avatar) {
         player.avatar = nextAvatar;
         emitRoomPlayersRosterToHosts(roomId, room);
+        // Mirror remote URLs async so projector gets same-origin assets.
+        if (/^https?:\/\//i.test(nextAvatar)) {
+          void resolvePlayerAvatarValue(nextAvatar).then((mirrored) => {
+            if (!mirrored || mirrored === player.avatar) return;
+            player.avatar = mirrored;
+            emitRoomPlayersRosterToHosts(roomId, room);
+          });
+        }
       }
       void recordPlayerDataJoin(room, player, playerPreferences);
     } catch (e) {
       console.error('❌ update-player-preferences:', e?.message || e);
+    }
+  });
+
+  /**
+   * Set avatar over the existing room socket (avoids browser CORS on POST /api/player/avatar
+   * when the page Origin is a www/apex twin missing from CORS_ORIGINS).
+   */
+  socket.on('set-player-avatar', async (data = {}, acknowledge) => {
+    const reply = (payload) => {
+      if (typeof acknowledge === 'function') acknowledge(payload);
+    };
+    try {
+      const roomId = typeof data.roomId === 'string' ? data.roomId : '';
+      const room = rooms.get(roomId);
+      const player = room?.players?.get(socket.id);
+      if (!room || !player || player.isHost || isDisplayConnectionPlayer(player)) {
+        reply({ ok: false, message: 'Not seated as a player in this room.' });
+        return;
+      }
+      let avatar = await playerAvatarStore.resolveAvatarFromBody(data);
+      if (avatar == null && data.avatar !== undefined) {
+        avatar = await resolvePlayerAvatarValue(data.avatar);
+      }
+      if (avatar == null) {
+        reply({ ok: false, message: 'Send avatar, dataUrl, imageBase64, or imageUrl.' });
+        return;
+      }
+      avatar = avatar === '' ? '' : (await resolvePlayerAvatarValue(avatar)) || avatar;
+      player.avatar = avatar;
+      emitRoomPlayersRosterToHosts(roomId, room);
+      const uid = player.playerUserId != null ? Number(player.playerUserId) : null;
+      if (uid != null && db) {
+        try {
+          await playerAccountsStore.updateProfile(db, uid, { avatar });
+        } catch (e) {
+          console.warn('set-player-avatar persist account:', e?.message || e);
+        }
+      }
+      void recordPlayerDataJoin(room, player, {
+        ...(typeof data.playerPreferences === 'object' && data.playerPreferences
+          ? data.playerPreferences
+          : {}),
+        ...(avatar ? { avatar } : {}),
+      });
+      reply({ ok: true, avatar });
+    } catch (e) {
+      console.error('set-player-avatar failed:', e?.message || e);
+      reply({ ok: false, message: e?.message || 'Could not save avatar' });
     }
   });
 

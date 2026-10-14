@@ -18,6 +18,7 @@ Hosts still use **Google OAuth** (`users` table). Player accounts are separate.
 - **Profile:** `GET /api/player/me` → user, stats, recent rounds
 - **Update profile:** `PATCH /api/player/profile` — `{ displayName?, avatar?, dataUrl?, imageUrl? }`
 - **Upload / paste avatar:** `POST /api/player/avatar` — `{ avatar? }` (preset), `{ dataUrl }` / `{ imageBase64 }`, or `{ imageUrl }` — returns `{ avatar }` (and persists for signed-in users)
+- **In-room (preferred):** socket `set-player-avatar` with the same body fields + `roomId` (ack `{ ok, avatar }`) — avoids CORS when the page Origin is a www/apex twin
 - **Serve stored image:** `GET /api/player-avatar/:digest`
 - **Sign out:** `POST /api/player/logout`
 

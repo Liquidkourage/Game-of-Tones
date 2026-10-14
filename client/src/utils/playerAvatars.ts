@@ -102,11 +102,15 @@ export async function compressImageFileToDataUrl(file: File, maxEdge = 256): Pro
   return dataUrl;
 }
 
-export async function uploadPlayerAvatar(body: {
+export type PlayerAvatarUploadBody = {
   avatar?: string;
   dataUrl?: string;
   imageUrl?: string;
-}): Promise<{ avatar: string }> {
+};
+
+export async function uploadPlayerAvatar(
+  body: PlayerAvatarUploadBody,
+): Promise<{ avatar: string }> {
   const res = await playerFetch(`${API_BASE || ''}/api/player/avatar`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -120,4 +124,56 @@ export async function uploadPlayerAvatar(body: {
     throw new Error(j.message || 'Could not save avatar');
   }
   return { avatar: j.avatar };
+}
+
+/** Prefer room socket (no CORS) when seated; fall back to HTTP; bare https URL last. */
+export async function persistPlayerAvatarValue(
+  next: string,
+  opts?: {
+    roomId?: string;
+    socket?: { emit: (event: string, payload: unknown, ack?: (res: any) => void) => void } | null;
+  },
+): Promise<string> {
+  const trimmed = String(next || '').trim();
+  if (!trimmed) return '';
+
+  const body: PlayerAvatarUploadBody = trimmed.startsWith('data:')
+    ? { dataUrl: trimmed }
+    : /^https?:\/\//i.test(trimmed)
+      ? { imageUrl: trimmed }
+      : { avatar: trimmed };
+
+  const socket = opts?.socket;
+  const roomId = opts?.roomId;
+  if (socket && roomId) {
+    try {
+      const avatar = await new Promise<string>((resolve, reject) => {
+        const t = window.setTimeout(() => reject(new Error('Avatar save timed out')), 45000);
+        try {
+          socket.emit('set-player-avatar', { roomId, ...body }, (res: any) => {
+            window.clearTimeout(t);
+            if (res?.ok && typeof res.avatar === 'string') resolve(res.avatar);
+            else reject(new Error(res?.message || 'Could not save avatar'));
+          });
+        } catch (e) {
+          window.clearTimeout(t);
+          reject(e);
+        }
+      });
+      return avatar;
+    } catch (socketErr) {
+      console.warn('set-player-avatar socket failed, trying HTTP:', socketErr);
+    }
+  }
+
+  try {
+    const { avatar } = await uploadPlayerAvatar(body);
+    return avatar;
+  } catch (httpErr) {
+    // Guests / blocked CORS: keep remote URL for join-time mirror on the server.
+    if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('preset:')) {
+      return trimmed;
+    }
+    throw httpErr;
+  }
 }
