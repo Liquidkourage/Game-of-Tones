@@ -169,11 +169,19 @@ export async function persistPlayerAvatarValue(
   try {
     const { avatar } = await uploadPlayerAvatar(body);
     return avatar;
-  } catch (httpErr) {
-    // Guests / blocked CORS: keep remote URL for join-time mirror on the server.
-    if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('preset:')) {
+  } catch (httpErr: any) {
+    const msg = String(httpErr?.message || httpErr || '');
+    // Don't keep a URL the server already said is missing/blocked — that just re-fails on join.
+    if (/404|not found|blocked the download/i.test(msg)) {
+      throw httpErr instanceof Error ? httpErr : new Error(msg);
+    }
+    // Guests / blocked CORS: presets stay local; remote URLs may still mirror on join.
+    if (trimmed.startsWith('preset:')) {
       return trimmed;
     }
-    throw httpErr;
+    if (/^https?:\/\//i.test(trimmed) && /cors|failed to fetch|network/i.test(msg)) {
+      return trimmed;
+    }
+    throw httpErr instanceof Error ? httpErr : new Error(msg || 'Could not save avatar');
   }
 }

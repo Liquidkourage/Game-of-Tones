@@ -55,8 +55,8 @@ export default function PlayerAvatarPicker({
         const msg = String(e?.message || 'Could not save avatar');
         setError(
           /cors|failed to fetch|network/i.test(msg)
-            ? 'Could not reach the server to save that image. Try a preset, or rejoin the room and paste the URL again.'
-            : msg,
+            ? 'Could not reach the server to save that image. Try a preset, upload a file, or rejoin and try again.'
+            : msg.replace(/^player-avatar:\s*/i, ''),
         );
       } finally {
         setBusy(false);

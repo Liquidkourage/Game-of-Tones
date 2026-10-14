@@ -322,21 +322,35 @@ app.use(
   }),
 );
 app.use(compression());
-app.use(cors({
-  origin: function (origin, callback) {
-    if (allowAllCors) {
-      return callback(null, true);
-    }
-    // Allow no origin (same-origin) or any in allowlist
-    if (!origin || corsAllowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    // Do not throw — throwing becomes a 500 and hides the real Origin in some clients.
-    console.warn(`🚫 CORS rejected Origin: ${origin}`);
-    return callback(null, false);
-  },
-  credentials: true
-}));
+// Per-request CORS so we can allow Origin when it matches this deployment's Host
+// (e.g. https://tempomusicbingo.com hitting the same Railway service even if CORS_ORIGINS omitted it).
+app.use((req, res, next) => {
+  cors({
+    origin(origin, callback) {
+      if (allowAllCors) {
+        return callback(null, true);
+      }
+      if (!origin || corsAllowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      try {
+        const originUrl = new URL(origin);
+        const reqHost = String(req.headers.host || '')
+          .split(':')[0]
+          .toLowerCase();
+        const originHost = originUrl.hostname.toLowerCase();
+        if (reqHost && originHost && (originHost === reqHost || `www.${originHost}` === reqHost || originHost === `www.${reqHost}`)) {
+          return callback(null, true);
+        }
+      } catch {
+        /* ignore */
+      }
+      console.warn(`🚫 CORS rejected Origin: ${origin} (Host: ${req.headers.host || ''})`);
+      return callback(null, false);
+    },
+    credentials: true,
+  })(req, res, next);
+});
 app.post(
   '/api/webhooks/stripe',
   express.raw({ type: 'application/json' }),

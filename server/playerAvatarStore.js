@@ -130,7 +130,9 @@ function sanitizeAvatarValue(raw, maxLen = 2000) {
     if (u.protocol !== 'https:' && !(u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1'))) {
       return '';
     }
-    return u.href.split('?')[0].slice(0, maxLen);
+    // Keep query string — many CDNs / signed image links 404 without it.
+    u.hash = '';
+    return u.href.slice(0, maxLen);
   } catch {
     return '';
   }
@@ -169,7 +171,12 @@ async function fetchRemoteImageBytes(url) {
         method: 'GET',
         redirect: 'manual',
         signal: ac.signal,
-        headers: { Accept: 'image/*' },
+        headers: {
+          Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+          // Some CDNs 404/403 anonymous fetches without a UA.
+          'User-Agent':
+            'Mozilla/5.0 (compatible; TempoMusicBingo/1.0; +https://tempomusicbingo.com)',
+        },
       });
     } finally {
       clearTimeout(to);
@@ -182,7 +189,19 @@ async function fetchRemoteImageBytes(url) {
       continue;
     }
 
-    if (!res.ok) throw new Error(`player-avatar: HTTP ${res.status}`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(
+          'That image URL was not found (404). Use a direct link to the image file, or upload/drop a photo instead.',
+        );
+      }
+      if (res.status === 403 || res.status === 401) {
+        throw new Error(
+          'That image host blocked the download. Try uploading the photo instead of pasting a URL.',
+        );
+      }
+      throw new Error(`player-avatar: HTTP ${res.status}`);
+    }
 
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length > MAX_BYTES) throw new Error('player-avatar: too large');
