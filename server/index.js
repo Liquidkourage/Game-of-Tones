@@ -54,6 +54,7 @@ const {
   normalizePatternComposite,
   patternCompositeForClient,
 } = require('./game/validateBingo');
+const callState = require('./game/callState');
 
 /** Host-facing bingo patterns; `blackout` incoming values normalize to `full_card`. */
 const ALLOWED_BINGO_PATTERNS = new Set([
@@ -1228,12 +1229,7 @@ async function replayCurrentSnippet(roomId, deviceId) {
       return { ok: false, error: 'no_spotify', songIndex: idx };
     }
 
-    room.currentSong = {
-      id: song.id,
-      name: song.name,
-      artist: song.artist,
-      explicit: song.explicit === true,
-    };
+    callState.setCurrentSong(room, song);
     room.currentSongStartMs = startMs;
     room.songStartAtMs = Date.now();
     emitSongPlayingToRoom(roomId, room, song, idx);
@@ -1263,10 +1259,8 @@ async function replayCurrentSnippet(roomId, deviceId) {
 function markCurrentSongPlayed(roomId) {
   const room = rooms.get(roomId);
   if (!room?.currentSong?.id) return { ok: false, error: 'no_current' };
-  room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
   const songId = room.currentSong.id;
-  const added = !room.calledSongIds.includes(songId);
-  if (added) room.calledSongIds.push(songId);
+  const added = callState.appendCalledSongId(room, songId);
   syncRoomStateAfterSongStart(roomId, room);
   sendPlayerCardUpdates(roomId, true);
   const songMeta = clientSongMetaFromPlaylistSong(
@@ -1295,14 +1289,11 @@ function markNextSongCalledAndNotify(roomId, room, song, songIndex) {
   if (typeof songIndex === 'number' && songIndex >= 0) {
     room.currentSongIndex = songIndex;
   }
-  room.currentSong = {
-    id: song.id,
-    name: song.name,
-    artist: song.artist,
-    explicit: song.explicit === true,
-    ...(songUsesYoutubePlayback(song) ? { youtubeMusic: true } : {}),
-    ...(songUsesApplePlayback(song) ? { appleMusic: true } : {}),
-  };
+  callState.setCurrentSong(room, {
+    ...song,
+    youtubeMusic: songUsesYoutubePlayback(song),
+    appleMusic: songUsesApplePlayback(song),
+  });
   try {
     const r = rooms.get(roomId);
     if (r) r.songStartAtMs = Date.now();
@@ -1332,11 +1323,11 @@ function syncCalledSongIdsFromPlaybackIndex(room) {
     (room.gameState === 'playing' || room.gameState === 'paused_for_verification')
   ) {
     const prefix = songs.slice(0, idx + 1).map((s) => s?.id).filter(Boolean);
-    room.calledSongIds = prefix;
+    callState.setCalledSongIds(room, prefix);
     return [...prefix];
   }
   const existing = Array.isArray(room.calledSongIds) ? room.calledSongIds.filter(Boolean) : [];
-  room.calledSongIds = existing;
+  callState.setCalledSongIds(room, existing);
   return [...existing];
 }
 
@@ -1666,14 +1657,11 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
       if (bump) {
         routineServerLog(`🔁 Bump snippet start → ${startMs}ms (${Math.floor(startMs / 1000)}s) for ${song.name}`);
       }
-      room.currentSong = {
-        id: song.id,
-        name: song.name,
-        artist: song.artist,
-        explicit: song.explicit === true,
-        ...(songUsesYoutubePlayback(song) ? { youtubeMusic: true } : {}),
-        ...(songUsesApplePlayback(song) ? { appleMusic: true } : {}),
-      };
+      callState.setCurrentSong(room, {
+        ...song,
+        youtubeMusic: songUsesYoutubePlayback(song),
+        appleMusic: songUsesApplePlayback(song),
+      });
       try {
         const r = rooms.get(roomId);
         if (r) r.songStartAtMs = Date.now();
@@ -1785,12 +1773,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
       return { ok: false, error: errorMsg || 'playback_failed' };
     }
 
-    room.currentSong = {
-      id: song.id,
-      name: song.name,
-      artist: song.artist,
-      explicit: song.explicit === true
-    };
+    callState.setCurrentSong(room, song);
     try {
       const r = rooms.get(roomId);
       if (r) {
@@ -3714,8 +3697,7 @@ function resetRoomCallHistoryForPrepSwitch(room) {
   if (room.gameState === 'playing' || room.gameState === 'paused_for_verification') {
     return false;
   }
-  room.calledSongIds = [];
-  room.currentSong = null;
+  callState.resetCalls(room);
   room.currentSongIndex = 0;
   room.currentSongStartMs = 0;
   room.songStartAtMs = null;
@@ -7638,9 +7620,7 @@ io.on('connection', (socket) => {
     // CRITICAL: Mark current song as played BEFORE validation so it's included in validation
     // This ensures that if a player calls bingo while a song is playing, that song counts
     if (room.currentSong && room.currentSong.id) {
-      room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
-      if (!room.calledSongIds.includes(room.currentSong.id)) {
-        room.calledSongIds.push(room.currentSong.id);
+      if (callState.appendCalledSongId(room, room.currentSong.id)) {
         logger.debug(`📝 BINGO CALL: Marked current song as played BEFORE validation: ${room.currentSong.name} (${room.currentSong.id})`);
       } else {
         logger.debug(`✅ BINGO CALL: Current song already in played list: ${room.currentSong.name} (${room.currentSong.id})`);
@@ -8486,13 +8466,12 @@ io.on('connection', (socket) => {
     
     // Reset live progress; keep mixFinalized, pool, and player cards
     room.gameState = 'waiting';
-    room.currentSong = null;
+    callState.resetCalls(room);
     room.currentSongIndex = 0;
     room.currentSongStartMs = 0;
     room.songStartAtMs = null;
     room.winners = [];
     room.playedSongs = [];
-    room.calledSongIds = [];
     room.bingoVerificationQueue = [];
     room.roundWinners = [];
     room.liveNightBoardRoundNumber = null;
@@ -8580,12 +8559,11 @@ io.on('connection', (socket) => {
     
     // Reset EVERYTHING else back to initial setup state
     room.gameState = 'waiting';
-    room.currentSong = null;
+    callState.resetCalls(room);
     room.currentSongIndex = 0;
     room.currentSongStartMs = 0;
     room.winners = [];
     room.playedSongs = [];
-    room.calledSongIds = [];
     room.bingoVerificationQueue = [];
     clearPublicDisplaySessionState(room);
     
@@ -9008,7 +8986,7 @@ io.on('connection', (socket) => {
     if (!isCurrentHost) return;
     try {
       room.winners = [];
-      room.calledSongIds = [];
+      callState.resetCalls(room);
       room.bingoVerificationQueue = [];
       clearPublicDisplaySessionState(room);
       clearPlayerBingoCallState(room);
@@ -9017,7 +8995,6 @@ io.on('connection', (socket) => {
       }
       room.bingoCards = new Map();
       room.clientCards = new Map();
-      room.currentSong = null;
       room.currentSongIndex = 0;
       // Queue cleared by removing pre-queue system
       room.round = (room.round || 0) + 1;
@@ -9118,7 +9095,7 @@ io.on('connection', (socket) => {
         // Never show sponsor during a live round.
         hideSponsorScreen(room);
         // Initialize call history and round
-        room.calledSongIds = [];
+        callState.resetCalls(room);
         room.bingoVerificationQueue = [];
         room.winners = [];
         // Hosts often Start Game for the next planned round without start-next-round;
@@ -9135,7 +9112,6 @@ io.on('connection', (socket) => {
         room.liveNightBoardRoundNumber = (Array.isArray(room.roundWinners) ? room.roundWinners.length : 0) + 1;
         clearPublicDisplaySessionState(room);
         room.currentSongIndex = 0;
-        room.currentSong = null;
         room.round = (room.round || 0) + 1;
         // Apply pattern from host if provided; default to 'line' if still unset
         try {
@@ -9596,8 +9572,7 @@ io.on('connection', (socket) => {
       room.winners = [];
       room.playlistSongs = [];
       room.currentSongIndex = 0;
-      room.currentSong = null;
-      room.calledSongIds = [];
+      callState.resetCalls(room);
       room.bingoVerificationQueue = [];
       room.mixFinalized = false;
       room.finalizedPlaylists = undefined;
@@ -9663,7 +9638,7 @@ io.on('connection', (socket) => {
       clearRoomTimer(roomId);
       clearPlaybackWatcher(roomId);
       room.currentSongIndex = undo.previousIndex;
-      room.currentSong = undo.previousSong;
+      callState.restoreCurrentSong(room, undo.previousSong);
       const dev = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id || '';
       await playSongAtIndex(roomId, dev, undo.previousIndex);
       room.lastSkipUndo = null;
@@ -10174,12 +10149,12 @@ io.on('connection', (socket) => {
       const poolIndex = Array.isArray(room.playlistSongs)
         ? room.playlistSongs.findIndex((s) => s.id === songId)
         : -1;
-      room.currentSong = {
+      callState.setCurrentSong(room, {
         id: songId,
         name: songName,
         artist: artistName,
-        explicit: fromPool?.explicit === true
-      };
+        explicit: fromPool?.explicit === true,
+      });
       if (poolIndex >= 0) {
         room.currentSongIndex = poolIndex;
       }
@@ -13052,16 +13027,11 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     if (songUsesHostBrowserPlayback(firstSong)) {
       const startMsBrowser = computeSnippetRandomStartMs(room, firstSong);
       room.currentSongStartMs = startMsBrowser;
-      room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
-      room.calledSongIds.push(firstSong.id);
-      room.currentSong = {
-        id: firstSong.id,
-        name: firstSong.name,
-        artist: firstSong.artist,
-        explicit: firstSong.explicit === true,
-        ...(songUsesYoutubePlayback(firstSong) ? { youtubeMusic: true } : {}),
-        ...(songUsesApplePlayback(firstSong) ? { appleMusic: true } : {}),
-      };
+      callState.callSong(room, {
+        ...firstSong,
+        youtubeMusic: songUsesYoutubePlayback(firstSong),
+        appleMusic: songUsesApplePlayback(firstSong),
+      });
       try {
         const r = rooms.get(roomId);
         if (r) r.songStartAtMs = Date.now();
@@ -13154,14 +13124,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     }
 
     // Track called song
-    room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
-    room.calledSongIds.push(firstSong.id);
-    room.currentSong = {
-      id: firstSong.id,
-      name: firstSong.name,
-      artist: firstSong.artist,
-      explicit: firstSong.explicit === true,
-    };
+    callState.callSong(room, firstSong);
 
     emitSongPlayingToRoom(roomId, room, firstSong, 0);
     syncRoomStateAfterSongStart(roomId, room);
