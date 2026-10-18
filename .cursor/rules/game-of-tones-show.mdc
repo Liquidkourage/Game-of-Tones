@@ -31,6 +31,13 @@ alwaysApply: true
 - Player cards **must only** use the round's **75-song `songs` set**, not a separate pool.
 - If play order is corrected after cards exist: update **host list + projector + server list state** only; **do not** regenerate cards unless Jay explicitly asks.
 
+## Bingo marks (Option B)
+
+- **Phone owns marks.** Player taps update local card state (persisted for reconnect); claim sends `markedPositions` with `player-bingo`.
+- **Server validates** submitted marks ∩ called songs (plus free space + pattern) — not the server mark map as win authority.
+- `mark-square` is **host live-card telemetry** (throttled); it must not be required for a valid win if the phone's marks ∩ called form the pattern.
+- Host verify UI should show the claim-time mark snapshot when present.
+
 ## Code touch map (avoid partial fixes)
 
 | Concern | Primary files |
@@ -40,6 +47,7 @@ alwaysApply: true
 | Projector layout / call # | `client/src/components/PublicDisplay.tsx`, `client/src/App.css` |
 | Card pool / 5×15 vs 1×75 | `server/index.js` — `generateBingoCards` |
 | Auto display mode | `PublicDisplay.tsx` `columnCallListLayout`, host `publicDisplayCallListMode` |
+| Bingo claim marks (Option B) | `server/game/validateBingo.js` `cardWithClientMarks`, `player-bingo` in `server/index.js`, `PlayerView` claim payload |
 
 ## Agent mistakes to avoid
 

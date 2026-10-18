@@ -358,6 +358,11 @@ const PlayerView: React.FC = () => {
   const [oneBy75PlaylistNames, setOneBy75PlaylistNames] = useState<string[]>([]);
   const bingoHoldPointerIdRef = useRef<number | null>(null);
   const bingoHoldSubmittedRef = useRef(false);
+  /** Throttle mark-square telemetry to server (phone owns marks locally; host live cards only). */
+  const markSquareQueueRef = useRef<
+    Array<{ roomId: string; songId: string; position: string; cardId: string | undefined }>
+  >([]);
+  const markSquareFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [venueBranding, setVenueBranding] = useState<VenueBranding | null>(null);
   /** Five column letters for card headers (host pref: BINGO, TEMPO, TONES, …). */
   const [bingoColumnLetters, setBingoColumnLetters] = useState<string>('BINGO');
@@ -1835,8 +1840,34 @@ const PlayerView: React.FC = () => {
     };
   }, []);
 
+  const drainMarkSquareTelemetry = () => {
+    markSquareFlushTimerRef.current = null;
+    if (!socket) {
+      markSquareQueueRef.current = [];
+      return;
+    }
+    const payload = markSquareQueueRef.current.shift();
+    if (!payload) return;
+    socket.emit('mark-square', payload);
+    if (markSquareQueueRef.current.length > 0) {
+      markSquareFlushTimerRef.current = setTimeout(drainMarkSquareTelemetry, 280);
+    }
+  };
+
+  const enqueueMarkSquareTelemetry = (payload: {
+    roomId: string;
+    songId: string;
+    position: string;
+    cardId: string | undefined;
+  }) => {
+    markSquareQueueRef.current.push(payload);
+    if (!markSquareFlushTimerRef.current) {
+      markSquareFlushTimerRef.current = setTimeout(drainMarkSquareTelemetry, 0);
+    }
+  };
+
   const markSquare = (position: string) => {
-    if (!bingoCard || !socket) return;
+    if (!bingoCard || !socket || !roomId) return;
 
     const square = bingoCard.squares.find(s => s.position === position);
     if (!square) return;
@@ -1844,16 +1875,7 @@ const PlayerView: React.FC = () => {
     const free = isPlayerFreeSpaceSquare(square);
     const songId = free ? '__FREE_SPACE__' : square.songId;
 
-    // Emit mark-square event to server (FREE is toggleable for fun; still counts for bingo).
-    socket.emit('mark-square', {
-      roomId,
-      songId,
-      position,
-      cardId: bingoCard.cardId || bingoCard.id,
-    });
-
-    // Update local state optimistically (toggle)
-    // Server will send mark-confirmed event to ensure sync
+    // Phone owns marks (Option B). Local toggle + persist first; mark-square is throttled host telemetry.
     updateActiveBingoCard((prev) => {
       const updatedSquares = prev.squares.map((sq) =>
         sq.position === position ? { ...sq, marked: !sq.marked } : sq,
@@ -1862,6 +1884,14 @@ const PlayerView: React.FC = () => {
       persistMarks(updatedCard);
       return updatedCard;
     });
+
+    enqueueMarkSquareTelemetry({
+      roomId,
+      songId,
+      position,
+      cardId: bingoCard.cardId || bingoCard.id,
+    });
+
     if (navigator.vibrate) navigator.vibrate(10);
   };
 
@@ -2038,9 +2068,22 @@ const PlayerView: React.FC = () => {
           bingoHoldSubmittedRef.current = true;
           setBingoStatus('checking');
           setBingoMessage('Checking your bingo...');
+          const card = bingoCardRef.current;
+          const markedPositions = (card?.squares || [])
+            .filter((s) => s.marked)
+            .map((s) => s.position);
+          // Drain pending mark telemetry before claim so host live card is close.
+          if (markSquareFlushTimerRef.current) {
+            clearTimeout(markSquareFlushTimerRef.current);
+            markSquareFlushTimerRef.current = null;
+          }
+          while (markSquareQueueRef.current.length && socket) {
+            socket.emit('mark-square', markSquareQueueRef.current.shift());
+          }
           socket.emit('player-bingo', {
             roomId,
-            cardId: bingoCardRef.current?.cardId || bingoCardRef.current?.id,
+            cardId: card?.cardId || card?.id,
+            markedPositions,
           });
         }
         setBingoHolding(false);

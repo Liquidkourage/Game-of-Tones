@@ -49,6 +49,8 @@ const {
   listCompletedLinesPlayedStrict,
   checkBingoWithPlayedSongs,
   validateBingoCardGrid,
+  cardWithClientMarks,
+  applyClientMarksInPlace,
   validateBingoForPattern,
   customPatternMaskVariantsSrv,
   normalizePatternComposite,
@@ -7583,7 +7585,7 @@ io.on('connection', (socket) => {
     }
     if (player.inPerson === undefined) player.inPerson = true;
 
-    const { cardId } = data || {};
+    const { cardId, markedPositions: claimMarkedPositions } = data || {};
     const playerCards = resolveActivePlayerCards(room, player, socket.id);
     let bingoCard = playerBingoCards.findBingoCardInList(playerCards, cardId);
     if (!bingoCard && playerCards.length) bingoCard = playerCards[0];
@@ -7633,8 +7635,25 @@ io.on('connection', (socket) => {
       'bingo-call-summary',
       20
     );
-    
-    const validationResult = validateBingoForPattern(player.bingoCard, room);
+
+    // Option B: phone owns marks — claim payload markedPositions ∩ called is authority.
+    // Legacy clients omit markedPositions → fall back to server card mark map.
+    const hasClientMarks = Array.isArray(claimMarkedPositions);
+    if (hasClientMarks) {
+      applyClientMarksInPlace(bingoCard, claimMarkedPositions);
+      player.bingoCard = bingoCard;
+      storePlayerBingoCards(
+        room,
+        socket.id,
+        player,
+        playerCards.length ? playerCards : [bingoCard],
+        bingoCard.cardId || null,
+      );
+    }
+    const claimCard = hasClientMarks
+      ? cardWithClientMarks(bingoCard, claimMarkedPositions)
+      : bingoCard;
+    const validationResult = validateBingoForPattern(claimCard, room);
 
     const hybridMode = !!room.hybridInPersonPlusOnline;
     const isRemotePlayer = hybridMode && player.inPerson === false;
@@ -7666,7 +7685,7 @@ io.on('connection', (socket) => {
     }
     
     // Get winning pattern positions for verification display
-    const winningPatternPositions = getWinningPatternPositions(player.bingoCard, room, validationResult);
+    const winningPatternPositions = getWinningPatternPositions(claimCard, room, validationResult);
     
     if (validationResult.valid) {
       // AUTO-PAUSE the game for host verification
@@ -7738,11 +7757,12 @@ io.on('connection', (socket) => {
         console.warn(`🚨 MISSING SONGS: [${missingFromPlaylist.join(', ')}] - This could indicate a data integrity issue`);
       }
       
-      // CRITICAL: Use room.bingoCards list as source of truth (active card = bingo call cardId)
+      // Prefer claim-time card (Option B client marks already applied) for host verify UI
       const sourceCardList = playerBingoCards.asBingoCardList(
         room.bingoCards?.get(socket.id) || player.bingoCards || player.bingoCard,
       );
       const sourceCard =
+        claimCard ||
         playerBingoCards.findBingoCardInList(sourceCardList, bingoCard?.cardId || player.bingoCard?.cardId) ||
         bingoCard ||
         sourceCardList[0] ||
@@ -7855,11 +7875,12 @@ io.on('connection', (socket) => {
         }
       }
       
-      // Use room.bingoCards list as source of truth
+      // Prefer claim-time card (Option B client marks) for host verify UI
       const sourceCardListFail = playerBingoCards.asBingoCardList(
         room.bingoCards?.get(socket.id) || player.bingoCards || player.bingoCard,
       );
       const sourceCard =
+        claimCard ||
         playerBingoCards.findBingoCardInList(sourceCardListFail, bingoCard?.cardId || player.bingoCard?.cardId) ||
         bingoCard ||
         sourceCardListFail[0] ||
@@ -7871,7 +7892,7 @@ io.on('connection', (socket) => {
       }
       
       const markedSquares = sourceCard.squares.filter(s => s.marked);
-      const winningPatternPositions = getWinningPatternPositions(player.bingoCard, room, validationResult);
+      const winningPatternPositions = getWinningPatternPositions(claimCard, room, validationResult);
       
       const cardToSend = {
         ...sourceCard,
@@ -10174,6 +10195,7 @@ io.on('connection', (socket) => {
   });
 
   // Mark bingo square
+  // Option B: mark-square is telemetry for host live cards — claim authority is phone markedPositions.
   socket.on('mark-square', (data) => {
     const { roomId, songId, position, cardId } = data || {};
     const room = rooms.get(roomId);
@@ -10206,8 +10228,7 @@ io.on('connection', (socket) => {
             square.songId = FREE_SPACE_SONG_ID;
           }
 
-          // CRITICAL: Send confirmation back to player to ensure their state matches server
-          // This prevents desync where server has mark but player doesn't
+          // Echo for clients that still sync off server; phone local marks remain claim authority.
           socket.emit('mark-confirmed', {
             position,
             songId: isFree ? FREE_SPACE_SONG_ID : songId,
@@ -10215,7 +10236,7 @@ io.on('connection', (socket) => {
             cardId: card.cardId || card.id,
           });
           
-          // Send real-time player card updates to host (immediate so marks show without delay)
+          // Host live cards (throttled batch path still applies via sendPlayerCardUpdates)
           sendPlayerCardUpdates(roomId, true);
           void persistPlayerDataCard(room, player, cards.length ? cards : [card]);
           // Fun FREE taps shouldn't inflate mark stats
@@ -10223,8 +10244,7 @@ io.on('connection', (socket) => {
             void playerAccountsStore.recordMark(db, player.playerUserId, playerStatsContext(room, player), 1);
           }
           
-          // Check for bingo pattern completion (but don't auto-announce)
-          // Use the same validation logic as the actual bingo call for consistency
+          // Hint only — win claims use player-bingo + markedPositions (Option B)
           const validationResult = validateBingoForPattern(card, room);
           if (validationResult.valid && !player.patternComplete) {
             player.patternComplete = true; // Use separate flag for pattern completion

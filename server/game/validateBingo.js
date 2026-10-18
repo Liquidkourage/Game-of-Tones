@@ -584,6 +584,43 @@ function validateBingoCardGrid(card) {
   return seen.size === 25;
 }
 
+/**
+ * Option B: phone owns marks at claim time.
+ * Returns a shallow card copy whose `square.marked` comes from client positions
+ * (not the server mark map). Invalid / missing positions are ignored.
+ * When `markedPositions` is null/undefined, returns the original card (legacy).
+ */
+function cardWithClientMarks(card, markedPositions) {
+  if (!card || markedPositions == null) return card;
+  const set = new Set(
+    (Array.isArray(markedPositions) ? markedPositions : [])
+      .map((p) => String(p))
+      .filter((p) => /^[0-4]-[0-4]$/.test(p)),
+  );
+  return {
+    ...card,
+    squares: (card.squares || []).map((sq) => ({
+      ...sq,
+      marked: set.has(String(sq.position)),
+    })),
+  };
+}
+
+/** Mutate card squares in place to match client claim marks (host live / verify snapshot). */
+function applyClientMarksInPlace(card, markedPositions) {
+  if (!card?.squares || markedPositions == null) return card;
+  const set = new Set(
+    (Array.isArray(markedPositions) ? markedPositions : [])
+      .map((p) => String(p))
+      .filter((p) => /^[0-4]-[0-4]$/.test(p)),
+  );
+  for (const sq of card.squares) {
+    if (!sq) continue;
+    sq.marked = set.has(String(sq.position));
+  }
+  return card;
+}
+
 function validateBingoForPattern(card, room) {
   const pattern = room?.pattern || 'line';
   // Make a copy to avoid race conditions during validation
@@ -835,6 +872,8 @@ module.exports = {
   listCompletedLinesPlayedStrict,
   checkBingoWithPlayedSongs,
   validateBingoCardGrid,
+  cardWithClientMarks,
+  applyClientMarksInPlace,
   validateBingoForPattern,
   customPatternMaskVariantsSrv,
   normalizePatternComposite,

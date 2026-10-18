@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
   validateBingoForPattern,
   validateBingoCardGrid,
+  cardWithClientMarks,
   normalizeLinesRequiredSrv,
   LINE_PATTERN_MAX_LINES_SRV,
   checkBingoWithPlayedSongs,
@@ -175,5 +176,32 @@ describe('free space characterization', () => {
     free.marked = false;
     const called = callIdsForPositions(card, row2);
     assert.equal(validateBingoForPattern(card, roomWithCalls('line', called)).valid, true);
+  });
+});
+
+describe('Option B — cardWithClientMarks', () => {
+  it('ignores server marks; uses client positions ∩ called for win', () => {
+    const card = makeGridCard();
+    // Server wrongly has no marks
+    const row0 = ['0-0', '0-1', '0-2', '0-3', '0-4'];
+    const called = callIdsForPositions(card, row0);
+    assert.equal(validateBingoForPattern(card, roomWithCalls('line', called)).valid, false);
+
+    const claimCard = cardWithClientMarks(card, row0);
+    assert.equal(validateBingoForPattern(claimCard, roomWithCalls('line', called)).valid, true);
+    // Original card unchanged
+    assert.equal(card.squares.find((s) => s.position === '0-0').marked, false);
+  });
+
+  it('rejects claim marks for songs that were not called', () => {
+    const card = makeGridCard();
+    const row0 = ['0-0', '0-1', '0-2', '0-3', '0-4'];
+    const claimCard = cardWithClientMarks(card, row0);
+    assert.equal(validateBingoForPattern(claimCard, roomWithCalls('line', [])).valid, false);
+  });
+
+  it('null markedPositions returns original card (legacy clients)', () => {
+    const card = makeGridCard();
+    assert.equal(cardWithClientMarks(card, null), card);
   });
 });
