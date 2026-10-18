@@ -1,9 +1,7 @@
-import React from 'react';
-import { render, screen } from '@testing-library/react';
-import App from './App';
-
-test('renders learn react link', () => {
-  render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+/**
+ * CRA Jest stub — real game characterization lives in `server/**/*.test.js` (`npm test` at repo root).
+ * Keep this file so `react-scripts test` does not fail on the default "learn react" assertion.
+ */
+test('client test harness is wired', () => {
+  expect(true).toBe(true);
 });
