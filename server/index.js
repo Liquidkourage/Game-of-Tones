@@ -42,6 +42,7 @@ const {
   shouldPersistRoom: shouldPersistLiveRoom,
 } = require('./game/liveRoomSnapshot');
 const participantIdentity = require('./game/participantIdentity');
+const { roomStateSafeForPlayers } = require('./game/roomStateForPlayers');
 const { createSocketGate, createTokenBucket } = require('./game/socketGate');
 const { properShuffle } = require('./game/shuffle');
 const playbackTimers = require('./playback/timers');
@@ -1043,40 +1044,22 @@ function emitToPlayersOnly(roomId, room, event, payload) {
   }
 }
 
-/**
- * Strip currently-playing / call-list / reveal payloads from room-state for player phones.
- * Players need pattern + board chrome only — not song IDs for auto-mark scripts.
- */
-function roomStateSafeForPlayers(payload) {
-  if (!payload || typeof payload !== 'object') return payload;
-  const safe = { ...payload };
-  safe.currentSong = null;
-  safe.playedSongs = [];
-  safe.playedSongIds = [];
-  safe.totalPlayedCount = 0;
-  safe.currentSongIndex = 0;
-  safe.totalSongs = undefined;
-  // Projector letter-reveal / winner overlays are not needed on phones and can leak titles.
-  delete safe.publicDisplayRevealState;
-  delete safe.lastDisplayWinner;
-  delete safe.publicDisplayFontSize;
-  delete safe.publicDisplayCallListMode;
-  delete safe.letterRevealIntervalSec;
-  delete safe.publicDisplayTitleRevealMode;
-  delete safe.publicDisplayLetterRevealToast;
-  delete safe.playerFeedback;
-  delete safe.songRequests;
-  delete safe.playlists;
-  delete safe.selectedDeviceId;
-  delete safe.winners;
-  delete safe.roundWinners;
-  return safe;
-}
-
 /** Full room-state → host/display; call-safe subset → player phones. */
 function emitRoomStateSplit(roomId, room, fullPayload) {
   emitToHostAndDisplays(roomId, room, 'room-state', fullPayload);
   emitToPlayersOnly(roomId, room, 'room-state', roomStateSafeForPlayers(fullPayload));
+}
+
+/** Projector/host theater only — never emit to player phones (asymmetric clients). */
+function emitSnippetBumped(roomId, room, songIndex, startMs) {
+  const idx = typeof songIndex === 'number' && songIndex >= 0 ? songIndex : 0;
+  emitToHostAndDisplays(roomId, room, 'snippet-bumped', {
+    roomId,
+    songIndex: idx,
+    callNumber: idx + 1,
+    startMs: typeof startMs === 'number' && Number.isFinite(startMs) ? startMs : null,
+    at: Date.now(),
+  });
 }
 
 /** Playlist rows safe for the whole room (no embedded track lists). */
@@ -1343,6 +1326,7 @@ async function replayCurrentSnippet(roomId, deviceId) {
     emitSongPlayingToRoom(roomId, room, song, idx);
     sendPlayerCardUpdates(roomId, true);
     startSimpleProgression(roomId, targetDeviceId, room.snippetLength);
+    emitSnippetBumped(roomId, room, idx, startMs);
     io.to(roomId).emit('game-resumed', { reason: 'Host bumped clip' });
     return { ok: true, songIndex: idx, startMs };
   } catch (e) {
@@ -1815,6 +1799,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
       const saved = loadSavedDeviceForRoom(roomId);
       const dev = deviceId || (saved && saved.id) || '';
       startSimpleProgression(roomId, dev, room.snippetLength);
+      if (bump) emitSnippetBumped(roomId, room, songIndex, startMs);
       return { ok: true, startMs };
     }
 
@@ -1932,6 +1917,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
 
     // Use simplified progression system
     startSimpleProgression(roomId, targetDeviceId, room.snippetLength);
+    if (bump) emitSnippetBumped(roomId, room, songIndex, startMs);
     return { ok: true, startMs };
   } catch (error) {
     console.error('❌ Error playing song at index:', error);

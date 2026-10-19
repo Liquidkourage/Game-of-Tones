@@ -300,6 +300,78 @@ body {
   width: 100%;
 }
 
+/* Host bump theater — intentional “new cut” on projector (not a glitch). */
+.public-bump-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 2600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(0, 40, 28, 0.55) 0%, rgba(0, 0, 0, 0.72) 70%);
+  animation: public-bump-flash-fade 2.4s ease-out forwards;
+}
+
+.public-bump-flash__inner {
+  text-align: center;
+  padding: clamp(20px, 4vmin, 48px) clamp(28px, 6vmin, 72px);
+  border-radius: clamp(16px, 2vmin, 28px);
+  border: max(2px, 0.3vmin) solid rgba(0, 255, 170, 0.55);
+  background: rgba(8, 18, 16, 0.88);
+  box-shadow: 0 0 48px rgba(0, 255, 170, 0.28), 0 24px 64px rgba(0, 0, 0, 0.55);
+  animation: public-bump-flash-pop 2.4s ease-out forwards;
+}
+
+.public-bump-flash__kicker {
+  font-size: clamp(0.95rem, 2.2vmin, 1.35rem);
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
+  margin-bottom: clamp(8px, 1.2vmin, 14px);
+}
+
+.public-bump-flash__title {
+  font-size: clamp(1.85rem, 5.5vmin, 4rem);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5dffc0;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.55), 0 0 36px rgba(0, 255, 170, 0.35);
+  line-height: 1.1;
+}
+
+@keyframes public-bump-flash-fade {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes public-bump-flash-pop {
+  0% {
+    transform: scale(0.92);
+  }
+  14% {
+    transform: scale(1.02);
+  }
+  28% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 /* Footer Styles */
 .app-footer {
   background: rgba(26, 26, 26, 0.95);

@@ -4117,8 +4117,8 @@ const HostView: React.FC = () => {
 
     newSocket.on('replay-snippet-result', (data: any) => {
       if (data?.ok) {
-        addLog('Bumped snippet to a new start', 'info');
-        showToast('Bumped clip', 'info');
+        addLog('New cut — same song, new snippet window', 'info');
+        showToast('New cut', 'info');
         setGamePaused(false);
         setIsPlaying(true);
       } else {
@@ -14341,6 +14341,7 @@ const HostView: React.FC = () => {
                         winners={roundWinners}
                         showOnProjector={showNightBoard}
                         onToggleProjector={setNightBoardVisible}
+                        roomId={roomId || undefined}
                       />
                     )}
                   </div>

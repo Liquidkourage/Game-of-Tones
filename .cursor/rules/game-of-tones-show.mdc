@@ -26,6 +26,11 @@ alwaysApply: true
 - **1×75 call grid** (five columns × five rows per window): top row = calls **1, 6, 11, 16, 21** (then 26, 31, …); bottom row = **5, 10, 15, 20, 25** (then 30, 35, …). Fill **down each column**, advance **left to right** (column 1 = 1–5, column 2 = 6–10, …). Call number = **play order index**, not pool band index.
 - **5×15 mode**: five playlist columns (B–O); still use **play order** for call badges when shown.
 
+## Asymmetric clients (forever)
+
+- **Phones never get call identity** mid-round: no `song-playing` / played-ID lists / letter-reveal / bump theater on player sockets. Strip via `roomStateSafeForPlayers`; bump flash is host+projector only (`snippet-bumped`).
+- Do **not** “help” phones with titles, auto-mark from audio, or spoiler hints — ear-only is the product. See `docs/ASYMMETRIC_CLIENTS.md`.
+
 ## Cards vs playback
 
 - Player cards **must only** use the round's **75-song `songs` set**, not a separate pool.

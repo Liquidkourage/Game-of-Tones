@@ -1132,6 +1132,10 @@ const PlayerView: React.FC = () => {
       } catch {}
     });
 
+    // Asymmetric clients: never act on now-playing / bump theater (host+projector only).
+    newSocket.on('song-playing', () => {});
+    newSocket.on('snippet-bumped', () => {});
+
     newSocket.on('song-alias-updated', (data: { songId: string; title: string; artist: string }) => {
       if (!data?.songId) return;
       patchAllBingoCardsSquares((squares) =>
