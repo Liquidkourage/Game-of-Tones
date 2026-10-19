@@ -1494,6 +1494,24 @@ function buildRoomPlayersRoster(room) {
   return roster;
 }
 
+/**
+ * Drop a superseded host seat entirely. Demoting with isHost=false left the host
+ * visible as a normal player (roster + bingo cards).
+ */
+function removeSupersededHostSeat(room, oldSocketId, reason) {
+  if (!room?.players || !oldSocketId) return false;
+  const op = room.players.get(oldSocketId);
+  if (!op) return false;
+  if (op.participantId) {
+    participantIdentity.unbindParticipantSocket(room, op.participantId, oldSocketId);
+  }
+  room.players.delete(oldSocketId);
+  routineServerLog(
+    `Removed superseded host seat ${op.name || '?'} (${oldSocketId})${reason ? `: ${reason}` : ''}`,
+  );
+  return true;
+}
+
 function normalizePlayerAvatarFromJoin(data, accountAvatar) {
   const fromAccount = playerAvatarStore.sanitizeAvatarValue(accountAvatar);
   if (fromAccount) return fromAccount;
@@ -6295,9 +6313,8 @@ io.on('connection', (socket) => {
           room.hostParticipantId &&
           hostParticipantId === room.hostParticipantId;
         if (sameClientReconnect || sameHostParticipant) {
-          if (room.players.has(room.host)) {
-            const op = room.players.get(room.host);
-            if (op) op.isHost = false;
+          if (room.host && room.host !== socket.id) {
+            removeSupersededHostSeat(room, room.host, 'host reconnect');
           }
           participantIdentity.setHostBinding(room, {
             participantId: hostParticipantId || room.hostParticipantId,
@@ -6322,9 +6339,8 @@ io.on('connection', (socket) => {
             claimUid != null &&
             Number(claimUid) === ownerUid
           ) {
-            if (room.players.has(room.host)) {
-              const op = room.players.get(room.host);
-              if (op) op.isHost = false;
+            if (room.host && room.host !== socket.id) {
+              removeSupersededHostSeat(room, room.host, 'host owner takeover');
             }
             participantIdentity.setHostBinding(room, {
               participantId: hostParticipantId || `host:user:${ownerUid}`,
@@ -6485,10 +6501,9 @@ io.on('connection', (socket) => {
     }
 
     if (effectiveIsHost) {
-      for (const [pid, p] of room.players) {
-        if (pid !== socket.id && p.isHost) {
-          routineServerLog(`Removing old host entry for ${p.name} (${pid})`);
-          p.isHost = false;
+      for (const [pid, p] of [...room.players.entries()]) {
+        if (pid !== socket.id && p?.isHost) {
+          removeSupersededHostSeat(room, pid, 'replaced by new host join');
         }
       }
       try {
@@ -6959,9 +6974,8 @@ io.on('connection', (socket) => {
     const ownerUid = room.ownerUserId != null ? Number(room.ownerUserId) : null;
     const socketUid = socket.hostUserId != null ? Number(socket.hostUserId) : null;
     if (!isCurrentHost && participantIdentity.requireHost(socket, room)) {
-      if (room.host && room.host !== socket.id && room.players.has(room.host)) {
-        const prior = room.players.get(room.host);
-        if (prior) prior.isHost = false;
+      if (room.host && room.host !== socket.id) {
+        removeSupersededHostSeat(room, room.host, 'host reclaim on finalize');
       }
       const reclaimPid =
         participantIdentity.participantIdForJoin({
@@ -6998,6 +7012,7 @@ io.on('connection', (socket) => {
       playerIsHost = true;
       socketIsRoomHost = true;
       isCurrentHost = true;
+      emitRoomPlayersRosterToHosts(roomId, room);
       routineServerLog(`✅ finalize-mix: reclaimed host for room owner (uid ${ownerUid})`);
     }
     
