@@ -50,6 +50,8 @@ alwaysApply: true
 | Bingo claim marks (Option B) | `server/game/validateBingo.js` `cardWithClientMarks`, `player-bingo` in `server/index.js`, `PlayerView` claim payload |
 | Mid-show restart persistence | `server/game/liveRoomSnapshot.js`, `server/liveRoomsStore.js` (`live_rooms`); host Resume after hydrate (`needsHostResume`) |
 | Stable participant identity | `server/game/participantIdentity.js`; `room.hostParticipantId` + `socketsByParticipant`; bingo queue carries `participantId` |
+| Socket gate / rate limits | `server/game/socketGate.js`; hot events in `docs/socket-events.md` |
+| Round timer registry | `server/playback/timers.js` (`snippetAdvance`); `stopLiveRoundTimers` clears all |
 
 ## Agent mistakes to avoid
 

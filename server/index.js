@@ -41,7 +41,9 @@ const {
   shouldPersistRoom: shouldPersistLiveRoom,
 } = require('./game/liveRoomSnapshot');
 const participantIdentity = require('./game/participantIdentity');
+const { createSocketGate, createTokenBucket } = require('./game/socketGate');
 const { properShuffle } = require('./game/shuffle');
+const playbackTimers = require('./playback/timers');
 const {
   FREE_SPACE_SONG_ID,
   isFreeBingoSquare,
@@ -281,6 +283,9 @@ const corsAllowedOrigins = expandCorsOriginAliases(
 // Log CORS configuration for debugging
 if (isProduction) {
   if (allowAllCors) {
+    console.error(
+      '🚨 SECURITY: CORS_ORIGINS=* in production — Socket.IO and HTTP allow all origins. Set CORS_ORIGINS to your app origin(s).',
+    );
     routineServerLog('🔓 CORS: Allowing ALL origins (*)');
   } else {
     routineServerLog('🔒 CORS: Restricting to origins:', corsAllowedOrigins);
@@ -405,6 +410,14 @@ playerAvatarStore.registerPlayerAvatarRoutes(app);
 // Game state management
 const games = new Map();
 const rooms = new Map();
+
+const socketGate = createSocketGate({
+  requireHost: (socket, room) => participantIdentity.requireHost(socket, room),
+  getRoom: (roomId) => rooms.get(roomId),
+});
+/** Player tap / claim spam protection (per socket). */
+const playerSocketRate = createTokenBucket({ capacity: 20, refillPerSec: 8 });
+const bingoClaimRate = createTokenBucket({ capacity: 4, refillPerSec: 0.5 });
 
 /** Debounced live_rooms writes (P0 #3 mid-show restart persistence). */
 const liveRoomSnapshotTimers = new Map();
@@ -1659,54 +1672,49 @@ function saveDeviceForUser(uid, device) {
   }
 }
 
-// Timer management functions
+// Timer management — snippet advance via playbackTimers registry (#9)
 function clearRoomTimer(roomId) {
-  if (roomTimers.has(roomId)) {
-    const room = rooms.get(roomId);
-    const currentTime = Date.now();
-    if (VERBOSE) {
-    routineServerLog(`🔍 TIMER CLEARED - Room: ${roomId}, Time: ${currentTime}`);
-    routineServerLog(`🔍 Reason: Manual interruption (skip/pause/previous)`);
-    routineServerLog(`🔍 Current Song: ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
-    routineServerLog(`🔍 Stack trace:`, new Error().stack?.split('\n').slice(1, 4).join('\n'));
-    }
-    
+  const hadLegacy = roomTimers.has(roomId);
+  if (hadLegacy) {
     clearTimeout(roomTimers.get(roomId));
     roomTimers.delete(roomId);
+  }
+  const cleared = playbackTimers.clear(roomId, 'snippetAdvance');
+  if (hadLegacy || cleared) {
+    if (VERBOSE) {
+      const room = rooms.get(roomId);
+      routineServerLog(`🔍 TIMER CLEARED - Room: ${roomId}`);
+      routineServerLog(`🔍 Current Song: ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
+    }
     routineServerLog(`⏰ Cleared timer for room: ${roomId}`);
   }
 }
 
 function setRoomTimer(roomId, callback, delay) {
-  // Clear any existing timer for this room
   clearRoomTimer(roomId);
-  
-  // Use exact delay - no buffer manipulation
+  const room = rooms.get(roomId);
+  const seq = room?.callSequence || 0;
   const actualDelay = delay;
-  
-  // Set new timer
-  const timerId = setTimeout(() => {
-    const room = rooms.get(roomId);
-    const currentTime = Date.now();
-    if (VERBOSE) {
-    routineServerLog(`🔍 TIMER FIRED - Room: ${roomId}, Time: ${currentTime}, Expected Duration: ${delay}ms, Actual Duration: ${actualDelay}ms`);
-    routineServerLog(`🔍 Room State - GameState: ${room?.gameState}, CurrentSongIndex: ${room?.currentSongIndex}, TotalSongs: ${room?.playlistSongs?.length}`);
-    routineServerLog(`🔍 Current Song - ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
-    routineServerLog(`🔍 Room exists: ${!!room}, Room ID: ${room?.id}`);
-    }
-    
-    roomTimers.delete(roomId);
-    if (!roomStillPlaying(roomId)) {
-      if (VERBOSE) routineServerLog(`🔍 Timer callback skipped — room ${roomId} no longer playing`);
-      return;
-    }
-    if (VERBOSE) routineServerLog(`🔍 About to execute callback for room ${roomId}`);
-    callback();
-    if (VERBOSE) routineServerLog(`🔍 Callback executed for room ${roomId}`);
-  }, actualDelay);
-  
-  roomTimers.set(roomId, timerId);
-  routineServerLog(`⏰ Set timer for room ${roomId}: ${actualDelay}ms (${actualDelay/1000}s)`);
+  playbackTimers.schedule(
+    roomId,
+    'snippetAdvance',
+    actualDelay,
+    () => {
+      if (VERBOSE) {
+        const r = rooms.get(roomId);
+        routineServerLog(
+          `🔍 TIMER FIRED - Room: ${roomId}, GameState: ${r?.gameState}, Index: ${r?.currentSongIndex}`,
+        );
+      }
+      if (!roomStillPlaying(roomId)) {
+        if (VERBOSE) routineServerLog(`🔍 Timer callback skipped — room ${roomId} no longer playing`);
+        return;
+      }
+      callback();
+    },
+    { callSequence: seq, getRoom: (id) => rooms.get(id), requirePlaying: true },
+  );
+  routineServerLog(`⏰ Set timer for room ${roomId}: ${actualDelay}ms (${actualDelay / 1000}s)`);
 }
 
 // Play song at specific index without changing the index.
@@ -4563,6 +4571,7 @@ function clearSpotifyCallRetryTimer(room) {
     clearTimeout(room._spotifyCallRetryTimer);
     room._spotifyCallRetryTimer = null;
   }
+  if (room?.id) playbackTimers.clear(room.id, 'spotifyCallRetry');
 }
 
 /**
@@ -4628,6 +4637,8 @@ function stopLiveRoundTimers(roomId, room) {
   releaseSongAdvance(room);
   clearSpotifyCallRetryTimer(room);
   clearRoomTimer(roomId);
+  playbackTimers.clear(roomId, 'spotifyCallRetry');
+  playbackTimers.clearAll(roomId);
   clearPlaybackWatcher(roomId);
 }
 
@@ -7768,7 +7779,7 @@ io.on('connection', (socket) => {
   });
 
   // Player calls BINGO (validated server-side)
-  socket.on('player-bingo', (data) => {
+  socketGate.on(socket, 'player-bingo', { rate: bingoClaimRate }, (data) => {
     const { roomId } = data || {};
     const room = rooms.get(roomId);
     if (!room) {
@@ -8149,7 +8160,7 @@ io.on('connection', (socket) => {
   });
 
   // Host approves or rejects bingo verification
-  socket.on('verify-bingo', (data) => {
+  socketGate.on(socket, 'verify-bingo', { hostOnly: true }, (data) => {
     const { roomId, playerId, approved, reason, playerName: bodyPlayerName, continueRound } = data || {};
     const room = rooms.get(roomId);
     if (!room) {
@@ -9252,7 +9263,8 @@ io.on('connection', (socket) => {
 
   // Pre-queue system removed - deterministic playback only
 
-  socket.on('start-game', async (data) => {
+  // hostOnly not used here: start-game may recreate a missing room for the owner before host binds.
+  socketGate.on(socket, 'start-game', { requireRoomId: true }, async (data) => {
     routineServerLog('🎮 Start game event received:', data);
     const { roomId, playlists, snippetLength = 30, deviceId, songList, lockedPlayOrder, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchReverse: incomingCustomReverse, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, customMatchAnywhere: incomingCustomAnywhere, customPatternName: incomingCustomPatternName, freeSpace, savedRoundPlayback, savedRoundId, roundName: incomingRoundName, prize: incomingRoundPrize } = data;
     const room = rooms.get(roomId);
@@ -9754,7 +9766,7 @@ io.on('connection', (socket) => {
   });
 
   // End current game gracefully (stop timers, optionally pause Spotify, keep cards/history)
-  socket.on('end-game', async (data) => {
+  socketGate.on(socket, 'end-game', { hostOnly: true }, async (data) => {
     const { roomId, stopPlayback = true } = data || {};
     const room = rooms.get(roomId);
     if (!room) return;
@@ -9784,7 +9796,7 @@ io.on('connection', (socket) => {
   });
 
   // Reset room to a fresh waiting state (clears cards, winners, playlist order)
-  socket.on('reset-game', async (data) => {
+  socketGate.on(socket, 'reset-game', { hostOnly: true }, async (data) => {
     const { roomId, stopPlayback = true } = data || {};
     const room = rooms.get(roomId);
     if (!room) return;
@@ -10409,7 +10421,7 @@ io.on('connection', (socket) => {
 
   // Mark bingo square
   // Option B: mark-square is telemetry for host live cards — claim authority is phone markedPositions.
-  socket.on('mark-square', (data) => {
+  socketGate.on(socket, 'mark-square', { rate: playerSocketRate }, (data) => {
     const { roomId, songId, position, cardId } = data || {};
     const room = rooms.get(roomId);
     
@@ -13746,47 +13758,7 @@ function sendPlayerCardUpdatesNow(roomId) {
   }
 }
 
-function checkBingo(card) {
-  // Check rows
-  for (let row = 0; row < 5; row++) {
-    let rowComplete = true;
-    for (let col = 0; col < 5; col++) {
-      const square = card.squares.find(s => s.position === `${row}-${col}`);
-      if (!square || !square.marked) {
-        rowComplete = false;
-        break;
-      }
-    }
-    if (rowComplete) return true;
-  }
-  
-  // Check columns
-  for (let col = 0; col < 5; col++) {
-    let colComplete = true;
-    for (let row = 0; row < 5; row++) {
-      const square = card.squares.find(s => s.position === `${row}-${col}`);
-      if (!square || !square.marked) {
-        colComplete = false;
-        break;
-      }
-    }
-    if (colComplete) return true;
-  }
-  
-  // Check diagonals
-  let diag1Complete = true;
-  let diag2Complete = true;
-  for (let i = 0; i < 5; i++) {
-    const square1 = card.squares.find(s => s.position === `${i}-${i}`);
-    const square2 = card.squares.find(s => s.position === `${i}-${4-i}`);
-    
-    if (!square1 || !square1.marked) diag1Complete = false;
-    if (!square2 || !square2.marked) diag2Complete = false;
-  }
-  
-  return diag1Complete || diag2Complete;
-}
-
+// Legacy mark-only checkBingo removed (unused) — wins use validateBingoForPattern (Option B).
 // Bingo pattern validation → server/game/validateBingo.js
 
 // Helper function to get winning pattern positions for verification display

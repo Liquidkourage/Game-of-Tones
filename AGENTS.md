@@ -38,6 +38,7 @@ Background shelf hydrate caused the Oct 2026 app **429**. `/api/org/shared-host-
 - **UI:** `client/src/` (React, `PlayerView`, `HostView`, etc.)
 - **API + sockets:** `server/`
 - **Root scripts:** `package.json` (`dev`, `build`, …)
+- **Engineering backlog status:** [`docs/ENGINEERING_BACKLOG.md`](docs/ENGINEERING_BACKLOG.md) (done vs deferred outside-review items)
 
 ## Live show (order, display, cards) — Jay’s source of truth
 
