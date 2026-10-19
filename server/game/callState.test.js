@@ -27,6 +27,9 @@ describe('callState', () => {
     assert.equal(room.currentSong.id, 's1');
     assert.equal(room.currentSong.explicit, true);
     assert.deepEqual(room.calledSongIds, ['s1']);
+    assert.ok(room.calledSongIds.includes(room.currentSong.id));
+    assert.equal(typeof room.callSequence, 'number');
+    assert.ok(room.callSequence >= 1);
     assert.equal(callSong(room, song).added, false);
     assert.deepEqual(room.calledSongIds, ['s1']);
   });

@@ -32,6 +32,7 @@ function resetCalls(room) {
 function setCalledSongIds(room, ids) {
   if (!room) return;
   room.calledSongIds = Array.isArray(ids) ? ids.filter(Boolean) : [];
+  room.callSequence = (room.callSequence || 0) + 1;
 }
 
 /** Set or clear currentSong only (bump / undo / display). */
@@ -50,7 +51,8 @@ function callSong(room, song) {
   ensureCalledList(room);
   const added = !room.calledSongIds.includes(song.id);
   if (added) room.calledSongIds.push(song.id);
-  return { added };
+  room.callSequence = (room.callSequence || 0) + 1;
+  return { added, callSequence: room.callSequence };
 }
 
 /** Append a called id without changing currentSong. */

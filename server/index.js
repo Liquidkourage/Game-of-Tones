@@ -34,6 +34,12 @@ const youtubeMusic = require('./youtubeMusic');
 const appleMusic = require('./appleMusic');
 const { applyYoutubeCatalogTrackVerification } = require('./youtubeTrackCatalogVerify');
 const playerBingoCards = require('./playerBingoCards');
+const liveRoomsStore = require('./liveRoomsStore');
+const {
+  serializeRoom: serializeLiveRoom,
+  hydrateRoom: hydrateLiveRoom,
+  shouldPersistRoom: shouldPersistLiveRoom,
+} = require('./game/liveRoomSnapshot');
 const { properShuffle } = require('./game/shuffle');
 const {
   FREE_SPACE_SONG_ID,
@@ -398,6 +404,91 @@ playerAvatarStore.registerPlayerAvatarRoutes(app);
 // Game state management
 const games = new Map();
 const rooms = new Map();
+
+/** Debounced live_rooms writes (P0 #3 mid-show restart persistence). */
+const liveRoomSnapshotTimers = new Map();
+const LIVE_ROOM_SNAPSHOT_DEBOUNCE_MS = 250;
+
+function scheduleLiveRoomSnapshot(roomId) {
+  if (!db || !roomId) return;
+  const existing = liveRoomSnapshotTimers.get(roomId);
+  if (existing) clearTimeout(existing);
+  const t = setTimeout(() => {
+    liveRoomSnapshotTimers.delete(roomId);
+    void flushLiveRoomSnapshot(roomId);
+  }, LIVE_ROOM_SNAPSHOT_DEBOUNCE_MS);
+  liveRoomSnapshotTimers.set(roomId, t);
+}
+
+async function flushLiveRoomSnapshot(roomId) {
+  if (!db || !roomId) return;
+  const room = rooms.get(roomId);
+  if (!room || !shouldPersistLiveRoom(room)) return;
+  const state = serializeLiveRoom(room);
+  if (!state) return;
+  await liveRoomsStore.upsertLiveRoom(db, roomId, state, {
+    orgId: room.dbOrganizationId ?? room.organizationId ?? null,
+    ownerUserId: room.ownerUserId ?? null,
+    gameState: room.gameState,
+  });
+}
+
+async function flushAllLiveRoomSnapshots() {
+  if (!db) return;
+  for (const [roomId, timer] of liveRoomSnapshotTimers.entries()) {
+    clearTimeout(timer);
+    liveRoomSnapshotTimers.delete(roomId);
+    await flushLiveRoomSnapshot(roomId);
+  }
+  for (const roomId of rooms.keys()) {
+    await flushLiveRoomSnapshot(roomId);
+  }
+}
+
+async function deleteLiveRoomSnapshot(roomId) {
+  if (!db || !roomId) return;
+  const t = liveRoomSnapshotTimers.get(roomId);
+  if (t) {
+    clearTimeout(t);
+    liveRoomSnapshotTimers.delete(roomId);
+  }
+  await liveRoomsStore.deleteLiveRoom(db, roomId);
+}
+
+async function tryRestoreRoomFromLiveSnapshot(roomId) {
+  if (!db || !roomId || rooms.has(roomId)) return null;
+  const row = await liveRoomsStore.loadLiveRoom(db, roomId);
+  if (!row?.state) return null;
+  const state = typeof row.state === 'string' ? JSON.parse(row.state) : row.state;
+  const room = hydrateLiveRoom(state);
+  if (!room) return null;
+  rooms.set(roomId, room);
+  try {
+    await hydrateRoomSongRequests(room);
+  } catch (_) {}
+  routineServerLog(
+    `♻️ Restored room ${roomId} from live_rooms (calls=${(room.calledSongIds || []).length}, state=${room.gameState}, needsHostResume=${!!room.needsHostResume})`,
+  );
+  return room;
+}
+
+async function hydrateLiveRoomsOnBoot() {
+  if (!db) return 0;
+  const rows = await liveRoomsStore.listRecentLiveRooms(db);
+  let n = 0;
+  for (const row of rows) {
+    if (!row?.room_id || rooms.has(row.room_id)) continue;
+    const state = typeof row.state === 'string' ? JSON.parse(row.state) : row.state;
+    const room = hydrateLiveRoom(state);
+    if (!room) continue;
+    rooms.set(row.room_id, room);
+    n += 1;
+  }
+  if (n > 0) {
+    routineServerLog(`♻️ Hydrated ${n} live room snapshot(s) from Postgres (host must Resume playback)`);
+  }
+  return n;
+}
 
 /** organization_id -> Map(songId -> { title, artist }) — loaded from song_display_aliases. */
 const songAliasCacheByOrg = new Map();
@@ -1276,6 +1367,7 @@ function markCurrentSongPlayed(roomId) {
     songName: songMeta?.name ?? room.currentSong.name,
     artistName: songMeta?.artist ?? room.currentSong.artist,
   });
+  scheduleLiveRoomSnapshot(roomId);
   return {
     ok: true,
     added,
@@ -1305,6 +1397,7 @@ function markNextSongCalledAndNotify(roomId, room, song, songIndex) {
   syncRoomStateAfterSongStart(roomId, room);
   sendPlayerCardUpdates(roomId, true);
   syncEventStatsForRoom(room);
+  scheduleLiveRoomSnapshot(roomId);
 }
 
 /**
@@ -2087,6 +2180,7 @@ async function initializeDatabase() {
     await hostPreferencesStore.ensureHostPreferencesTable(db);
     await playersStore.ensurePlayerTables(db);
     await playerAccountsStore.ensurePlayerAccountTables(db);
+    await liveRoomsStore.ensureLiveRoomsTable(db);
     await db.query(`
       CREATE TABLE IF NOT EXISTS host_spotify_playlist_list_cache (
         organization_id VARCHAR(50) PRIMARY KEY,
@@ -2502,6 +2596,31 @@ process.on('unhandledRejection', (reason) => {
     return;
   }
   console.error('⚠️ Unhandled promise rejection (server kept alive — fix the call site):', reason);
+});
+
+let tempoShuttingDown = false;
+async function tempoGracefulShutdown(signal) {
+  if (tempoShuttingDown) return;
+  tempoShuttingDown = true;
+  console.log(`🛑 ${signal}: flushing live room snapshots and closing…`);
+  try {
+    await flushAllLiveRoomSnapshots();
+  } catch (e) {
+    console.error('live_rooms flush on shutdown failed:', e?.message || e);
+  }
+  try {
+    io.close();
+  } catch (_) {}
+  try {
+    if (db && typeof db.end === 'function') await db.end();
+  } catch (_) {}
+  process.exit(0);
+}
+process.on('SIGTERM', () => {
+  void tempoGracefulShutdown('SIGTERM');
+});
+process.on('SIGINT', () => {
+  void tempoGracefulShutdown('SIGINT');
 });
 
 const SPOTIFY_TRACKS_5XX_COOLDOWN_MS = 45000;
@@ -5722,6 +5841,7 @@ function enqueueBingoVerification(io, room, roomId, verificationData, callerDisp
       waitingAhead: depth - 1,
     });
   }
+  scheduleLiveRoomSnapshot(roomId);
 }
 
 function supersedeRemainingBingoQueue(room, roomId, io) {
@@ -5798,6 +5918,7 @@ function resumeGameAfterVerificationQueueEmpty(roomId, room, reason = 'Bingo ver
     // Invalidate any in-flight pause so it cannot re-pause after we resume.
     live._bingoPauseGen = (live._bingoPauseGen || 0) + 1;
     live.gameState = 'playing';
+    live.needsHostResume = false;
 
     const pausedElapsedMs =
       live.snippetPausedElapsedMs != null && Number.isFinite(live.snippetPausedElapsedMs)
@@ -5850,6 +5971,7 @@ function resumeGameAfterVerificationQueueEmpty(roomId, room, reason = 'Bingo ver
 
     io.to(roomId).emit('bingo-verification-cleared', { reason });
     io.to(roomId).emit('game-resumed', { reason });
+    scheduleLiveRoomSnapshot(roomId);
   })();
 }
 
@@ -5980,48 +6102,51 @@ io.on('connection', (socket) => {
       cancelPendingRoomCleanup(roomId, wantsHost ? 'host rejoined' : 'player joined');
     }
 
-    // Create room if it doesn't exist
+    // Create room if it doesn't exist (prefer live_rooms snapshot after deploy/restart)
     if (!rooms.has(roomId)) {
-      logger.info(`Creating new room: ${roomId} for organization: ${organizationId}`, 'room-create');
-      const newRoom = {
-        id: roomId,
-        organizationId: organizationId,
-        host: wantsHost ? socket.id : null,
-        hostClientId: wantsHost && clientId ? clientId : null,
-        players: new Map(),
-        gameState: 'waiting',
-        snippetLength: 30,
-        winners: [],
-        repeatMode: false,
-        volume: 100,
-        /** When true, only in-person players can pause/end the round with a verified bingo; online players get unofficial bingo. */
-        hybridInPersonPlusOnline: false,
-        playlistSongs: [],
-        currentSongIndex: 0,
-        // Pre-queue system removed for deterministic playback
-        pattern: 'line', // Default pattern
-        linesRequired: 1,
-        customPattern: undefined, // Will be set when custom pattern is chosen
-        customPatternName: '',
-        customPatternReverse: false,
-        customPatternAllowRotation: false,
-        customPatternAllowMirror: false,
-        customPatternAnywhere: false,
-        patternComposite: undefined,
-        letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
-        publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
-        publicDisplayLetterRevealToast: true,
-        maxPlayerBingoCards: 1,
-        bingoWinPolicy: 'any_round',
-        songRequests: [],
-        createdAt: new Date().toISOString()
-      };
-      rooms.set(roomId, newRoom);
-      await hydrateRoomSongRequests(newRoom);
+      const restored = await tryRestoreRoomFromLiveSnapshot(roomId);
+      if (!restored) {
+        logger.info(`Creating new room: ${roomId} for organization: ${organizationId}`, 'room-create');
+        const newRoom = {
+          id: roomId,
+          organizationId: organizationId,
+          host: wantsHost ? socket.id : null,
+          hostClientId: wantsHost && clientId ? clientId : null,
+          players: new Map(),
+          gameState: 'waiting',
+          snippetLength: 30,
+          winners: [],
+          repeatMode: false,
+          volume: 100,
+          /** When true, only in-person players can pause/end the round with a verified bingo; online players get unofficial bingo. */
+          hybridInPersonPlusOnline: false,
+          playlistSongs: [],
+          currentSongIndex: 0,
+          // Pre-queue system removed for deterministic playback
+          pattern: 'line', // Default pattern
+          linesRequired: 1,
+          customPattern: undefined, // Will be set when custom pattern is chosen
+          customPatternName: '',
+          customPatternReverse: false,
+          customPatternAllowRotation: false,
+          customPatternAllowMirror: false,
+          customPatternAnywhere: false,
+          patternComposite: undefined,
+          letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
+          publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
+          publicDisplayLetterRevealToast: true,
+          maxPlayerBingoCards: 1,
+          bingoWinPolicy: 'any_round',
+          songRequests: [],
+          createdAt: new Date().toISOString()
+        };
+        rooms.set(roomId, newRoom);
+        await hydrateRoomSongRequests(newRoom);
 
-      // Log organization info
-      if (organizationId !== 'DEFAULT') {
-        routineServerLog(`🏢 Room ${roomId} created for organization ${organizationId}`);
+        // Log organization info
+        if (organizationId !== 'DEFAULT') {
+          routineServerLog(`🏢 Room ${roomId} created for organization ${organizationId}`);
+        }
       }
     }
 
@@ -6339,6 +6464,7 @@ io.on('connection', (socket) => {
             randomStarts: room.randomStarts || 'none',
             playerCount: getNonHostPlayerCount(room),
             gameState: room.gameState,
+            needsHostResume: !!room.needsHostResume,
             winners: room.winners || [],
             playedSongs: playedSongsPayloadForRoomState(room, playedSongIds),
             playedSongIds,
@@ -6359,6 +6485,13 @@ io.on('connection', (socket) => {
             venueBranding: venueBrandingForRoom(room),
             ...publicDisplayRoomStateExtras(room),
           });
+          if (room.needsHostResume) {
+            socket.emit('playback-warning', {
+              message:
+                'Server restarted mid-show — call board and pool were restored. Press Resume / Start on the locked speaker to continue audio.',
+              type: 'needs_host_resume',
+            });
+          }
           
           // Send current song info if playing
           if (room.currentSong && room.snippetLength) {
@@ -9463,6 +9596,8 @@ io.on('connection', (socket) => {
 
         routineServerLog('🎵 Starting automatic playback (sequential 1→N through pool)...');
         await startAutomaticPlayback(roomId, playlists, deviceId, showDeck);
+        room.needsHostResume = false;
+        scheduleLiveRoomSnapshot(roomId);
         
         routineServerLog('✅ Game state set and playback attempt triggered');
       } catch (error) {
@@ -9570,6 +9705,7 @@ io.on('connection', (socket) => {
       }
       
       io.to(roomId).emit('game-ended', { roomId });
+      await deleteLiveRoomSnapshot(roomId);
       routineServerLog(`🛑 Game ended gracefully for room ${roomId}`);
     } catch (e) {
       console.error('❌ Error ending game:', e?.message || e);
@@ -9607,6 +9743,7 @@ io.on('connection', (socket) => {
         clearCard: true,
         message: 'Round cleared — waiting for next start',
       });
+      await deleteLiveRoomSnapshot(roomId);
       routineServerLog(`🔁 Game reset for room ${roomId} (full pool/card cache cleared)`);
     } catch (e) {
       console.error('❌ Error resetting game:', e?.message || e);
@@ -9846,12 +9983,17 @@ io.on('connection', (socket) => {
           return;
         }
         routineServerLog('▶️ Resuming song in room:', roomId);
+        room.needsHostResume = false;
+        if (room.gameState === 'paused') {
+          room.gameState = 'playing';
+        }
         const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
         if (!deviceId) {
           console.error('❌ No device found for resume');
           socket.emit('error', { message: 'No device available for resume' });
           return;
         }
+        scheduleLiveRoomSnapshot(roomId);
 
         // Tab-focus / socket resync often emits resume while Connect is already playing — skip to avoid blips.
         if (resumePosition === undefined && room.snippetPausedElapsedMs == null && room.currentSong?.id) {
@@ -18790,6 +18932,7 @@ const PORT = process.env.PORT || 7093;
 (async function tempoServerBootstrap() {
   try {
     await initializeDatabase();
+    await hydrateLiveRoomsOnBoot();
 
     if (db) {
       try {
