@@ -19,6 +19,7 @@ const PLAIN_FIELDS = [
   'dbOrganizationId',
   'ownerUserId',
   'hostClientId',
+  'hostParticipantId',
   'gameState',
   'snippetLength',
   'randomStarts',
@@ -90,6 +91,7 @@ function serializePlayers(players) {
     if (!clientId) continue;
     out.push({
       clientId,
+      participantId: typeof p.participantId === 'string' ? p.participantId : null,
       name: p.name || 'Player',
       inPerson: p.inPerson !== false,
       playerUserId: p.playerUserId != null ? p.playerUserId : null,
@@ -160,7 +162,9 @@ function hydrateRoom(state) {
     ownerUserId: state.ownerUserId ?? null,
     host: null,
     hostClientId: state.hostClientId || null,
+    hostParticipantId: state.hostParticipantId || null,
     players: new Map(),
+    socketsByParticipant: new Map(),
     bingoCards: new Map(),
     clientCards: new Map(),
     gameState: typeof state.gameState === 'string' ? state.gameState : 'waiting',
