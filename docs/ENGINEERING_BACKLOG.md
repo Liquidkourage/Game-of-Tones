@@ -28,4 +28,4 @@ Outside review items from `game-of-tones-engineering-feedback.md` (Oct 2026).
 | 11 | Node 22 LTS + Vite |
 | 12 | Structured logging (pino) |
 
-Achievements / richer Stats remain parked until Jay reopens them.
+Achievements thin slice shipped (five counter-based badges on phone options + host player cards). Richer stats / pattern collectibles / leaderboards remain out of scope until reopened.

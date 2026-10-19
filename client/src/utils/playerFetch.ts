@@ -28,6 +28,12 @@ export type PlayerRoundHistory = {
   endedAt?: string | null;
 };
 
+export type PlayerAchievement = {
+  id: string;
+  title: string;
+  unlockedAt?: string | null;
+};
+
 export function getPlayerJwt(): string | null {
   try {
     return localStorage.getItem(JWT_KEY);
@@ -63,16 +69,18 @@ export async function fetchPlayerSession(): Promise<{
   user: PlayerAccountUser | null;
   stats: PlayerStats | null;
   recentRounds: PlayerRoundHistory[];
+  achievements: PlayerAchievement[];
   playerToken?: string;
 }> {
   const res = await playerFetch(`${API_BASE || ''}/api/player/me`);
   if (!res.ok) {
-    return { user: null, stats: null, recentRounds: [] };
+    return { user: null, stats: null, recentRounds: [], achievements: [] };
   }
   const j = (await res.json()) as {
     user?: PlayerAccountUser | null;
     stats?: PlayerStats | null;
     recentRounds?: PlayerRoundHistory[];
+    achievements?: PlayerAchievement[];
     playerToken?: string;
   };
   if (j.playerToken) setPlayerJwt(j.playerToken);
@@ -80,6 +88,7 @@ export async function fetchPlayerSession(): Promise<{
     user: j.user ?? null,
     stats: j.stats ?? null,
     recentRounds: j.recentRounds ?? [],
+    achievements: Array.isArray(j.achievements) ? j.achievements : [],
     playerToken: j.playerToken,
   };
 }

@@ -4,6 +4,7 @@
 
 const playerAuth = require('./playerAuth');
 const playerAvatarStore = require('./playerAvatarStore');
+const playerAchievements = require('./playerAchievements');
 
 const MAX_DISPLAY_NAME_LEN = 80;
 
@@ -66,6 +67,7 @@ async function ensurePlayerAccountTables(db) {
   await db.query(`
     ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS avatar TEXT NOT NULL DEFAULT ''
   `);
+  await playerAchievements.ensureAchievementTable(db);
   return true;
 }
 
@@ -237,8 +239,15 @@ async function ensureRoundHistory(db, playerUserId, ctx) {
   await upsertRoundHistory(db, playerUserId, ctx);
 }
 
+async function syncAchievementsFromStats(db, playerUserId) {
+  if (!db || playerUserId == null) return [];
+  const stats = await getStats(db, playerUserId);
+  await playerAchievements.evaluateAndUnlock(db, playerUserId, stats || {});
+  return playerAchievements.listForPlayer(db, playerUserId);
+}
+
 async function recordGameJoin(db, playerUserId, ctx) {
-  if (!db || playerUserId == null) return;
+  if (!db || playerUserId == null) return null;
   await ensureStatsRow(db, playerUserId);
   const r = await db.query(
     `INSERT INTO player_round_history
@@ -260,11 +269,13 @@ async function recordGameJoin(db, playerUserId, ctx) {
        WHERE player_user_id = $1`,
       [playerUserId]
     );
+    return syncAchievementsFromStats(db, playerUserId);
   }
+  return syncAchievementsFromStats(db, playerUserId);
 }
 
 async function recordMark(db, playerUserId, ctx, delta = 1) {
-  if (!db || playerUserId == null || delta <= 0) return;
+  if (!db || playerUserId == null || delta <= 0) return null;
   await ensureStatsRow(db, playerUserId);
   await ensureRoundHistory(db, playerUserId, ctx);
   await db.query(
@@ -282,10 +293,11 @@ async function recordMark(db, playerUserId, ctx, delta = 1) {
       delta,
     ]
   );
+  return syncAchievementsFromStats(db, playerUserId);
 }
 
 async function recordBingoCalled(db, playerUserId, ctx) {
-  if (!db || playerUserId == null) return;
+  if (!db || playerUserId == null) return null;
   await ensureStatsRow(db, playerUserId);
   await ensureRoundHistory(db, playerUserId, ctx);
   await db.query(
@@ -298,10 +310,11 @@ async function recordBingoCalled(db, playerUserId, ctx) {
      WHERE player_user_id = $1 AND room_id = $2 AND round_token = $3`,
     [playerUserId, String(ctx.roomId).slice(0, 64), String(ctx.roundToken || '').slice(0, 512)]
   );
+  return syncAchievementsFromStats(db, playerUserId);
 }
 
 async function recordBingoWon(db, playerUserId, ctx) {
-  if (!db || playerUserId == null) return;
+  if (!db || playerUserId == null) return null;
   await ensureStatsRow(db, playerUserId);
   await ensureRoundHistory(db, playerUserId, ctx);
   await db.query(
@@ -314,6 +327,7 @@ async function recordBingoWon(db, playerUserId, ctx) {
      WHERE player_user_id = $1 AND room_id = $2 AND round_token = $3`,
     [playerUserId, String(ctx.roomId).slice(0, 64), String(ctx.roundToken || '').slice(0, 512)]
   );
+  return syncAchievementsFromStats(db, playerUserId);
 }
 
 function accountPublicRow(row) {
@@ -369,6 +383,7 @@ module.exports = {
   recordMark,
   recordBingoCalled,
   recordBingoWon,
+  syncAchievementsFromStats,
   accountPublicRow,
   statsPublicRow,
   roundHistoryPublicRow,

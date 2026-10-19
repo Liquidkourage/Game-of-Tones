@@ -10,6 +10,7 @@ import {
   playerLogout,
   updatePlayerDisplayName,
   type PlayerAccountUser,
+  type PlayerAchievement,
   type PlayerRoundHistory,
   type PlayerStats,
 } from '../utils/playerFetch';
@@ -273,6 +274,7 @@ const PlayerView: React.FC = () => {
   const [joinGateError, setJoinGateError] = useState<string | null>(null);
   const [playerAccount, setPlayerAccount] = useState<PlayerAccountUser | null>(null);
   const [playerStats, setPlayerStats] = useState<PlayerStats | null>(null);
+  const [playerAchievements, setPlayerAchievements] = useState<PlayerAchievement[]>([]);
   const [playerRecentRounds, setPlayerRecentRounds] = useState<PlayerRoundHistory[]>([]);
   const [displayNameDraft, setDisplayNameDraft] = useState('');
   const [displayNameBusy, setDisplayNameBusy] = useState(false);
@@ -701,6 +703,7 @@ const PlayerView: React.FC = () => {
       if (cancelled || !session.user) return;
       setPlayerAccount(session.user);
       setPlayerStats(session.stats);
+      setPlayerAchievements(session.achievements);
       setPlayerRecentRounds(session.recentRounds);
       setPlayerName(session.user.displayName);
       try {
@@ -741,6 +744,7 @@ const PlayerView: React.FC = () => {
     void fetchPlayerSession().then((session) => {
       if (cancelled || !session.user) return;
       setPlayerStats(session.stats);
+      setPlayerAchievements(session.achievements);
       setPlayerRecentRounds(session.recentRounds);
     });
     return () => {
@@ -773,6 +777,7 @@ const PlayerView: React.FC = () => {
     account?: PlayerAccountUser | null,
     stats?: PlayerStats | null,
     recentRounds?: PlayerRoundHistory[],
+    achievements?: PlayerAchievement[],
   ) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -788,6 +793,7 @@ const PlayerView: React.FC = () => {
     if (account) setPlayerAccount(account);
     if (stats !== undefined) setPlayerStats(stats);
     if (recentRounds !== undefined) setPlayerRecentRounds(recentRounds);
+    if (achievements !== undefined) setPlayerAchievements(achievements);
     setJoinReady(true);
   };
 
@@ -801,7 +807,13 @@ const PlayerView: React.FC = () => {
       const { user } = await updatePlayerDisplayName(trimmed);
       setPlayerAccount(user);
       setDisplayNameDraft(user.displayName);
-      finishGuestOrAccountJoin(user.displayName, user, playerStats, playerRecentRounds);
+      finishGuestOrAccountJoin(
+        user.displayName,
+        user,
+        playerStats,
+        playerRecentRounds,
+        playerAchievements,
+      );
       if (socket && socket.connected) {
         try {
           socket.emit('join-room', buildJoinPayload(user.displayName));
@@ -2486,12 +2498,18 @@ const PlayerView: React.FC = () => {
               }
             }
           }}
-          onAccountReady={(user, stats, recentRounds) => {
+          onAccountReady={(user, stats, recentRounds, achievements) => {
             if (user.avatar) {
               setPlayerAvatar(user.avatar);
               writeGuestAvatar(user.avatar);
             }
-            finishGuestOrAccountJoin(user.displayName, user, stats, recentRounds);
+            finishGuestOrAccountJoin(
+              user.displayName,
+              user,
+              stats,
+              recentRounds,
+              achievements ?? [],
+            );
             if (socket && socket.connected) {
               try {
                 socket.emit(
@@ -3138,6 +3156,20 @@ const PlayerView: React.FC = () => {
                             <span className="player-v2-stat-label">Wins</span>
                           </div>
                         </div>
+                        {playerAchievements.length > 0 ? (
+                          <div className="player-v2-achievements">
+                            <div className="player-v2-sheet-label player-v2-achievements-label">
+                              Achievements
+                            </div>
+                            <ul className="player-v2-achievement-list">
+                              {playerAchievements.map((ach) => (
+                                <li key={ach.id} className="player-v2-achievement-chip" title={ach.id}>
+                                  {ach.title}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
 
@@ -3180,6 +3212,7 @@ const PlayerView: React.FC = () => {
                           void playerLogout().then(() => {
                             setPlayerAccount(null);
                             setPlayerStats(null);
+                            setPlayerAchievements([]);
                             setPlayerRecentRounds([]);
                             clearPlayerSeat(roomId);
                             clearPlayerJoinIntent(roomId);

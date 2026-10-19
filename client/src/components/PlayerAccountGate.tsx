@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { API_BASE } from '../config';
 import {
   PlayerAccountUser,
+  PlayerAchievement,
   PlayerStats,
   PlayerRoundHistory,
   playerFetch,
@@ -16,7 +17,12 @@ export type PlayerUiTheme = 'dark' | 'light';
 
 type Props = {
   onGuestContinue: (displayName: string, avatar?: string) => void;
-  onAccountReady: (user: PlayerAccountUser, stats: PlayerStats | null, recentRounds: PlayerRoundHistory[]) => void;
+  onAccountReady: (
+    user: PlayerAccountUser,
+    stats: PlayerStats | null,
+    recentRounds: PlayerRoundHistory[],
+    achievements?: PlayerAchievement[],
+  ) => void;
   initialMode?: Mode;
   theme?: PlayerUiTheme;
   onThemeChange?: (theme: PlayerUiTheme) => void;
@@ -86,7 +92,12 @@ const PlayerAccountGate: React.FC<Props> = ({
           try {
             const { user: updated } = await updatePlayerProfile({ avatar: avatarDraft });
             writeGuestAvatar(updated.avatar || avatarDraft);
-            onAccountReady(updated, j.stats ?? null, j.recentRounds ?? []);
+            onAccountReady(
+              updated,
+              j.stats ?? null,
+              j.recentRounds ?? [],
+              Array.isArray(j.achievements) ? j.achievements : [],
+            );
             return;
           } catch {
             /* fall through with signup user */
@@ -94,7 +105,12 @@ const PlayerAccountGate: React.FC<Props> = ({
         }
         if (user.avatar) writeGuestAvatar(user.avatar);
         else if (avatarDraft) writeGuestAvatar(avatarDraft);
-        onAccountReady(user, j.stats ?? null, j.recentRounds ?? []);
+        onAccountReady(
+          user,
+          j.stats ?? null,
+          j.recentRounds ?? [],
+          Array.isArray(j.achievements) ? j.achievements : [],
+        );
       }
     } catch (e) {
       setError(String(e));
