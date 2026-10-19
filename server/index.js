@@ -23,6 +23,7 @@ const hostPreferencesStore = require('./hostPreferences');
 const playersStore = require('./players');
 const playerAuth = require('./playerAuth');
 const playerAccountsStore = require('./playerAccounts');
+const playerAchievements = require('./playerAchievements');
 const songAliasesStore = require('./songAliases');
 const fiveByFifteenAssign = require('./fiveByFifteenAssign');
 const venueLogoCache = require('./venueLogoCache');
@@ -1540,9 +1541,26 @@ function emitRoomPlayersRosterToHosts(roomId, room) {
   }
 }
 
+async function refreshPlayerAchievementCache(player) {
+  if (!player) return [];
+  if (player.playerUserId == null || !db) {
+    player.achievements = [];
+    return [];
+  }
+  try {
+    const rows = await playerAccountsStore.syncAchievementsFromStats(db, player.playerUserId);
+    player.achievements = playerAchievements.compactPublicRows(rows);
+  } catch (e) {
+    console.warn('refreshPlayerAchievementCache:', e?.message || e);
+    if (!Array.isArray(player.achievements)) player.achievements = [];
+  }
+  return player.achievements;
+}
+
 function hostPlayerCardEmitPayload(room, playerId, cardsOrCard, playedSongs) {
   const player = room.players.get(playerId);
   const cards = playerBingoCards.asBingoCardList(cardsOrCard);
+  const achievements = Array.isArray(player?.achievements) ? player.achievements : [];
   return {
     playerName: player?.name || 'Unknown',
     avatar: typeof player?.avatar === 'string' ? player.avatar : '',
@@ -1550,6 +1568,7 @@ function hostPlayerCardEmitPayload(room, playerId, cardsOrCard, playedSongs) {
     cards,
     playedSongs,
     inPerson: player?.inPerson !== false,
+    ...(achievements.length ? { achievements } : {}),
   };
 }
 
@@ -3539,7 +3558,12 @@ function emitUnofficialBingoAck(io, room, roomId, socket, player, validationResu
       : `🌐 Remote hybrid bingo (unofficial) for ${player.name}`,
   );
   if (player.playerUserId != null) {
-    void playerAccountsStore.recordBingoCalled(db, player.playerUserId, playerStatsContext(room, player));
+    void playerAccountsStore
+      .recordBingoCalled(db, player.playerUserId, playerStatsContext(room, player))
+      .then((rows) => {
+        if (rows) player.achievements = playerAchievements.compactPublicRows(rows);
+      })
+      .catch((e) => console.warn('recordBingoCalled achievements:', e?.message || e));
   }
 }
 
@@ -3667,7 +3691,7 @@ function rebindBingoCardsToActivePlayers(room) {
   return rebound;
 }
 
-function buildHostPlayerCardsData(room) {
+async function buildHostPlayerCardsData(room) {
   rebindBingoCardsToActivePlayers(room);
   const playedSongs = playedSongIdsForHostPlayerCards(room);
   const playerCardsData = {};
@@ -3677,6 +3701,9 @@ function buildHostPlayerCardsData(room) {
       if (!player || player.isHost || player.name === 'Display') continue;
       const cards = resolveActivePlayerCards(room, player, playerId);
       if (!cards.length) continue;
+      if (player.playerUserId != null && player.achievements === undefined) {
+        await refreshPlayerAchievementCache(player);
+      }
       playerCardsData[playerId] = hostPlayerCardEmitPayload(room, playerId, cards, playedSongs);
     }
   }
@@ -6428,7 +6455,12 @@ io.on('connection', (socket) => {
       void recordPlayerDataJoin(room, player, playerPreferences);
       if (joinedPlayerUserId != null) {
         void playerAccountsStore.linkClientToAccount(db, clientId, joinedPlayerUserId);
-        void playerAccountsStore.recordGameJoin(db, joinedPlayerUserId, playerStatsContext(room, player));
+        void playerAccountsStore
+          .recordGameJoin(db, joinedPlayerUserId, playerStatsContext(room, player))
+          .then((rows) => {
+            if (rows) player.achievements = playerAchievements.compactPublicRows(rows);
+          })
+          .catch((e) => console.warn('recordGameJoin achievements:', e?.message || e));
       }
     }
 
@@ -7915,7 +7947,12 @@ io.on('connection', (socket) => {
       };
       room.winners.push(winnerData);
       if (player.playerUserId != null) {
-        void playerAccountsStore.recordBingoCalled(db, player.playerUserId, playerStatsContext(room, player));
+        void playerAccountsStore
+          .recordBingoCalled(db, player.playerUserId, playerStatsContext(room, player))
+          .then((rows) => {
+            if (rows) player.achievements = playerAchievements.compactPublicRows(rows);
+          })
+          .catch((e) => console.warn('recordBingoCalled achievements:', e?.message || e));
       }
       
       // Send success to the caller
@@ -8364,7 +8401,12 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('bingo-called', bingoCalledPayload);
 
       if (player.playerUserId != null) {
-        void playerAccountsStore.recordBingoWon(db, player.playerUserId, playerStatsContext(room, player));
+        void playerAccountsStore
+          .recordBingoWon(db, player.playerUserId, playerStatsContext(room, player))
+          .then((rows) => {
+            if (rows) player.achievements = playerAchievements.compactPublicRows(rows);
+          })
+          .catch((e) => console.warn('recordBingoWon achievements:', e?.message || e));
       }
 
       // Award & keep playing: celebrate, DQ that card, resume (do not end the round).
@@ -9196,7 +9238,7 @@ io.on('connection', (socket) => {
         }
       }
 
-      const playerCardsData = buildHostPlayerCardsData(room);
+      const playerCardsData = await buildHostPlayerCardsData(room);
       
       socket.emit('player-cards-update', playerCardsData);
       if (room.players.get(socket.id)?.isHost) {
@@ -10480,7 +10522,12 @@ io.on('connection', (socket) => {
             !prevMarked &&
             player.playerUserId != null
           ) {
-            void playerAccountsStore.recordMark(db, player.playerUserId, playerStatsContext(room, player), 1);
+            void playerAccountsStore
+              .recordMark(db, player.playerUserId, playerStatsContext(room, player), 1)
+              .then((rows) => {
+                if (rows) player.achievements = playerAchievements.compactPublicRows(rows);
+              })
+              .catch((e) => console.warn('recordMark achievements:', e?.message || e));
           }
           
           // Hint only — win claims use player-bingo + markedPositions (Option B)
@@ -13745,31 +13792,33 @@ function clearPlayerCardUpdateTimer(roomId) {
 }
 
 function sendPlayerCardUpdatesNow(roomId) {
-  try {
-    const room = rooms.get(roomId);
-    if (!room) return;
+  void (async () => {
+    try {
+      const room = rooms.get(roomId);
+      if (!room) return;
 
-    const playerCardsData = buildHostPlayerCardsData(room);
-    
-    // Send to all hosts in the room
-    room.players.forEach((player, playerId) => {
-      if (player.isHost) {
-        const hostSocket = io.sockets.sockets.get(playerId);
-        if (hostSocket) {
-          hostSocket.emit('player-cards-update', playerCardsData);
+      const playerCardsData = await buildHostPlayerCardsData(room);
+
+      // Send to all hosts in the room
+      room.players.forEach((player, playerId) => {
+        if (player.isHost) {
+          const hostSocket = io.sockets.sockets.get(playerId);
+          if (hostSocket) {
+            hostSocket.emit('player-cards-update', playerCardsData);
+          }
         }
-      }
-    });
-    
-    showLog.routineLogThrottled(
-      `player-cards-rt:${roomId}`,
-      `📋 Real-time update: ${Object.keys(playerCardsData).length} player cards → host(s) in room ${roomId}`,
-      routineServerLog,
-      30_000,
-    );
-  } catch (e) {
-    console.error('❌ Error sending real-time player card updates:', e?.message || e);
-  }
+      });
+
+      showLog.routineLogThrottled(
+        `player-cards-rt:${roomId}`,
+        `📋 Real-time update: ${Object.keys(playerCardsData).length} player cards → host(s) in room ${roomId}`,
+        routineServerLog,
+        30_000,
+      );
+    } catch (e) {
+      console.error('❌ Error sending real-time player card updates:', e?.message || e);
+    }
+  })();
 }
 
 // Legacy mark-only checkBingo removed (unused) — wins use validateBingoForPattern (Option B).
@@ -14149,12 +14198,14 @@ app.post('/api/player/signup', async (req, res) => {
     const recentRounds = playerAccountsStore.roundHistoryPublicRows(
       await playerAccountsStore.listRecentRounds(db, row.id, 10),
     );
+    const achievements = await playerAccountsStore.syncAchievementsFromStats(db, row.id);
     return res.json({
       ok: true,
       token,
       user: playerAccountsStore.accountPublicRow(row),
       stats: playerAccountsStore.statsPublicRow(stats),
       recentRounds,
+      achievements,
     });
   } catch (e) {
     console.error('POST /api/player/signup:', e?.message || e);
@@ -14175,12 +14226,14 @@ app.post('/api/player/login', async (req, res) => {
     const recentRounds = playerAccountsStore.roundHistoryPublicRows(
       await playerAccountsStore.listRecentRounds(db, row.id, 10),
     );
+    const achievements = await playerAccountsStore.syncAchievementsFromStats(db, row.id);
     return res.json({
       ok: true,
       token,
       user: playerAccountsStore.accountPublicRow(row),
       stats: playerAccountsStore.statsPublicRow(stats),
       recentRounds,
+      achievements,
     });
   } catch (e) {
     console.error('POST /api/player/login:', e?.message || e);
@@ -14194,7 +14247,11 @@ app.get('/api/player/me', async (req, res) => {
     const uid = playerAuth.getPlayerUserIdFromRequest(req);
     if (!uid) return res.json({ user: null });
     if (!db) {
-      return res.json({ user: { id: uid }, stats: playerAccountsStore.statsPublicRow(null) });
+      return res.json({
+        user: { id: uid },
+        stats: playerAccountsStore.statsPublicRow(null),
+        achievements: [],
+      });
     }
     const row = await playerAccountsStore.getAccountById(db, uid);
     if (!row) return res.json({ user: null });
@@ -14202,11 +14259,14 @@ app.get('/api/player/me', async (req, res) => {
     const recentRounds = playerAccountsStore.roundHistoryPublicRows(
       await playerAccountsStore.listRecentRounds(db, uid, 10),
     );
+    // Backfill unlocks for accounts that earned counters before achievements shipped
+    const achievements = await playerAccountsStore.syncAchievementsFromStats(db, uid);
     const rawJwt = playerAuth.getPlayerJwtRawFromRequest(req);
     return res.json({
       user: playerAccountsStore.accountPublicRow(row),
       stats: playerAccountsStore.statsPublicRow(stats),
       recentRounds,
+      achievements,
       ...(rawJwt ? { playerToken: rawJwt } : {}),
     });
   } catch (e) {

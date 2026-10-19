@@ -7274,6 +7274,36 @@ button.conn-chip.conn-chip-compact {
   color: var(--player-v2-text-muted);
 }
 
+.player-container--v2 .player-v2-achievements {
+  margin-top: 12px;
+}
+
+.player-container--v2 .player-v2-achievements-label {
+  margin-bottom: 8px;
+}
+
+.player-container--v2 .player-v2-achievement-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.player-container--v2 .player-v2-achievement-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--player-v2-text-primary);
+  background: var(--player-v2-sheet-row-bg);
+  border: 1px solid var(--player-v2-sheet-row-border);
+}
+
 .player-container--v2 .player-v2-round-list {
   list-style: none;
   margin: 0;

@@ -6810,6 +6810,37 @@ const HostView: React.FC = () => {
                 <OnlinePlayerBadge compact={compact} />
               )}
             </div>
+            {Array.isArray(playerData.achievements) && playerData.achievements.length > 0 ? (
+              <div
+                className="host-player-achievement-strip"
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  justifyContent: 'center',
+                  gap: 4,
+                  marginBottom: 8,
+                }}
+              >
+                {playerData.achievements.map((ach: { id?: string; title?: string }) => (
+                  <span
+                    key={ach.id || ach.title}
+                    title={ach.id || ''}
+                    style={{
+                      display: 'inline-flex',
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                      fontSize: compact ? '0.65rem' : '0.72rem',
+                      fontWeight: 700,
+                      color: '#c5f0d8',
+                      background: 'rgba(0, 255, 136, 0.1)',
+                      border: '1px solid rgba(0, 255, 136, 0.35)',
+                    }}
+                  >
+                    {ach.title || ach.id}
+                  </span>
+                ))}
+              </div>
+            ) : null}
 
             {(() => {
               const hostCards =
@@ -15146,6 +15177,45 @@ const HostView: React.FC = () => {
                 {pendingVerification.inPerson === false ? <OnlinePlayerBadge /> : null}
                 <span>called BINGO!</span>
               </p>
+              {(() => {
+                const verifyAchievements =
+                  (Array.isArray(pendingVerification.achievements) &&
+                    pendingVerification.achievements) ||
+                  (pendingVerification.playerId &&
+                    Array.isArray(playerCards.get(pendingVerification.playerId)?.achievements) &&
+                    playerCards.get(pendingVerification.playerId)?.achievements) ||
+                  [];
+                if (!verifyAchievements.length) return null;
+                return (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      justifyContent: 'center',
+                      gap: 4,
+                      marginBottom: 10,
+                    }}
+                  >
+                    {verifyAchievements.map((ach: { id?: string; title?: string }) => (
+                      <span
+                        key={ach.id || ach.title}
+                        style={{
+                          display: 'inline-flex',
+                          padding: '3px 9px',
+                          borderRadius: 999,
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          color: '#c5f0d8',
+                          background: 'rgba(0, 255, 136, 0.1)',
+                          border: '1px solid rgba(0, 255, 136, 0.35)',
+                        }}
+                      >
+                        {ach.title || ach.id}
+                      </span>
+                    ))}
+                  </div>
+                );
+              })()}
               {pendingVerification.inPerson === false ? (
                 <p style={{ color: '#7ec8ff', fontSize: '0.85rem', marginBottom: 8 }}>
                   Joined online (remote link).
