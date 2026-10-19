@@ -48,6 +48,7 @@ alwaysApply: true
 | Card pool / 5×15 vs 1×75 | `server/index.js` — `generateBingoCards` |
 | Auto display mode | `PublicDisplay.tsx` `columnCallListLayout`, host `publicDisplayCallListMode` |
 | Bingo claim marks (Option B) | `server/game/validateBingo.js` `cardWithClientMarks`, `player-bingo` in `server/index.js`, `PlayerView` claim payload |
+| Mid-show restart persistence | `server/game/liveRoomSnapshot.js`, `server/liveRoomsStore.js` (`live_rooms`); host Resume after hydrate (`needsHostResume`) |
 
 ## Agent mistakes to avoid
 
