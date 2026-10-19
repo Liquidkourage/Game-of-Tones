@@ -1736,6 +1736,9 @@ const PublicDisplay: React.FC = () => {
     visible: boolean;
   }>({ mediaUrl: '', text: '', qrUrl: '', mediaKind: 'image', visible: false });
   const [remoteHybridNotice, setRemoteHybridNotice] = useState<string>('');
+  /** Host bump theater — SAME SONG · NEW CUT (host/display only). */
+  const [bumpFlash, setBumpFlash] = useState<{ callNumber: number; key: number } | null>(null);
+  const bumpFlashClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Connection status and sync management
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
   const [reconnectAttempts, setReconnectAttempts] = useState<number>(0);
@@ -2861,6 +2864,19 @@ const PublicDisplay: React.FC = () => {
       }
     });
 
+    newSocket.on('snippet-bumped', (data: any) => {
+      const callNumber = Math.max(1, Number(data?.callNumber) || Number(data?.songIndex) + 1 || 1);
+      if (bumpFlashClearRef.current) {
+        clearTimeout(bumpFlashClearRef.current);
+        bumpFlashClearRef.current = null;
+      }
+      setBumpFlash({ callNumber, key: Date.now() });
+      bumpFlashClearRef.current = setTimeout(() => {
+        setBumpFlash(null);
+        bumpFlashClearRef.current = null;
+      }, 2400);
+    });
+
     newSocket.on('playback-resumed', (data: any) => {
       setPlaybackPaused(false);
       const elapsed = Number(data?.snippetElapsedMs);
@@ -3455,6 +3471,10 @@ const PublicDisplay: React.FC = () => {
       if (revealSyncTimerRef.current) {
         clearTimeout(revealSyncTimerRef.current);
         revealSyncTimerRef.current = null;
+      }
+      if (bumpFlashClearRef.current) {
+        clearTimeout(bumpFlashClearRef.current);
+        bumpFlashClearRef.current = null;
       }
       socketRef.current = null;
       newSocket.close();
@@ -5651,6 +5671,21 @@ const PublicDisplay: React.FC = () => {
           </div>
         </div>
       )}
+
+      {bumpFlash ? (
+        <div
+          key={bumpFlash.key}
+          className="public-bump-flash"
+          role="status"
+          aria-live="polite"
+          aria-label="Same song, new cut"
+        >
+          <div className="public-bump-flash__inner">
+            <div className="public-bump-flash__kicker">Call {bumpFlash.callNumber}</div>
+            <div className="public-bump-flash__title">Same song · New cut</div>
+          </div>
+        </div>
+      ) : null}
 
       {showNightBoard && roundWinnersBoard.length > 0 && (() => {
         const nightBoardRows = roundWinnersBoard.length;

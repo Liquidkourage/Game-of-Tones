@@ -44,6 +44,8 @@ Background shelf hydrate caused the Oct 2026 app **429**. `/api/org/shared-host-
 
 Detailed rules: `.cursor/rules/game-of-tones-show.mdc` (always applied).
 
+**Asymmetric clients:** phones never receive now-playing / call IDs / bump theater — see [`docs/ASYMMETRIC_CLIENTS.md`](docs/ASYMMETRIC_CLIENTS.md).
+
 **North star:** Saved rounds lock a Fisher–Yates `playOrder` when saved; **Start Game preserves it**. Host pool + projector + playback + offline call sheet match it. Legacy snapshots without `playOrder` shuffle once at Start Game. Cards use that round's 75-song `songs` set, not a separate pool. **Auto** display: 5×15 if five playlists, 1×75 carousel if one.
 
 **Projector:** Always **five** columns; top row calls 1,6,11,16,21…; bottom row 5,10,15,20,25…. No `?cols=` override. Never fix width by switching to three columns.

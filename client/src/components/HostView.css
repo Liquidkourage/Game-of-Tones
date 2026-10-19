@@ -3492,6 +3492,13 @@
   color: rgba(255, 255, 255, 0.55);
 }
 
+.host-view .host-night-board__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
 .host-view .host-night-board__toggle {
   display: inline-flex;
   align-items: center;
@@ -3500,6 +3507,18 @@
   color: rgba(255, 255, 255, 0.82);
   cursor: pointer;
   user-select: none;
+}
+
+.host-view .host-night-board__save {
+  font-size: 0.8rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.host-view .host-night-board__export-error {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  color: #ff8a8a;
 }
 
 .host-view .host-night-board__list {
