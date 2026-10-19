@@ -360,7 +360,13 @@ const PlayerView: React.FC = () => {
   const bingoHoldSubmittedRef = useRef(false);
   /** Throttle mark-square telemetry to server (phone owns marks locally; host live cards only). */
   const markSquareQueueRef = useRef<
-    Array<{ roomId: string; songId: string; position: string; cardId: string | undefined }>
+    Array<{
+      roomId: string;
+      songId: string;
+      position: string;
+      cardId: string | undefined;
+      marked: boolean;
+    }>
   >([]);
   const markSquareFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [venueBranding, setVenueBranding] = useState<VenueBranding | null>(null);
@@ -1316,34 +1322,10 @@ const PlayerView: React.FC = () => {
       setGameState(prev => ({ ...prev, isPlaying: false }));
     });
 
-    // Listen for mark confirmation from server to ensure sync
-    newSocket.on('mark-confirmed', (data: any) => {
-      const { position, songId, marked, cardId } = data || {};
-      if (!position || !songId) return;
-
-      setBingoCards((prev) => {
-        if (!prev.length) return prev;
-        const targetIdx = cardId
-          ? prev.findIndex((c) => c.cardId === cardId)
-          : 0;
-        const i = targetIdx >= 0 ? targetIdx : 0;
-        const card = prev[i];
-        if (!card) return prev;
-        const square = card.squares.find((s) => s.position === position && s.songId === songId);
-        if (square && square.marked !== marked) {
-          const updatedCard = {
-            ...card,
-            squares: card.squares.map((s) =>
-              s.position === position && s.songId === songId ? { ...s, marked } : s,
-            ),
-          };
-          persistMarks(updatedCard);
-          const next = [...prev];
-          next[i] = updatedCard;
-          return next;
-        }
-        return prev;
-      });
+    // Option B: phone owns marks — do not let mark-confirmed overwrite local daubs
+    // (that inverted FREE / mid-game free-space when server baseline disagreed).
+    newSocket.on('mark-confirmed', (_data: any) => {
+      /* telemetry ack only */
     });
 
     newSocket.on('game-restarted', (data: any) => {
@@ -1859,8 +1841,18 @@ const PlayerView: React.FC = () => {
     songId: string;
     position: string;
     cardId: string | undefined;
+    marked: boolean;
   }) => {
-    markSquareQueueRef.current.push(payload);
+    // Coalesce same square: host should see the latest desired state, not a toggle train.
+    const q = markSquareQueueRef.current;
+    const idx = q.findIndex(
+      (p) =>
+        p.position === payload.position &&
+        (p.cardId || '') === (payload.cardId || '') &&
+        p.roomId === payload.roomId,
+    );
+    if (idx >= 0) q[idx] = payload;
+    else q.push(payload);
     if (!markSquareFlushTimerRef.current) {
       markSquareFlushTimerRef.current = setTimeout(drainMarkSquareTelemetry, 0);
     }
@@ -1874,11 +1866,12 @@ const PlayerView: React.FC = () => {
 
     const free = isPlayerFreeSpaceSquare(square);
     const songId = free ? '__FREE_SPACE__' : square.songId;
+    const nextMarked = !square.marked;
 
-    // Phone owns marks (Option B). Local toggle + persist first; mark-square is throttled host telemetry.
+    // Phone owns marks (Option B). Local toggle + persist first; mark-square sends absolute marked for host.
     updateActiveBingoCard((prev) => {
       const updatedSquares = prev.squares.map((sq) =>
-        sq.position === position ? { ...sq, marked: !sq.marked } : sq,
+        sq.position === position ? { ...sq, marked: nextMarked } : sq,
       );
       const updatedCard = { ...prev, squares: updatedSquares };
       persistMarks(updatedCard);
@@ -1890,6 +1883,7 @@ const PlayerView: React.FC = () => {
       songId,
       position,
       cardId: bingoCard.cardId || bingoCard.id,
+      marked: nextMarked,
     });
 
     if (navigator.vibrate) navigator.vibrate(10);

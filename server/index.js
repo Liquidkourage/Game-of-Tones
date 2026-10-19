@@ -10421,8 +10421,9 @@ io.on('connection', (socket) => {
 
   // Mark bingo square
   // Option B: mark-square is telemetry for host live cards — claim authority is phone markedPositions.
+  // Prefer absolute `marked` from the phone so FREE / mid-game free-space can't invert vs toggle.
   socketGate.on(socket, 'mark-square', { rate: playerSocketRate }, (data) => {
-    const { roomId, songId, position, cardId } = data || {};
+    const { roomId, songId, position, cardId, marked: markedRaw } = data || {};
     const room = rooms.get(roomId);
     
     if (room) {
@@ -10446,17 +10447,24 @@ io.on('connection', (socket) => {
         const square = card.squares.find(s => s.position === position);
         const isFree = square && (square.isFreeSpace || square.songId === FREE_SPACE_SONG_ID);
         // FREE is clickable for fun; still counts as marked for bingo validation.
-        if (square && (isFree || square.songId === songId)) {
-          square.marked = !square.marked;
-          if (isFree) {
+        // Accept FREE by position even if phone still has a pre–free-space songId.
+        if (square && (isFree || square.songId === songId || songId === FREE_SPACE_SONG_ID)) {
+          const prevMarked = !!square.marked;
+          if (typeof markedRaw === 'boolean') {
+            square.marked = markedRaw;
+          } else {
+            // Legacy clients that only toggle
+            square.marked = !square.marked;
+          }
+          if (isFree || songId === FREE_SPACE_SONG_ID) {
             square.isFreeSpace = true;
             square.songId = FREE_SPACE_SONG_ID;
           }
 
-          // Echo for clients that still sync off server; phone local marks remain claim authority.
+          // Ack for legacy clients; modern PlayerView ignores this (phone owns marks).
           socket.emit('mark-confirmed', {
             position,
-            songId: isFree ? FREE_SPACE_SONG_ID : songId,
+            songId: isFree || songId === FREE_SPACE_SONG_ID ? FREE_SPACE_SONG_ID : songId,
             marked: square.marked,
             cardId: card.cardId || card.id,
           });
@@ -10464,8 +10472,14 @@ io.on('connection', (socket) => {
           // Host live cards (throttled batch path still applies via sendPlayerCardUpdates)
           sendPlayerCardUpdates(roomId, true);
           void persistPlayerDataCard(room, player, cards.length ? cards : [card]);
-          // Fun FREE taps shouldn't inflate mark stats
-          if (!isFree && player.playerUserId != null) {
+          // Fun FREE taps shouldn't inflate mark stats; only count newly marked non-free squares
+          if (
+            !isFree &&
+            songId !== FREE_SPACE_SONG_ID &&
+            square.marked &&
+            !prevMarked &&
+            player.playerUserId != null
+          ) {
             void playerAccountsStore.recordMark(db, player.playerUserId, playerStatsContext(room, player), 1);
           }
           

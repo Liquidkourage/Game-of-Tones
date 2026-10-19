@@ -36,6 +36,7 @@ alwaysApply: true
 - **Phone owns marks.** Player taps update local card state (persisted for reconnect); claim sends `markedPositions` with `player-bingo`.
 - **Server validates** submitted marks ∩ called songs (plus free space + pattern) — not the server mark map as win authority.
 - `mark-square` is **host live-card telemetry** (throttled); it must not be required for a valid win if the phone's marks ∩ called form the pattern.
+- Telemetry sends absolute `marked: true|false` (set, do not toggle) so FREE / mid-game free-space cannot invert vs the phone.
 - Host verify UI should show the claim-time mark snapshot when present.
 
 ## Code touch map (avoid partial fixes)
