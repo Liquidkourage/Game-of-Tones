@@ -40,6 +40,7 @@ const {
   hydrateRoom: hydrateLiveRoom,
   shouldPersistRoom: shouldPersistLiveRoom,
 } = require('./game/liveRoomSnapshot');
+const participantIdentity = require('./game/participantIdentity');
 const { properShuffle } = require('./game/shuffle');
 const {
   FREE_SPACE_SONG_ID,
@@ -6224,29 +6225,55 @@ io.on('connection', (socket) => {
     
     /** Only one active host; reconnect allowed if clientId matches room.hostClientId; takeover if old host socket disconnected */
     let effectiveIsHost = wantsHost;
+    participantIdentity.ensureRoomIdentityMaps(room);
     if (wantsHost) {
+      const hostParticipantId = participantIdentity.participantIdForJoin({
+        isHost: true,
+        clientId,
+        ownerUserId: room.ownerUserId ?? claimUid,
+        hostClientId: room.hostClientId,
+      });
       if (!room.host) {
-        room.host = socket.id;
-        if (clientId) room.hostClientId = clientId;
+        participantIdentity.setHostBinding(room, {
+          participantId: hostParticipantId,
+          socketId: socket.id,
+          clientId: clientId || undefined,
+        });
         effectiveIsHost = true;
         routineServerLog(`Set ${playerName} as host for room: ${roomId}`);
       } else if (room.host === socket.id) {
+        participantIdentity.setHostBinding(room, {
+          participantId: hostParticipantId || room.hostParticipantId,
+          socketId: socket.id,
+          clientId: clientId || room.hostClientId || undefined,
+        });
         effectiveIsHost = true;
       } else {
         const oldHostSocket = io.sockets.sockets.get(room.host);
         const oldHostConnected = !!(oldHostSocket && oldHostSocket.connected);
         const sameClientReconnect = clientId && room.hostClientId && clientId === room.hostClientId;
-        if (sameClientReconnect) {
+        const sameHostParticipant =
+          hostParticipantId &&
+          room.hostParticipantId &&
+          hostParticipantId === room.hostParticipantId;
+        if (sameClientReconnect || sameHostParticipant) {
           if (room.players.has(room.host)) {
             const op = room.players.get(room.host);
             if (op) op.isHost = false;
           }
-          room.host = socket.id;
+          participantIdentity.setHostBinding(room, {
+            participantId: hostParticipantId || room.hostParticipantId,
+            socketId: socket.id,
+            clientId: clientId || room.hostClientId || undefined,
+          });
           effectiveIsHost = true;
-          routineServerLog(`Host reconnected (clientId) for room ${roomId}`);
+          routineServerLog(`Host reconnected (stable id) for room ${roomId}`);
         } else if (!oldHostConnected) {
-          room.host = socket.id;
-          if (clientId) room.hostClientId = clientId;
+          participantIdentity.setHostBinding(room, {
+            participantId: hostParticipantId,
+            socketId: socket.id,
+            clientId: clientId || undefined,
+          });
           effectiveIsHost = true;
           routineServerLog(`New host claimed room ${roomId} (previous host disconnected)`);
         } else {
@@ -6261,8 +6288,11 @@ io.on('connection', (socket) => {
               const op = room.players.get(room.host);
               if (op) op.isHost = false;
             }
-            room.host = socket.id;
-            if (clientId) room.hostClientId = clientId;
+            participantIdentity.setHostBinding(room, {
+              participantId: hostParticipantId || `host:user:${ownerUid}`,
+              socketId: socket.id,
+              clientId: clientId || undefined,
+            });
             effectiveIsHost = true;
             routineServerLog(`Host takeover by room owner (uid ${ownerUid}) for room ${roomId}`);
           } else {
@@ -6338,8 +6368,21 @@ io.on('connection', (socket) => {
     }
 
     if (priorPlayer && priorPlayer.id !== socket.id) {
+      if (priorPlayer.participantId) {
+        participantIdentity.unbindParticipantSocket(room, priorPlayer.participantId, priorPlayer.id);
+      }
       room.players.delete(priorPlayer.id);
     }
+
+    const joinedParticipantId =
+      priorPlayer?.participantId ||
+      participantIdentity.participantIdForJoin({
+        isHost: effectiveIsHost,
+        isDisplay: String(playerName || '').trim() === 'Display',
+        clientId,
+        ownerUserId: room.ownerUserId ?? claimUid,
+        hostClientId: room.hostClientId,
+      });
 
     const player = {
       id: socket.id,
@@ -6351,6 +6394,7 @@ io.on('connection', (socket) => {
         ? [...priorPlayer.disqualifiedCardIds]
         : [],
       clientId: clientId || null,
+      participantId: joinedParticipantId || null,
       /** false = joined as remote/online when host enables hybrid mode */
       inPerson,
       playerUserId: joinedPlayerUserId,
@@ -6360,6 +6404,14 @@ io.on('connection', (socket) => {
     };
     
     room.players.set(socket.id, player);
+    if (joinedParticipantId) {
+      if (!socket.data) socket.data = {};
+      socket.data.participantId = joinedParticipantId;
+      participantIdentity.bindParticipantSocket(room, joinedParticipantId, socket.id);
+    }
+    if (effectiveIsHost && joinedParticipantId) {
+      room.hostParticipantId = joinedParticipantId;
+    }
 
     if (!effectiveIsHost && clientId) {
       void recordPlayerDataJoin(room, player, playerPreferences);
@@ -6433,6 +6485,7 @@ io.on('connection', (socket) => {
       organizationId: organizationId,
       playerName: playerName,
       isHost: effectiveIsHost,
+      participantId: player.participantId || null,
       playerCount: getNonHostPlayerCount(room),
       hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline,
       venueBranding: venueBrandingForRoom(room),
@@ -6862,17 +6915,23 @@ io.on('connection', (socket) => {
     // socket reconnect / Strict Mode remount before join-room finishes reclaiming).
     const ownerUid = room.ownerUserId != null ? Number(room.ownerUserId) : null;
     const socketUid = socket.hostUserId != null ? Number(socket.hostUserId) : null;
-    if (
-      !isCurrentHost &&
-      ownerUid != null &&
-      socketUid != null &&
-      ownerUid === socketUid
-    ) {
+    if (!isCurrentHost && participantIdentity.requireHost(socket, room)) {
       if (room.host && room.host !== socket.id && room.players.has(room.host)) {
         const prior = room.players.get(room.host);
         if (prior) prior.isHost = false;
       }
-      room.host = socket.id;
+      const reclaimPid =
+        participantIdentity.participantIdForJoin({
+          isHost: true,
+          ownerUserId: ownerUid ?? socketUid,
+          clientId: player?.clientId,
+          hostClientId: room.hostClientId,
+        }) || room.hostParticipantId;
+      participantIdentity.setHostBinding(room, {
+        participantId: reclaimPid,
+        socketId: socket.id,
+        clientId: player?.clientId || room.hostClientId || undefined,
+      });
       socket.join(roomId);
       if (!player) {
         player = {
@@ -6880,11 +6939,18 @@ io.on('connection', (socket) => {
           name: 'Host',
           isHost: true,
           clientId: null,
+          participantId: reclaimPid,
           inPerson: true,
         };
         room.players.set(socket.id, player);
       } else {
         player.isHost = true;
+        if (reclaimPid) player.participantId = reclaimPid;
+      }
+      if (reclaimPid) {
+        if (!socket.data) socket.data = {};
+        socket.data.participantId = reclaimPid;
+        participantIdentity.bindParticipantSocket(room, reclaimPid, socket.id);
       }
       playerIsHost = true;
       socketIsRoomHost = true;
@@ -7947,6 +8013,7 @@ io.on('connection', (socket) => {
           : 1;
       const verificationData = {
         playerId: socket.id,
+        participantId: player.participantId || null,
         playerName: player.name,
         avatar: typeof player.avatar === 'string' ? player.avatar : '',
         inPerson: player.inPerson !== false,
@@ -8041,6 +8108,7 @@ io.on('connection', (socket) => {
           : 1;
       const verificationData = {
         playerId: socket.id,
+        participantId: player.participantId || null,
         playerName: player.name,
         inPerson: player.inPerson !== false,
         playerCard: cardToSend,
@@ -8093,8 +8161,7 @@ io.on('connection', (socket) => {
       });
       return;
     }
-    const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
-    if (!isHost) {
+    if (!participantIdentity.requireHost(socket, room)) {
       socket.emit('bingo-verified', {
         approved: false,
         error: 'not_host',
@@ -8116,8 +8183,12 @@ io.on('connection', (socket) => {
     }
 
     const headData = q[0].verificationData;
-    let resolvedPlayerId = headData.playerId;
-    let player = room.players.get(resolvedPlayerId);
+    let resolvedPlayerId = participantIdentity.resolveLivePlayerSocketId(room, {
+      participantId: headData.participantId,
+      playerId: headData.playerId,
+      playerName: headData.playerName,
+    });
+    let player = resolvedPlayerId ? room.players.get(resolvedPlayerId) : null;
 
     if (!player && headData.playerName) {
       for (const [pid, p] of room.players) {
@@ -9687,7 +9758,7 @@ io.on('connection', (socket) => {
     const { roomId, stopPlayback = true } = data || {};
     const room = rooms.get(roomId);
     if (!room) return;
-    if (room.host !== socket.id && !room.players.get(socket.id)?.isHost) return;
+    if (!participantIdentity.requireHost(socket, room)) return;
     try {
       await finalizeOrgEventForRoom(room);
       stopLiveRoundTimers(roomId, room);
@@ -9717,7 +9788,7 @@ io.on('connection', (socket) => {
     const { roomId, stopPlayback = true } = data || {};
     const room = rooms.get(roomId);
     if (!room) return;
-    if (room.host !== socket.id && !room.players.get(socket.id)?.isHost) return;
+    if (!participantIdentity.requireHost(socket, room)) return;
     try {
       await finalizeOrgEventForRoom(room);
       stopLiveRoundTimers(roomId, room);
@@ -10600,6 +10671,9 @@ io.on('connection', (socket) => {
     for (const [roomId, room] of rooms.entries()) {
       if (room.players.has(socket.id)) {
         const player = room.players.get(socket.id);
+        if (player?.participantId) {
+          participantIdentity.unbindParticipantSocket(room, player.participantId, socket.id);
+        }
         room.players.delete(socket.id);
         
         routineServerLog(`Player ${player.name} left room ${roomId}`);
@@ -10610,6 +10684,7 @@ io.on('connection', (socket) => {
         }
         
         // If the host disconnected, promote another HOST-role socket only — never the TV Display client.
+        // Keep hostParticipantId so the same host can reclaim on reconnect.
         if (room.host === socket.id) {
           if (room.players.size > 0) {
             const nmLower = (n) => String(n || '').trim().toLowerCase();
@@ -10621,7 +10696,11 @@ io.on('connection', (socket) => {
             );
             if (candidates.length > 0) {
               const newHost = candidates[0];
-              room.host = newHost.id;
+              participantIdentity.setHostBinding(room, {
+                participantId: newHost.participantId || room.hostParticipantId,
+                socketId: newHost.id,
+                clientId: newHost.clientId || room.hostClientId || undefined,
+              });
               routineServerLog(`Assigned ${newHost.name} as new host for room ${roomId}`);
             } else {
               room.host = null;
