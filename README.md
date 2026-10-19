@@ -17,7 +17,7 @@ A modern, real-time music bingo game with Spotify integration. Where music meets
 
 ### Prerequisites
 
-- Node.js (v16 or higher)
+- Node.js **18.x** (see `package.json` `engines`: `>=18 <20` until the Node 22 upgrade)
 - npm or yarn
 - Spotify Premium account (for host)
 
