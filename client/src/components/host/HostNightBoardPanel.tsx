@@ -15,6 +15,9 @@ export type NightBoardPlannedRound = {
   name: string;
   prize?: string;
   status: 'completed' | 'active' | 'planned' | 'unplanned';
+  /** Local stamp when round completed (backup if server roundWinners not yet restored). */
+  winnerName?: string;
+  winnerAvatar?: string;
 };
 
 type HostNightBoardPanelProps = {
@@ -49,13 +52,19 @@ const HostNightBoardPanel: React.FC<HostNightBoardPanelProps> = ({
     plannedRounds.length > 0
       ? plannedRounds.map((r, i) => {
           const winner = winnerByRound.get(i + 1);
+          const stampedName = r.winnerName?.trim() || '';
+          const name = winner?.playerName?.trim() || stampedName || '—';
+          const done =
+            Boolean(winner) ||
+            (r.status === 'completed' && Boolean(stampedName)) ||
+            name !== '—';
           return {
             key: `round-${i + 1}`,
             label: r.name || `Round ${i + 1}`,
             prize: (winner?.prize || r.prize || '').trim() || '—',
-            winner: winner?.playerName?.trim() || '—',
-            avatar: winner?.avatar || '',
-            done: Boolean(winner),
+            winner: name,
+            avatar: winner?.avatar || r.winnerAvatar || '',
+            done,
           };
         })
       : winners.map((w) => ({

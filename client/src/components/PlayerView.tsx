@@ -879,7 +879,13 @@ const PlayerView: React.FC = () => {
     socket.emit(
       'song-request',
       { roomId, title, artist },
-      (result: { ok?: boolean; request?: unknown; mySongRequests?: unknown } | undefined) => {
+      (result: {
+        ok?: boolean;
+        request?: unknown;
+        mySongRequests?: unknown;
+        reason?: string;
+        message?: string;
+      } | undefined) => {
         if (settled) return;
         settled = true;
         window.clearTimeout(timeoutId);
@@ -894,6 +900,9 @@ const PlayerView: React.FC = () => {
           }
         } else {
           setRequestStatus('error');
+          if (result?.reason === 'limit_reached' && result.message) {
+            window.alert(result.message);
+          }
         }
       },
     );
@@ -1869,8 +1878,9 @@ const PlayerView: React.FC = () => {
     );
     if (idx >= 0) q[idx] = payload;
     else q.push(payload);
+    // Delay first flush so rapid taps coalesce and the UI paint isn't fighting a socket emit.
     if (!markSquareFlushTimerRef.current) {
-      markSquareFlushTimerRef.current = setTimeout(drainMarkSquareTelemetry, 0);
+      markSquareFlushTimerRef.current = setTimeout(drainMarkSquareTelemetry, 120);
     }
   };
 
@@ -2052,9 +2062,23 @@ const PlayerView: React.FC = () => {
     }
   };
 
+  const showIncompletePatternPopup = () => {
+    setBingoStatus('failed');
+    setBingoMessage("You haven't completed the winning pattern yet");
+    window.setTimeout(() => {
+      setBingoStatus('idle');
+      setBingoMessage('');
+    }, 3200);
+  };
+
   const startBingoHold = (e: React.PointerEvent<HTMLButtonElement>) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
+    const cardNow = bingoCardRef.current;
+    if (!cardNow || !checkVisualPattern(cardNow)) {
+      showIncompletePatternPopup();
+      return;
+    }
     bingoHoldSubmittedRef.current = false;
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -2075,11 +2099,19 @@ const PlayerView: React.FC = () => {
       setHoldProgress(p);
       if (p >= 1) {
         if (socket && !bingoHoldSubmittedRef.current) {
+          const card = bingoCardRef.current;
+          if (!card || !checkVisualPattern(card)) {
+            bingoHoldSubmittedRef.current = true;
+            showIncompletePatternPopup();
+            setBingoHolding(false);
+            holdStartRef.current = null;
+            holdRafRef.current = null;
+            return;
+          }
           bingoHoldSubmittedRef.current = true;
           setBingoStatus('checking');
           setBingoMessage('Checking your bingo...');
-          const card = bingoCardRef.current;
-          const markedPositions = (card?.squares || [])
+          const markedPositions = (card.squares || [])
             .filter((s) => s.marked)
             .map((s) => s.position);
           // Drain pending mark telemetry before claim so host live card is close.
@@ -2092,7 +2124,7 @@ const PlayerView: React.FC = () => {
           }
           socket.emit('player-bingo', {
             roomId,
-            cardId: card?.cardId || card?.id,
+            cardId: card.cardId || card.id,
             markedPositions,
           });
         }
@@ -2554,6 +2586,7 @@ const PlayerView: React.FC = () => {
               customMatchAnywhere={gameState.customMatchAnywhere}
               customPatternName={gameState.customPatternName}
               patternComposite={gameState.patternComposite}
+              card={bingoCard}
             />
           ) : null}
           <div className="bingo-section-measure">
@@ -2622,11 +2655,11 @@ const PlayerView: React.FC = () => {
                     key={bingoCard?.cardId || bingoCard?.id || `card-${activeCardIndex}`}
                     className="player-card-carousel__slide"
                     initial={{
-                      x: carouselDir === 0 ? 0 : carouselDir > 0 ? 36 : -36,
-                      opacity: carouselDir === 0 ? 1 : 0.55,
+                      x: carouselDir === 0 ? 0 : carouselDir > 0 ? 28 : -28,
+                      opacity: carouselDir === 0 ? 1 : 0.7,
                     }}
                     animate={{ x: 0, opacity: 1 }}
-                    transition={{ type: 'spring', stiffness: 480, damping: 38, mass: 0.75 }}
+                    transition={{ type: 'tween', duration: 0.18, ease: 'easeOut' }}
                   >
                     {renderBingoCard()}
                   </motion.div>

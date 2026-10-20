@@ -51,6 +51,7 @@ const PLAIN_FIELDS = [
   'publicDisplayCallListMode',
   'publicDisplayFontSize',
   'maxPlayerBingoCards',
+  'maxSongRequestsPerPlayer',
   'freeSpaceEnabled',
   'bingoWinPolicy',
   'songRequests',
@@ -204,6 +205,10 @@ function hydrateRoom(state) {
     publicDisplayCallListMode: state.publicDisplayCallListMode,
     publicDisplayFontSize: state.publicDisplayFontSize,
     maxPlayerBingoCards: state.maxPlayerBingoCards || 1,
+    maxSongRequestsPerPlayer:
+      typeof state.maxSongRequestsPerPlayer === 'number' && Number.isFinite(state.maxSongRequestsPerPlayer)
+        ? Math.min(20, Math.max(1, Math.round(state.maxSongRequestsPerPlayer)))
+        : 5,
     freeSpaceEnabled: !!state.freeSpaceEnabled,
     bingoWinPolicy: state.bingoWinPolicy || 'any_round',
     songRequests: Array.isArray(state.songRequests) ? state.songRequests : [],

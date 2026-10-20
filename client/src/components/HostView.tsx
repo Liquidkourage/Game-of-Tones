@@ -52,6 +52,7 @@ import {
   BingoPattern,
   BINGO_PATTERNS,
   getPatternDisplayName,
+  getPatternHintLabel,
   getSavedCustomPatterns,
   PATTERN_OPTIONS,
   saveCustomPattern,
@@ -223,6 +224,7 @@ type SongRequestEntry = {
   status: 'pending' | 'approved' | 'rejected';
   moderatedAt?: number;
   resolvedSong?: Song;
+  fromHost?: boolean;
 };
 
 function normalizeSongRequestEntry(raw: any): SongRequestEntry | null {
@@ -264,6 +266,7 @@ function normalizeSongRequestEntry(raw: any): SongRequestEntry | null {
     status,
     moderatedAt: Number.isFinite(Number(raw?.moderatedAt)) ? Number(raw.moderatedAt) : undefined,
     ...(resolvedSong ? { resolvedSong } : {}),
+    ...(raw?.fromHost === true ? { fromHost: true } : {}),
   };
 }
 
@@ -454,11 +457,12 @@ function normalizeRoomGameStateForHost(gameState: unknown): 'waiting' | 'playing
   return 'waiting';
 }
 
-/** Saved-pattern display name for server sync (projector / clients). */
+/** Saved-pattern display name for server sync (projector / clients). Never empty when mask is set. */
 function customPatternDisplayNameForEmit(
   mask: readonly string[],
   selected: SavedCustomPattern | null | undefined,
   savedList: SavedCustomPattern[],
+  fallbackName?: string | null,
 ): string | undefined {
   if (!mask.length) return undefined;
   const key = positionsKeyForMatch(mask);
@@ -467,7 +471,10 @@ function customPatternDisplayNameForEmit(
   if (fromSelected) return fromSelected.slice(0, MAX_CUSTOM_PATTERN_NAME_EMIT);
   const hit = savedList.find((sp) => positionsKeyForMatch(sp.positions) === key);
   const n = hit?.name?.trim();
-  return n ? n.slice(0, MAX_CUSTOM_PATTERN_NAME_EMIT) : undefined;
+  if (n) return n.slice(0, MAX_CUSTOM_PATTERN_NAME_EMIT);
+  const fb = typeof fallbackName === 'string' ? fallbackName.trim() : '';
+  if (fb) return fb.slice(0, MAX_CUSTOM_PATTERN_NAME_EMIT);
+  return 'Custom shape';
 }
 
 interface Playlist {
@@ -660,6 +667,8 @@ interface EventRound {
   bingoPattern?: BingoPattern;
   /** Required when `bingoPattern === 'custom'` (saved-pattern squares). */
   customPatternMask?: string[];
+  /** Display name for custom shape (projector / host labels). */
+  customPatternName?: string;
   /** Required when `bingoPattern === 'composite'` (AND/OR clauses). */
   patternComposite?: PatternCompositeSpec;
   /** When `bingoPattern === 'line'`: how many distinct rows/columns/diagonals must be complete (1–6). */
@@ -680,6 +689,9 @@ interface EventRound {
   playRecap?: RoundPlayRecap;
   /** Optional prize label for this round (shown on projector + night winners board). */
   prize?: string;
+  /** Stamped when this event round completes (survives refresh; pairs with server roundWinners). */
+  winnerName?: string;
+  winnerAvatar?: string;
 }
 
 interface RoundPlayRecap {
@@ -1890,6 +1902,38 @@ const HostView: React.FC = () => {
   const verificationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [roundComplete, setRoundComplete] = useState<any>(null);
   const [roundWinners, setRoundWinners] = useState<Array<any>>([]);
+  /** Rehydrate event-round winner lines from server roundWinners after restart/refresh. */
+  useEffect(() => {
+    if (!roomId || !Array.isArray(roundWinners) || roundWinners.length === 0) return;
+    setEventRounds((prev) => {
+      let changed = false;
+      const next = prev.map((r, i) => {
+        const w = roundWinners.find((x: any) => Number(x?.roundNumber) === i + 1);
+        const name = typeof w?.playerName === 'string' ? w.playerName.trim() : '';
+        if (!name) return r;
+        const avatar = typeof w?.avatar === 'string' ? w.avatar : r.winnerAvatar;
+        if (r.winnerName === name && (r.winnerAvatar || '') === (avatar || '')) return r;
+        changed = true;
+        return {
+          ...r,
+          winnerName: name,
+          ...(avatar != null ? { winnerAvatar: avatar } : {}),
+          ...(r.status === 'completed'
+            ? {}
+            : r.status === 'active'
+              ? { status: 'completed' as const, completedAt: r.completedAt || Date.now() }
+              : {}),
+        };
+      });
+      if (!changed) return prev;
+      try {
+        localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, [roundWinners, roomId]);
   /** Projector night winners board visibility (host toggle). */
   const [showNightBoard, setShowNightBoard] = useState(false);
   /** Game-tab Tonight accordion — user-controlled; auto-collapses once when a round goes live. */
@@ -1986,6 +2030,7 @@ const HostView: React.FC = () => {
   );
   const [showPlayerFeedbackModal, setShowPlayerFeedbackModal] = useState(false);
   const [songRequests, setSongRequests] = useState<SongRequestEntry[]>([]);
+  const [maxSongRequestsPerPlayer, setMaxSongRequestsPerPlayer] = useState(5);
   const [requestModerationBusyId, setRequestModerationBusyId] = useState<string | null>(null);
   /** Spotify matches for a pending request — host picks when search returns more than one. */
   const [requestTrackPicker, setRequestTrackPicker] = useState<{
@@ -4078,6 +4123,10 @@ const HostView: React.FC = () => {
       }
     });
     newSocket.on('song-requests-cleared', () => setSongRequests([]));
+    newSocket.on('max-song-requests-per-player-updated', (data: any) => {
+      const n = Math.round(Number(data?.maxRequests));
+      if (Number.isFinite(n) && n >= 1 && n <= 20) setMaxSongRequestsPerPlayer(n);
+    });
     newSocket.on('song-request-removed', (data: any) => {
       const requestId = typeof data?.requestId === 'string' ? data.requestId : '';
       if (!requestId) return;
@@ -4216,14 +4265,28 @@ const HostView: React.FC = () => {
             writeActiveHostRoom({ roomId, gameState: 'waiting', updatedAt: Date.now() });
           }
           const completedRoundIndex = currentRoundIndexRef.current;
+          const winnerName =
+            typeof data.playerName === 'string' && data.playerName.trim()
+              ? data.playerName.trim()
+              : undefined;
+          const winnerAvatar =
+            typeof data.avatar === 'string' ? data.avatar : undefined;
           setEventRounds((prev) => {
             const cur = completedRoundIndex;
-            if (cur < 0 || cur >= prev.length || prev[cur].status === 'completed') return prev;
+            if (cur < 0 || cur >= prev.length) return prev;
+            const existing = prev[cur];
+            if (existing.status === 'completed' && existing.winnerName) return prev;
             const next = [...prev];
             next[cur] = stampRoundPlayRecap(
-              { ...next[cur], status: 'completed', completedAt: Date.now() },
+              {
+                ...existing,
+                status: 'completed',
+                completedAt: existing.completedAt || Date.now(),
+                ...(winnerName ? { winnerName } : {}),
+                ...(winnerAvatar != null ? { winnerAvatar } : {}),
+              },
               playedInOrderRef.current,
-              [finalizedOrderRef.current, next[cur].savedMixSnapshot?.songs],
+              [finalizedOrderRef.current, existing.savedMixSnapshot?.songs],
             );
             try {
               localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
@@ -5010,6 +5073,10 @@ const HostView: React.FC = () => {
       }
       if (payload?.maxPlayerBingoCards != null) {
         setMaxPlayerBingoCards(normalizeMaxPlayerBingoCards(payload.maxPlayerBingoCards, 1));
+      }
+      if (payload?.maxSongRequestsPerPlayer != null) {
+        const n = Math.round(Number(payload.maxSongRequestsPerPlayer));
+        if (Number.isFinite(n) && n >= 1 && n <= 20) setMaxSongRequestsPerPlayer(n);
       }
       if (payload?.bingoWinPolicy != null) {
         setBingoWinPolicy(normalizeBingoWinPolicy(payload.bingoWinPolicy, 'any_round'));
@@ -6590,11 +6657,21 @@ const HostView: React.FC = () => {
 
       if (patternForStart === 'custom' && maskForStart.length === 0) {
         window.alert(
-          'This round uses a custom pattern but no squares are saved. Choose a saved custom pattern in Round builder.',
+          'This round uses a custom pattern but no squares are saved. Choose a saved custom pattern (or draw one) in Round builder, then try Start Game again.',
         );
         setIsStartingGame(false);
         return false;
       }
+
+      const customNameForStart =
+        patternForStart === 'custom'
+          ? customPatternDisplayNameForEmit(
+              maskForStart,
+              selectedCustomPattern,
+              savedCustomPatterns,
+              roundForStart?.customPatternName,
+            ) || 'Custom shape'
+          : '';
 
       if (patternForStart === 'custom' && maskForStart.length > 0) {
         socket.emit('set-pattern', {
@@ -6605,8 +6682,7 @@ const HostView: React.FC = () => {
           customMatchAllowRotation: !!(roundForStart?.customMatchAllowRotation ?? customMatchAllowRotation),
           customMatchAllowMirror: !!(roundForStart?.customMatchAllowMirror ?? customMatchAllowMirror),
           customMatchAnywhere: !!(roundForStart?.customMatchAnywhere ?? customMatchAnywhere),
-          customPatternName:
-            customPatternDisplayNameForEmit(maskForStart, selectedCustomPattern, savedCustomPatterns) ?? '',
+          customPatternName: customNameForStart,
         });
       } else if (patternForStart === 'composite' && compositeForStart) {
         socket.emit('set-pattern', { roomId, pattern: 'composite', patternComposite: compositeForStart });
@@ -6656,12 +6732,7 @@ const HostView: React.FC = () => {
         customMatchAllowRotation: !!(roundForStart?.customMatchAllowRotation ?? customMatchAllowRotation),
         customMatchAllowMirror: !!(roundForStart?.customMatchAllowMirror ?? customMatchAllowMirror),
         customMatchAnywhere: !!(roundForStart?.customMatchAnywhere ?? customMatchAnywhere),
-        ...(patternForStart === 'custom'
-          ? {
-              customPatternName:
-                customPatternDisplayNameForEmit(maskForStart, selectedCustomPattern, savedCustomPatterns) ?? '',
-            }
-          : {}),
+        ...(patternForStart === 'custom' ? { customPatternName: customNameForStart } : {}),
         freeSpace: freeSpaceForStart,
         savedRoundPlayback: useSavedRoundPlayback,
         savedRoundId: useSavedRoundPlayback ? roundForStart?.id : undefined,
@@ -7208,6 +7279,33 @@ const HostView: React.FC = () => {
     addLog('Display letters reset', 'info');
   };
 
+  const hostActivePatternLabel = useCallback(() => {
+    const round = currentRoundIndex >= 0 ? eventRounds[currentRoundIndex] : null;
+    return getPatternHintLabel(pattern, {
+      linesRequired,
+      patternComposite,
+      customPatternName:
+        customPatternDisplayNameForEmit(
+          customMask.length ? customMask : customPattern,
+          selectedCustomPattern,
+          savedCustomPatterns,
+          round?.customPatternName,
+        ) || selectedCustomPattern?.name || round?.customPatternName || undefined,
+      customMatchAnywhere,
+    });
+  }, [
+    pattern,
+    linesRequired,
+    patternComposite,
+    customMask,
+    customPattern,
+    selectedCustomPattern,
+    savedCustomPatterns,
+    customMatchAnywhere,
+    currentRoundIndex,
+    eventRounds,
+  ]);
+
   const patchActiveRoundBingo = useCallback(
     (
       patch: Partial<
@@ -7215,6 +7313,7 @@ const HostView: React.FC = () => {
           EventRound,
           | 'bingoPattern'
           | 'customPatternMask'
+          | 'customPatternName'
           | 'patternComposite'
           | 'freeSpaceEnabled'
           | 'linesRequired'
@@ -7232,7 +7331,12 @@ const HostView: React.FC = () => {
         const r = prev[idx];
         let updated: EventRound = { ...r, ...patch };
         if (patch.bingoPattern != null && patch.bingoPattern !== 'custom' && patch.bingoPattern !== 'composite') {
-          updated = { ...updated, customPatternMask: undefined, patternComposite: undefined };
+          updated = {
+            ...updated,
+            customPatternMask: undefined,
+            customPatternName: undefined,
+            patternComposite: undefined,
+          };
         }
         if (patch.bingoPattern != null && patch.bingoPattern !== 'line') {
           updated = { ...updated, linesRequired: undefined };
@@ -7244,13 +7348,14 @@ const HostView: React.FC = () => {
             customMatchAllowRotation: undefined,
             customMatchAllowMirror: undefined,
             customMatchAnywhere: undefined,
+            customPatternName: undefined,
           };
         }
         if (patch.bingoPattern === 'custom') {
           updated = { ...updated, patternComposite: undefined };
         }
         if (patch.bingoPattern === 'composite') {
-          updated = { ...updated, customPatternMask: undefined };
+          updated = { ...updated, customPatternMask: undefined, customPatternName: undefined };
           if (!updated.patternComposite) {
             const d = normalizePatternComposite(DEFAULT_COMPOSITE_SPEC);
             if (d) updated = { ...updated, patternComposite: d };
@@ -7614,9 +7719,16 @@ const HostView: React.FC = () => {
     setCustomMatchAllowRotation(rot);
     setCustomMatchAllowMirror(mir);
     setCustomMatchAnywhere(anyw);
+    const customName =
+      customPatternDisplayNameForEmit(
+        customPatternObj.positions,
+        customPatternObj,
+        savedCustomPatterns,
+      ) || customPatternObj.name || 'Custom shape';
     patchActiveRoundBingo({
       bingoPattern: 'custom',
       customPatternMask: customPatternObj.positions,
+      customPatternName: customName,
       patternComposite: undefined,
       customMatchReverse: rev,
       customMatchAllowRotation: rot,
@@ -7632,10 +7744,9 @@ const HostView: React.FC = () => {
         customMatchAllowRotation: rot,
         customMatchAllowMirror: mir,
         customMatchAnywhere: anyw,
-        customPatternName:
-          customPatternDisplayNameForEmit(customPatternObj.positions, customPatternObj, savedCustomPatterns) ?? '',
+        customPatternName: customName,
       });
-      addLog(`Custom pattern set to ${customPatternObj.name}`, 'info');
+      addLog(`Custom pattern set to ${customName}`, 'info');
     }
   };
 
@@ -7683,9 +7794,16 @@ const HostView: React.FC = () => {
     const rot = savedPattern.matchAllowRotation === true;
     const mir = savedPattern.matchAllowMirror === true;
     const anyw = savedPattern.matchAnywhere === true;
+    const customName =
+      customPatternDisplayNameForEmit(
+        savedPattern.positions,
+        savedPattern,
+        getSavedCustomPatterns(),
+      ) || savedPattern.name || 'Custom shape';
     handleUpdateRoundBingoFields(idx, {
       bingoPattern: 'custom',
       customPatternMask: [...savedPattern.positions],
+      customPatternName: customName,
       patternComposite: undefined,
       customMatchReverse: rev,
       customMatchAllowRotation: rot,
@@ -7710,9 +7828,7 @@ const HostView: React.FC = () => {
           customMatchAllowRotation: rot,
           customMatchAllowMirror: mir,
           customMatchAnywhere: anyw,
-          customPatternName:
-            customPatternDisplayNameForEmit(savedPattern.positions, savedPattern, getSavedCustomPatterns()) ??
-            '',
+          customPatternName: customName,
         });
       }
       addLog(
@@ -8669,6 +8785,39 @@ const HostView: React.FC = () => {
     socket.emit('clear-song-requests', { roomId });
     showToast('All song requests cleared.', 'info');
   }, [socket, roomId, showToast]);
+
+  const updateMaxSongRequestsPerPlayer = useCallback(
+    (next: number) => {
+      const n = Math.min(20, Math.max(1, Math.round(Number(next)) || 5));
+      setMaxSongRequestsPerPlayer(n);
+      if (socket && roomId) {
+        socket.emit('set-max-song-requests-per-player', { roomId, maxRequests: n });
+      }
+    },
+    [socket, roomId],
+  );
+
+  const hostAddSongRequest = useCallback(
+    async (title: string, artist: string) => {
+      if (!socket || !roomId || !title.trim()) return;
+      await new Promise<void>((resolve) => {
+        socket.emit(
+          'host-song-request',
+          { roomId, title: title.trim(), artist: artist.trim() },
+          (result: { ok?: boolean; request?: unknown } | undefined) => {
+            if (result?.ok && result.request) {
+              setSongRequests((prev) => mergeSongRequests(prev, result.request));
+              showToast('Request added to the queue.', 'info');
+            } else {
+              showToast('Could not add that request.', 'error');
+            }
+            resolve();
+          },
+        );
+      });
+    },
+    [socket, roomId, showToast],
+  );
 
   const generateSongList = useCallback(
     async (opts?: {
@@ -9851,6 +10000,7 @@ const HostView: React.FC = () => {
           EventRound,
           | 'bingoPattern'
           | 'customPatternMask'
+          | 'customPatternName'
           | 'patternComposite'
           | 'freeSpaceEnabled'
           | 'linesRequired'
@@ -9873,7 +10023,12 @@ const HostView: React.FC = () => {
           updated = { ...updated, prize: nextPrize || undefined };
         }
         if (patch.bingoPattern != null && patch.bingoPattern !== 'custom' && patch.bingoPattern !== 'composite') {
-          updated = { ...updated, customPatternMask: undefined, patternComposite: undefined };
+          updated = {
+            ...updated,
+            customPatternMask: undefined,
+            customPatternName: undefined,
+            patternComposite: undefined,
+          };
         }
         if (patch.bingoPattern != null && patch.bingoPattern !== 'line') {
           updated = { ...updated, linesRequired: undefined };
@@ -9885,13 +10040,14 @@ const HostView: React.FC = () => {
             customMatchAllowRotation: undefined,
             customMatchAllowMirror: undefined,
             customMatchAnywhere: undefined,
+            customPatternName: undefined,
           };
         }
         if (patch.bingoPattern === 'custom') {
           updated = { ...updated, patternComposite: undefined };
         }
         if (patch.bingoPattern === 'composite') {
-          updated = { ...updated, customPatternMask: undefined };
+          updated = { ...updated, customPatternMask: undefined, customPatternName: undefined };
           if (!updated.patternComposite) {
             const d = normalizePatternComposite(DEFAULT_COMPOSITE_SPEC);
             if (d) updated = { ...updated, patternComposite: d };
@@ -11852,7 +12008,7 @@ const HostView: React.FC = () => {
       roundStatus,
       roundStatusLabel,
       playlistNames,
-      patternLabel: getPatternDisplayName(pattern),
+      patternLabel: hostActivePatternLabel(),
       poolCount,
       playedCount,
       remainingCount,
@@ -11883,6 +12039,7 @@ const HostView: React.FC = () => {
     joinedPlayersRoster,
     winners.length,
     getDisplaySongTitle,
+    hostActivePatternLabel,
   ]);
 
   const showPrimaryFinalizeMixButton =
@@ -14088,7 +14245,12 @@ const HostView: React.FC = () => {
       >
         <div className="host-shell">
           <nav className="host-sidebar host-glass-panel" aria-label="Host navigation">
-            {HOST_GLASS_NAV_ITEMS.map((item) => (
+            {HOST_GLASS_NAV_ITEMS.map((item) => {
+              const pendingRequests =
+                item.id === 'requests'
+                  ? songRequests.filter((r) => r.status === 'pending').length
+                  : 0;
+              return (
               <button
                 key={item.id}
                 type="button"
@@ -14098,12 +14260,23 @@ const HostView: React.FC = () => {
                     : 'host-sidebar__btn'
                 }
                 aria-current={hostGlassNav === item.id ? 'page' : undefined}
+                aria-label={
+                  pendingRequests > 0
+                    ? `${item.label}, ${pendingRequests} waiting`
+                    : item.label
+                }
                 onClick={() => onHostGlassNav(item.id)}
               >
                 {hostNavIcons[item.id]}
                 <span>{item.label}</span>
+                {pendingRequests > 0 ? (
+                  <span className="host-sidebar__chip" aria-hidden>
+                    {pendingRequests > 99 ? '99+' : pendingRequests}
+                  </span>
+                ) : null}
               </button>
-            ))}
+              );
+            })}
           </nav>
           <div className="host-shell__main" ref={hostShellMainRef}>
         {/* Header */}
@@ -14337,6 +14510,8 @@ const HostView: React.FC = () => {
                           name: r.name,
                           prize: r.prize,
                           status: r.status,
+                          winnerName: r.winnerName,
+                          winnerAvatar: r.winnerAvatar,
                         }))}
                         winners={roundWinners}
                         showOnProjector={showNightBoard}
@@ -14532,6 +14707,9 @@ const HostView: React.FC = () => {
                   pendingCount={songRequests.filter((r) => r.status === 'pending').length}
                   busyRequestId={requestModerationBusyId}
                   trackPicker={requestTrackPicker}
+                  maxSongRequestsPerPlayer={maxSongRequestsPerPlayer}
+                  onMaxSongRequestsPerPlayerChange={updateMaxSongRequestsPerPlayer}
+                  onHostAddRequest={hostAddSongRequest}
                   onModerate={(request, status) => void moderateSongRequest(request, status)}
                   onConfirmTrack={(request, track) => void confirmSongRequestTrack(request, track)}
                   onCancelTrackPicker={() => setRequestTrackPicker(null)}
@@ -15021,7 +15199,7 @@ const HostView: React.FC = () => {
                 Player Cards &amp; Progress
               </div>
               <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
-                Pattern: <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
+                Pattern: <strong style={{ color: '#c5d4e0' }}>{hostActivePatternLabel()}</strong>
                 {' · '}
                 <span>Press Escape to close</span>
               </div>
@@ -15083,7 +15261,7 @@ const HostView: React.FC = () => {
                 Player Cards &amp; Progress
               </h2>
               <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
-                Pattern: <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
+                Pattern: <strong style={{ color: '#c5d4e0' }}>{hostActivePatternLabel()}</strong>
                 {' · '}
                 <span>Click outside or press Escape to close</span>
               </div>

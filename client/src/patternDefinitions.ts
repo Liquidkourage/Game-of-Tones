@@ -469,6 +469,44 @@ export function countCompletedLinesVisual(card: { squares: CardSqLite[] }): numb
   return n;
 }
 
+/** Unmarked cells on each incomplete bingo line; returns the smallest count (spaces left for nearest line). */
+export function minSpacesLeftTowardNextLine(card: { squares: CardSqLite[] }): number {
+  const isOn = (pos: string) => {
+    const sq = card.squares.find((s) => s.position === pos);
+    return isLiteVisuallyDaubed(sq);
+  };
+  const lines: string[][] = [];
+  for (let row = 0; row < 5; row++) {
+    lines.push([0, 1, 2, 3, 4].map((c) => `${row}-${c}`));
+  }
+  for (let col = 0; col < 5; col++) {
+    lines.push([0, 1, 2, 3, 4].map((r) => `${r}-${col}`));
+  }
+  lines.push([0, 1, 2, 3, 4].map((i) => `${i}-${i}`));
+  lines.push([0, 1, 2, 3, 4].map((i) => `${i}-${4 - i}`));
+  let best = 5;
+  for (const line of lines) {
+    const missing = line.reduce((n, pos) => n + (isOn(pos) ? 0 : 1), 0);
+    if (missing === 0) continue;
+    if (missing < best) best = missing;
+  }
+  return best === 5 ? 5 : best;
+}
+
+/** Audience line-progress copy: lines done/needed + spaces left on the nearest incomplete line. */
+export function formatLinePatternProgress(
+  card: { squares: CardSqLite[] } | null | undefined,
+  linesRequired: unknown,
+): string | null {
+  if (!card?.squares?.length) return null;
+  const need = normalizeLinesRequired(linesRequired ?? 1);
+  const have = countCompletedLinesVisual(card);
+  if (have >= need) return `Line ${need}/${need} · ready`;
+  const spaces = minSpacesLeftTowardNextLine(card);
+  const spaceLabel = spaces === 1 ? '1 space left' : `${spaces} spaces left`;
+  return `Line ${have}/${need} · ${spaceLabel}`;
+}
+
 /** Count complete lines where every cell passes the given validator (e.g. marked + played song). */
 export function countCompletedLinesWithValidator(
   card: { squares: CardSqLite[] },

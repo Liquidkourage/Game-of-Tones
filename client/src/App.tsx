@@ -41,6 +41,10 @@ function AppHeader() {
   const isHostEntry =
     isHome &&
     (location.search.includes('mode=host') || new URLSearchParams(location.search).get('host') === '1');
+  /** Already in a room (player/host/display) — hide header Join so it doesn't pull people out mid-game. */
+  const inActiveGame =
+    /^\/(player|host|display)(\/|$)/.test(location.pathname) ||
+    /^\/room\//.test(location.pathname);
 
   useEffect(() => {
     const onBranding = (e: Event) => {
@@ -162,7 +166,7 @@ function AppHeader() {
                 <span>Host</span>
               </Link>
             )
-          ) : (
+          ) : inActiveGame ? null : (
             <Link to="/" className="app-header__org-link" title="Join a game">
               <UserPlus size={16} aria-hidden className="app-header__org-icon" />
               <span>Join</span>

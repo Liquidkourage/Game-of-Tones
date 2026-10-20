@@ -148,6 +148,20 @@
   color: rgba(255, 255, 255, 0.9);
 }
 
+.host-glass-theme .host-sidebar__chip {
+  margin-left: auto;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: #00ffa3;
+  color: #0a0e14;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.35rem;
+  text-align: center;
+}
+
 .host-glass-theme .host-sidebar__btn--active {
   background: linear-gradient(
     145deg,
@@ -1949,6 +1963,50 @@
 .host-glass-theme .host-requests-workspace__stats strong {
   color: var(--host-glass-violet-bright);
   font-weight: 800;
+}
+
+.host-glass-theme .host-requests-workspace__cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+.host-glass-theme .host-requests-workspace__cap input {
+  width: 3.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  padding: 4px 6px;
+}
+
+.host-glass-theme .host-requests-workspace__host-add {
+  margin-top: 12px;
+  padding: 14px 16px;
+}
+
+.host-glass-theme .host-requests-workspace__subtitle {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  font-weight: 750;
+}
+
+.host-glass-theme .host-requests-workspace__host-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.host-glass-theme .host-requests-workspace__host-add-row input {
+  flex: 1 1 140px;
+  min-width: 120px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  padding: 8px 10px;
 }
 
 .host-glass-theme .host-requests-workspace__link {

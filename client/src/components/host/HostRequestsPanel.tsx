@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Inbox, Trash2 } from 'lucide-react';
 import PlayerAvatar from '../PlayerAvatar';
 
@@ -11,6 +11,7 @@ export type HostSongRequestRow = {
   submittedAt: number;
   status: 'pending' | 'approved' | 'rejected';
   resolvedSong?: { id: string; name: string; artist: string };
+  fromHost?: boolean;
 };
 
 export type HostRequestTrackPicker = {
@@ -31,6 +32,9 @@ type HostRequestsPanelProps = {
   pendingCount: number;
   busyRequestId: string | null;
   trackPicker: HostRequestTrackPicker | null;
+  maxSongRequestsPerPlayer: number;
+  onMaxSongRequestsPerPlayerChange: (next: number) => void;
+  onHostAddRequest: (title: string, artist: string) => void | Promise<void>;
   onModerate: (request: HostSongRequestRow, status: 'approved' | 'rejected') => void;
   onConfirmTrack: (
     request: HostSongRequestRow,
@@ -55,6 +59,9 @@ const HostRequestsPanel: React.FC<HostRequestsPanelProps> = ({
   pendingCount,
   busyRequestId,
   trackPicker,
+  maxSongRequestsPerPlayer,
+  onMaxSongRequestsPerPlayerChange,
+  onHostAddRequest,
   onModerate,
   onConfirmTrack,
   onCancelTrackPicker,
@@ -63,6 +70,22 @@ const HostRequestsPanel: React.FC<HostRequestsPanelProps> = ({
   onGoToRounds,
 }) => {
   const sorted = requests.slice().reverse();
+  const [hostTitle, setHostTitle] = useState('');
+  const [hostArtist, setHostArtist] = useState('');
+  const [hostAddBusy, setHostAddBusy] = useState(false);
+
+  const submitHostRequest = async () => {
+    const title = hostTitle.trim();
+    if (!title || hostAddBusy) return;
+    setHostAddBusy(true);
+    try {
+      await onHostAddRequest(title, hostArtist.trim());
+      setHostTitle('');
+      setHostArtist('');
+    } finally {
+      setHostAddBusy(false);
+    }
+  };
 
   return (
     <div className="host-requests-workspace">
@@ -89,8 +112,53 @@ const HostRequestsPanel: React.FC<HostRequestsPanelProps> = ({
           <span>
             <strong>{pendingCount}</strong> pending
           </span>
+          <label className="host-requests-workspace__cap">
+            Per-player limit
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={maxSongRequestsPerPlayer}
+              onChange={(e) => {
+                const n = Math.round(Number(e.target.value));
+                if (!Number.isFinite(n)) return;
+                onMaxSongRequestsPerPlayerChange(Math.min(20, Math.max(1, n)));
+              }}
+            />
+          </label>
           <button type="button" className="host-requests-workspace__link" onClick={onGoToRounds}>
             Open Rounds →
+          </button>
+        </div>
+      </section>
+
+      <section className="host-glass-panel host-requests-workspace__host-add" aria-label="Add a request as host">
+        <h3 className="host-requests-workspace__subtitle">Add a request</h3>
+        <p className="host-requests-workspace__blurb">
+          Drop a title into the queue yourself (same moderation flow as player submissions).
+        </p>
+        <div className="host-requests-workspace__host-add-row">
+          <input
+            type="text"
+            placeholder="Song title"
+            value={hostTitle}
+            onChange={(e) => setHostTitle(e.target.value)}
+            maxLength={120}
+          />
+          <input
+            type="text"
+            placeholder="Artist (optional)"
+            value={hostArtist}
+            onChange={(e) => setHostArtist(e.target.value)}
+            maxLength={120}
+          />
+          <button
+            type="button"
+            className="host-playlist-quick-add"
+            disabled={!hostTitle.trim() || hostAddBusy}
+            onClick={() => void submitHostRequest()}
+          >
+            {hostAddBusy ? 'Adding…' : 'Add to queue'}
           </button>
         </div>
       </section>
@@ -98,7 +166,7 @@ const HostRequestsPanel: React.FC<HostRequestsPanelProps> = ({
       <section className="host-glass-panel host-requests-workspace__queue" aria-label="Request queue">
         {sorted.length === 0 ? (
           <p className="host-requests-workspace__empty">
-            No requests yet. Players submit from their card menu.
+            No requests yet. Players submit from their card menu, or add one above.
           </p>
         ) : (
           <ul className="host-requests-workspace__list">
@@ -113,6 +181,7 @@ const HostRequestsPanel: React.FC<HostRequestsPanelProps> = ({
                   >
                     from <PlayerAvatar avatar={request.avatar} name={request.playerName} size="sm" />
                     {request.playerName}
+                    {request.fromHost ? ' (host)' : ''}
                   </span>
                 </div>
                 <div className="host-requests-workspace__actions">
