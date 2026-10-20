@@ -1851,6 +1851,10 @@ const PublicDisplay: React.FC = () => {
       if (!state || typeof state !== 'object') return;
       applyingServerRevealRef.current = true;
       let shouldHealServer = false;
+      /** True when we accepted a wholesale sequence replace (real reset / non-empty epoch payload). */
+      let acceptedWholesaleSequence = false;
+      /** True when we refused an empty mid-round wipe — keep local baselines and heal server. */
+      let refusedEmptySequenceWipe = false;
       try {
         const serverEpoch =
           typeof state.seqEpoch === 'number' && Number.isFinite(state.seqEpoch)
@@ -1873,8 +1877,10 @@ const PublicDisplay: React.FC = () => {
               revealSequenceRef.current.length === 0
             ) {
               revealSequenceRef.current = [...serverSeq];
+              acceptedWholesaleSequence = true;
             } else {
               shouldHealServer = true;
+              refusedEmptySequenceWipe = true;
             }
           } else {
             const localSeq = revealSequenceRef.current;
@@ -1887,8 +1893,21 @@ const PublicDisplay: React.FC = () => {
           }
         }
         if (state.songBaselines && typeof state.songBaselines === 'object') {
-          if (takeWholesale) {
+          // Never wholesale-clear baselines when we just refused an empty sequence wipe —
+          // missing baseline ≡ seq length, which blanks every call card while letters stay in memory.
+          if (refusedEmptySequenceWipe) {
+            songBaselineRef.current = mergeSongBaselinesPreferLower(
+              songBaselineRef.current,
+              state.songBaselines,
+            );
+          } else if (takeWholesale && (opts?.forceClear === true || acceptedWholesaleSequence)) {
             songBaselineRef.current = { ...state.songBaselines };
+          } else if (takeWholesale) {
+            // Epoch advanced but sequence path did not accept wholesale (edge) — prefer-lower only.
+            songBaselineRef.current = mergeSongBaselinesPreferLower(
+              songBaselineRef.current,
+              state.songBaselines,
+            );
           } else {
             songBaselineRef.current = mergeSongBaselinesPreferLower(
               songBaselineRef.current,
@@ -1896,11 +1915,33 @@ const PublicDisplay: React.FC = () => {
             );
           }
         }
+        // After a refused wipe, played songs with no baseline would blank (missing → length).
+        // Backfill 0 so kept letters stay visible — same invariant as post-hydrate reconnect.
+        if (refusedEmptySequenceWipe) {
+          const playedIds = playedOrderRef.current || [];
+          let backfilled = false;
+          for (const songId of playedIds) {
+            if (!songId) continue;
+            if (songBaselineRef.current[songId] === undefined) {
+              songBaselineRef.current[songId] = 0;
+              backfilled = true;
+            }
+          }
+          if (backfilled) shouldHealServer = true;
+        }
         if (opts?.restoreCarousel !== false && typeof state.carouselIndex === 'number' && Number.isFinite(state.carouselIndex)) {
           const serverIdx = Math.max(0, Math.floor(state.carouselIndex));
           const localIdx = carouselIndexRef.current;
           // room-state often carries carouselIndex 0 until the display sync lands — never regress live scroll.
-          let idx = takeWholesale ? serverIdx : serverIdx >= localIdx ? serverIdx : localIdx;
+          // Refused empty wipe: do not snap carousel to server 0 either.
+          let idx =
+            refusedEmptySequenceWipe
+              ? localIdx
+              : takeWholesale
+                ? serverIdx
+                : serverIdx >= localIdx
+                  ? serverIdx
+                  : localIdx;
           // Collapse duplicate-tail indices from a pre-wrap server value (avoids one fly-through on reconnect).
           const totalCols = countPlayOrderColumns(playedOrderRef.current);
           if (totalCols > visibleCols) {
