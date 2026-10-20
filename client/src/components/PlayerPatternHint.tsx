@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import {
   STANDARD_BINGO_POSITIONS,
+  formatLinePatternProgress,
   getPatternHintLabel,
   patternHintCellPositions,
   type PatternCompositeSpec,
@@ -16,6 +17,8 @@ export type PlayerPatternHintProps = {
   customMatchAnywhere?: boolean;
   customPatternName?: string;
   patternComposite?: PatternCompositeSpec | null;
+  /** Active card — used for line-mode spaces/lines progress. */
+  card?: { squares: Array<{ position: string; marked?: boolean; isFreeSpace?: boolean; songId?: string }> } | null;
 };
 
 /** Tiny always-on pattern reminder: label + 5×5 dots (does not replace the live card). */
@@ -29,6 +32,7 @@ const PlayerPatternHint: React.FC<PlayerPatternHintProps> = ({
   customMatchAnywhere,
   customPatternName,
   patternComposite,
+  card,
 }) => {
   const label = useMemo(
     () =>
@@ -40,6 +44,11 @@ const PlayerPatternHint: React.FC<PlayerPatternHintProps> = ({
       }),
     [pattern, linesRequired, patternComposite, customPatternName, customMatchAnywhere],
   );
+
+  const lineProgress = useMemo(() => {
+    if (pattern !== 'line' || !card) return null;
+    return formatLinePatternProgress(card, linesRequired);
+  }, [pattern, card, linesRequired]);
 
   const lit = useMemo(() => {
     const positions = patternHintCellPositions({
@@ -79,6 +88,9 @@ const PlayerPatternHint: React.FC<PlayerPatternHintProps> = ({
       <div className="player-pattern-hint__copy">
         <span className="player-pattern-hint__eyebrow">Win with</span>
         <span className="player-pattern-hint__label">{label}</span>
+        {lineProgress ? (
+          <span className="player-pattern-hint__progress">{lineProgress}</span>
+        ) : null}
       </div>
     </div>
   );

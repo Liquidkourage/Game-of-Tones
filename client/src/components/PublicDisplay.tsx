@@ -1865,7 +1865,17 @@ const PublicDisplay: React.FC = () => {
         if (Array.isArray(state.revealSequence)) {
           const serverSeq = state.revealSequence;
           if (takeWholesale) {
-            revealSequenceRef.current = [...serverSeq];
+            // Empty server payload must not wipe letters mid-round (sync/reconnect race) —
+            // players reported letters appearing then disappearing. Explicit reset uses forceClear.
+            if (
+              opts?.forceClear === true ||
+              serverSeq.length > 0 ||
+              revealSequenceRef.current.length === 0
+            ) {
+              revealSequenceRef.current = [...serverSeq];
+            } else {
+              shouldHealServer = true;
+            }
           } else {
             const localSeq = revealSequenceRef.current;
             const merged = mergeRevealSequences(localSeq, serverSeq);

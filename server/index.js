@@ -699,6 +699,35 @@ function maxPlayerBingoCardsForRoom(room) {
   return playerBingoCards.normalizeMaxPlayerBingoCards(room?.maxPlayerBingoCards, 1);
 }
 
+const DEFAULT_MAX_SONG_REQUESTS_PER_PLAYER = 5;
+
+function normalizeMaxSongRequestsPerPlayer(raw, fallback = DEFAULT_MAX_SONG_REQUESTS_PER_PLAYER) {
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(20, Math.max(1, n));
+}
+
+function maxSongRequestsPerPlayerForRoom(room) {
+  return normalizeMaxSongRequestsPerPlayer(
+    room?.maxSongRequestsPerPlayer,
+    DEFAULT_MAX_SONG_REQUESTS_PER_PLAYER,
+  );
+}
+
+/** Pending + approved count toward the per-player cap (rejected do not count). */
+function countPlayerSongRequestsTowardCap(room, { clientId, playerName } = {}) {
+  const list = Array.isArray(room?.songRequests) ? room.songRequests : [];
+  const cid = typeof clientId === 'string' ? clientId.trim() : '';
+  const name = typeof playerName === 'string' ? playerName.trim() : '';
+  return list.filter((entry) => {
+    if (!entry || (entry.status !== 'pending' && entry.status !== 'approved')) return false;
+    const entryCid = typeof entry.clientId === 'string' ? entry.clientId.trim() : '';
+    if (cid && entryCid) return entryCid === cid;
+    if (!entryCid && name && entry.playerName === name) return true;
+    return false;
+  }).length;
+}
+
 function normalizeBingoWinPolicy(raw, fallback = 'any_round') {
   return raw === 'one_win' || raw === 'any_round' ? raw : fallback;
 }
@@ -4118,6 +4147,7 @@ function publicDisplayRoomStateExtras(room) {
     lastDisplayWinner: room.lastDisplayWinner || null,
     bingoColumnLetters: bingoColumnLettersForRoom(room),
     maxPlayerBingoCards: maxPlayerBingoCardsForRoom(room),
+    maxSongRequestsPerPlayer: maxSongRequestsPerPlayerForRoom(room),
     bingoWinPolicy: bingoWinPolicyForRoom(room),
     currentRoundName: roundName || null,
     currentRoundPrize: prize || null,
@@ -6259,6 +6289,7 @@ io.on('connection', (socket) => {
           publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
           publicDisplayLetterRevealToast: true,
           maxPlayerBingoCards: 1,
+          maxSongRequestsPerPlayer: DEFAULT_MAX_SONG_REQUESTS_PER_PLAYER,
           bingoWinPolicy: 'any_round',
           songRequests: [],
           createdAt: new Date().toISOString()
@@ -6801,7 +6832,7 @@ io.on('connection', (socket) => {
       }
       const now = Date.now();
       if (socket.lastSongRequestAt && now - socket.lastSongRequestAt < 3000) {
-        reply({ ok: false });
+        reply({ ok: false, reason: 'too_fast' });
         return;
       }
       socket.lastSongRequestAt = now;
@@ -6809,6 +6840,20 @@ io.on('connection', (socket) => {
         typeof player.clientId === 'string' && player.clientId.trim()
           ? player.clientId.trim().slice(0, 128)
           : undefined;
+      const cap = maxSongRequestsPerPlayerForRoom(room);
+      const used = countPlayerSongRequestsTowardCap(room, {
+        clientId: clientId || undefined,
+        playerName: player.name || '',
+      });
+      if (used >= cap) {
+        reply({
+          ok: false,
+          reason: 'limit_reached',
+          maxSongRequestsPerPlayer: cap,
+          message: `Request limit reached (${cap} per player). Ask the host if you need more.`,
+        });
+        return;
+      }
       const request = {
         id: `${now}-${socket.id}`,
         playerName: player.name || 'Player',
@@ -6833,10 +6878,97 @@ io.on('connection', (socket) => {
         clientId: clientId || undefined,
         playerName: player.name || '',
       });
-      reply({ ok: true, request, mySongRequests });
+      reply({
+        ok: true,
+        request,
+        mySongRequests,
+        maxSongRequestsPerPlayer: cap,
+      });
     } catch (error) {
       console.error('song-request failed:', error?.message || error);
       reply({ ok: false });
+    }
+  });
+
+  /** Host adds a request into the same audience queue (counts under a synthetic host client key). */
+  socket.on('host-song-request', (data = {}, acknowledge) => {
+    const reply = (payload) => {
+      if (typeof acknowledge === 'function') acknowledge(payload);
+    };
+    try {
+      const roomId = typeof data.roomId === 'string' ? data.roomId : '';
+      const room = rooms.get(roomId);
+      if (!room) {
+        reply({ ok: false });
+        return;
+      }
+      const isCurrentHost =
+        room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) {
+        reply({ ok: false });
+        return;
+      }
+      const title =
+        typeof data.title === 'string' ? data.title.replace(/\s+/g, ' ').trim().slice(0, 120) : '';
+      const artist =
+        typeof data.artist === 'string' ? data.artist.replace(/\s+/g, ' ').trim().slice(0, 120) : '';
+      if (!title) {
+        reply({ ok: false, reason: 'missing_title' });
+        return;
+      }
+      const now = Date.now();
+      const hostPlayer = room.players.get(socket.id);
+      const request = {
+        id: `${now}-host-${socket.id}`,
+        playerName:
+          (typeof data.playerName === 'string' && data.playerName.trim()
+            ? data.playerName.trim().slice(0, 120)
+            : null) ||
+          hostPlayer?.name ||
+          'Host',
+        avatar: typeof hostPlayer?.avatar === 'string' ? hostPlayer.avatar : '',
+        clientId: `host:${room.hostClientId || room.id || 'room'}`,
+        title,
+        artist,
+        submittedAt: now,
+        status: 'pending',
+        fromHost: true,
+      };
+      room.songRequests = [
+        ...(Array.isArray(room.songRequests) ? room.songRequests : []),
+        request,
+      ].slice(-roomSongRequestsStore.MAX_ROOM_SONG_REQUESTS);
+      persistRoomSongRequests(room);
+      for (const [playerId, roomPlayer] of room.players) {
+        if (playerId === room.host || roomPlayer?.isHost) {
+          io.to(playerId).emit('song-request-updated', request);
+        }
+      }
+      reply({ ok: true, request });
+    } catch (error) {
+      console.error('host-song-request failed:', error?.message || error);
+      reply({ ok: false });
+    }
+  });
+
+  socket.on('set-max-song-requests-per-player', (data = {}) => {
+    try {
+      const { roomId, maxRequests } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost =
+        room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+      const next = normalizeMaxSongRequestsPerPlayer(maxRequests, maxSongRequestsPerPlayerForRoom(room));
+      if (maxSongRequestsPerPlayerForRoom(room) === next) {
+        io.to(roomId).emit('max-song-requests-per-player-updated', { maxRequests: next });
+        return;
+      }
+      room.maxSongRequestsPerPlayer = next;
+      io.to(roomId).emit('max-song-requests-per-player-updated', { maxRequests: next });
+      routineServerLog(`🎫 Max song requests per player for room ${roomId}: ${next}`);
+    } catch (e) {
+      console.error('❌ Error setting max song requests per player:', e?.message || e);
     }
   });
 
@@ -7456,13 +7588,28 @@ io.on('connection', (socket) => {
       room.customPatternName = '';
       if (room.pattern === 'custom') {
         const mask = Array.isArray(customMask) ? customMask.filter(p => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p)) : [];
+        if (mask.length === 0) {
+          // Never leave pattern=custom with an empty mask — Start Game / bingo break.
+          room.pattern = 'line';
+          room.customPattern = undefined;
+          room.customPatternName = '';
+          room.patternComposite = undefined;
+          room.linesRequired = normalizeLinesRequiredSrv(lrIn != null ? lrIn : room.linesRequired != null ? room.linesRequired : 1);
+          io.to(roomId).emit('pattern-updated', patternMetaForClient(room));
+          socket.emit('error', {
+            message:
+              'Custom pattern needs at least one square. Choose a saved shape or draw one before starting.',
+          });
+          return;
+        }
         room.customPattern = new Set(mask);
         room.patternComposite = undefined;
         room.customPatternReverse = readOrientationBoolSrv(customMatchReverse);
         room.customPatternAllowRotation = readOrientationBoolSrv(customMatchAllowRotation);
         room.customPatternAllowMirror = readOrientationBoolSrv(customMatchAllowMirror);
         room.customPatternAnywhere = readOrientationBoolSrv(customMatchAnywhere);
-        room.customPatternName = sanitizeCustomPatternNameSrv(incomingCustomPatternName);
+        room.customPatternName =
+          sanitizeCustomPatternNameSrv(incomingCustomPatternName) || 'Custom shape';
       } else if (room.pattern === 'composite') {
         room.customPattern = undefined;
         room.patternComposite = normalizePatternComposite(incomingComposite);
@@ -9486,17 +9633,31 @@ io.on('connection', (socket) => {
           if (incomingPattern && allowed.has(canonicalHostBingoPattern(incomingPattern))) {
             room.pattern = canonicalHostBingoPattern(incomingPattern);
           }
-          if (room.pattern === 'custom' && Array.isArray(incomingCustomMask)) {
-            const mask = incomingCustomMask.filter((p) => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p));
-            room.customPattern = mask.length > 0 ? new Set(mask) : undefined;
+          if (room.pattern === 'custom') {
+            const mask = Array.isArray(incomingCustomMask)
+              ? incomingCustomMask.filter((p) => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p))
+              : Array.from(room.customPattern || []).filter((p) =>
+                  /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p),
+                );
+            if (mask.length === 0) {
+              socket.emit('error', {
+                message:
+                  'This round uses a custom pattern but no squares are saved. Choose a saved custom pattern in Round builder, then Start Game again.',
+              });
+              return;
+            }
+            room.customPattern = new Set(mask);
             room.patternComposite = undefined;
-            room.customPatternName = sanitizeCustomPatternNameSrv(incomingCustomPatternName);
+            room.customPatternName =
+              sanitizeCustomPatternNameSrv(incomingCustomPatternName) ||
+              sanitizeCustomPatternNameSrv(room.customPatternName) ||
+              'Custom shape';
           } else if (room.pattern === 'composite') {
             room.customPattern = undefined;
             room.customPatternName = '';
             room.patternComposite = normalizePatternComposite(incomingPatternComposite);
             if (!room.patternComposite) room.pattern = 'line';
-          } else if (room.pattern !== 'custom') {
+          } else {
             room.customPattern = undefined;
             room.customPatternName = '';
             room.patternComposite = undefined;
@@ -9849,6 +10010,7 @@ io.on('connection', (socket) => {
           publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
           publicDisplayLetterRevealToast: true,
           maxPlayerBingoCards: 1,
+          maxSongRequestsPerPlayer: DEFAULT_MAX_SONG_REQUESTS_PER_PLAYER,
           bingoWinPolicy: 'any_round',
           songRequests: [],
         };
@@ -15643,6 +15805,7 @@ app.post('/api/host/rooms', async (req, res) => {
         customPattern: undefined,
         patternComposite: undefined,
         maxPlayerBingoCards: 1,
+        maxSongRequestsPerPlayer: DEFAULT_MAX_SONG_REQUESTS_PER_PLAYER,
         bingoWinPolicy: 'any_round',
         songRequests: [],
         createdAt: new Date().toISOString(),

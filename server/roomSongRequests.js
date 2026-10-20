@@ -75,6 +75,7 @@ function sanitizeSongRequestEntry(raw) {
     ...(clientId ? { clientId } : {}),
     ...(Number.isFinite(moderatedAt) ? { moderatedAt } : {}),
     ...(resolvedSong ? { resolvedSong } : {}),
+    ...(raw.fromHost === true ? { fromHost: true } : {}),
   };
 }
 
