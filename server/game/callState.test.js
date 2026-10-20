@@ -35,9 +35,20 @@ describe('callState', () => {
   });
 
   it('setCalledSongIds replaces the list', () => {
-    const room = { calledSongIds: ['x'] };
+    const room = { calledSongIds: ['x'], callSequence: 0 };
     setCalledSongIds(room, ['a', null, 'b']);
     assert.deepEqual(room.calledSongIds, ['a', 'b']);
+    assert.equal(room.callSequence, 1);
+  });
+
+  it('setCalledSongIds no-ops without bumping callSequence', () => {
+    const room = { calledSongIds: ['a', 'b'], callSequence: 7 };
+    setCalledSongIds(room, ['a', 'b']);
+    assert.deepEqual(room.calledSongIds, ['a', 'b']);
+    assert.equal(room.callSequence, 7);
+    setCalledSongIds(room, ['a', null, 'b']);
+    assert.deepEqual(room.calledSongIds, ['a', 'b']);
+    assert.equal(room.callSequence, 7);
   });
 
   it('setCurrentSong / restoreCurrentSong', () => {

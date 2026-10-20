@@ -87,6 +87,8 @@ describe('liveRoomSnapshot', () => {
     assert.equal(room.gameState, 'paused'); // mid-round → paused for host resume
     assert.ok(room.clientCards.has('cid-ada'));
     assert.equal(room.players.size, 0);
+    assert.equal(room.hostProjectorPrefsSeeded, true);
+    assert.equal(room.restoredFromLiveSnapshot, true);
   });
 
   it('round-trip keeps bingo validation inputs aligned', () => {

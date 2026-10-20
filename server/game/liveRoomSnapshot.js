@@ -227,6 +227,8 @@ function hydrateRoom(state) {
     randomStarts: state.randomStarts || 'none',
     needsHostResume: state.needsHostResume === true || LIVE_GAME_STATES.has(state.gameState),
     restoredFromLiveSnapshot: true,
+    // Snapshot already carries live host settings — do not re-seed from DB prefs on host rejoin.
+    hostProjectorPrefsSeeded: true,
   };
 
   // If we were mid-round, do not auto-resume Spotify — host presses Resume.

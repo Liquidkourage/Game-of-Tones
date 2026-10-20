@@ -813,15 +813,23 @@ async function restoreOrDealBingoCardForJoiner(room, roomId, socket, clientIdOpt
   if (!player || player.isHost || player.name === 'Display') return false;
 
   rebindBingoCardsToActivePlayers(room);
-  const bound = resolveActivePlayerCards(room, player, socket.id);
+  let bound = resolveActivePlayerCards(room, player, socket.id);
   if (bound.length) {
     storePlayerBingoCards(room, socket.id, player, bound);
     emitBingoCardsToSocket(socket.id, bound, { room });
+    if (allowDeal && bound.length < maxPlayerBingoCardsForRoom(room)) {
+      await ensurePlayerCardsFilledToRoomMax(roomId, room, socket.id, player);
+    }
     return true;
   }
 
   const restored = await restoreAndEmitBingoCardForJoiner(room, socket, clientIdOpt);
-  if (restored) return true;
+  if (restored) {
+    if (allowDeal) {
+      await ensurePlayerCardsFilledToRoomMax(roomId, room, socket.id, player);
+    }
+    return true;
+  }
   if (!allowDeal) return false;
 
   const live =
@@ -837,7 +845,7 @@ async function restoreOrDealBingoCardForJoiner(room, roomId, socket, clientIdOpt
   if (!live || !hasPool) return false;
 
   routineServerLog(`🎲 Dealing card(s) after failed restore for ${player.name}`);
-  const card = await generateBingoCardForPlayer(roomId, socket.id);
+  const card = await generateBingoCardForPlayer(roomId, socket.id, { fillToMax: true });
   return !!card;
 }
 
@@ -3650,25 +3658,59 @@ function bingoCardMatchesCurrentRoundPool(room, card) {
 function resolveActivePlayerCards(room, player, playerId) {
   if (!room || !player || player.isHost || player.name === 'Display') return [];
 
+  // Prefer the longest pool-valid list. A stale 1-card socket entry must not beat
+  // clientCards/player.bingoCards with 2–3 cards (that was wiping second cards on rebind).
+  const candidates = [];
   const bySocket = playerBingoCards.asBingoCardList(room.bingoCards?.get(playerId));
   if (bySocket.length && bySocket.every((c) => bingoCardMatchesCurrentRoundPool(room, c))) {
-    return bySocket;
+    candidates.push(bySocket);
   }
 
-  const byPlayer = playerBingoCards.asBingoCardList(player.bingoCards || player.bingoCard);
-  if (byPlayer.length && byPlayer.every((c) => bingoCardMatchesCurrentRoundPool(room, c))) {
-    return byPlayer;
+  const byPlayerList = playerBingoCards.asBingoCardList(player.bingoCards);
+  if (
+    byPlayerList.length &&
+    byPlayerList.every((c) => bingoCardMatchesCurrentRoundPool(room, c))
+  ) {
+    candidates.push(byPlayerList);
+  } else {
+    const byPlayerSingular = playerBingoCards.asBingoCardList(player.bingoCard);
+    if (
+      byPlayerSingular.length &&
+      byPlayerSingular.every((c) => bingoCardMatchesCurrentRoundPool(room, c))
+    ) {
+      candidates.push(byPlayerSingular);
+    }
   }
 
   const clientId = player.clientId;
   if (clientId && room.clientCards?.has(clientId)) {
     const byClient = playerBingoCards.asBingoCardList(room.clientCards.get(clientId));
     if (byClient.length && byClient.every((c) => bingoCardMatchesCurrentRoundPool(room, c))) {
-      return byClient;
+      candidates.push(byClient);
     }
   }
 
-  return [];
+  if (!candidates.length) return [];
+  let best = candidates[0];
+  for (let i = 1; i < candidates.length; i++) {
+    if (candidates[i].length > best.length) best = candidates[i];
+  }
+  return best;
+}
+
+/** After restore/rejoin: pad dealt cards up to room.maxPlayerBingoCards. */
+async function ensurePlayerCardsFilledToRoomMax(roomId, room, playerId, player) {
+  if (!room || !player || player.isHost || player.name === 'Display') return false;
+  const max = maxPlayerBingoCardsForRoom(room);
+  let have = resolveActivePlayerCards(room, player, playerId);
+  if (have.length >= max) return false;
+  if (have.length === 0) return false;
+  routineServerLog(
+    `🃏 Padding cards for ${player.name}: ${have.length}→${max} (restore left them under room max)`,
+  );
+  await generateBingoCardForPlayer(roomId, playerId, { append: true, fillToMax: true });
+  have = resolveActivePlayerCards(room, player, playerId);
+  return have.length > 0 && have.length <= max;
 }
 
 /** Resolve primary (first) card — legacy callers. */
@@ -3795,6 +3837,14 @@ async function ensureActivePlayersHaveCards(roomId, room) {
       ) {
         storePlayerBingoCards(room, playerId, player, prior);
         emitBingoCardsToSocket(playerId, prior, { isNewCard: false, room });
+        if (prior.length < maxPlayerBingoCardsForRoom(room)) {
+          try {
+            await ensurePlayerCardsFilledToRoomMax(roomId, room, playerId, player);
+            dealt++;
+          } catch (e) {
+            console.error(`❌ Pad after saved-round restore failed for ${player.name}:`, e?.message || e);
+          }
+        }
         clearCardRecoveryCooldown(room, player, playerId);
         continue;
       }
@@ -3805,6 +3855,15 @@ async function ensureActivePlayersHaveCards(roomId, room) {
       try {
         const restored = await restoreAndEmitBingoCardForJoiner(room, sock, player.clientId);
         if (restored) {
+          have = resolveActivePlayerCards(room, player, playerId);
+          if (have.length < maxPlayerBingoCardsForRoom(room)) {
+            try {
+              await ensurePlayerCardsFilledToRoomMax(roomId, room, playerId, player);
+              dealt++;
+            } catch (e) {
+              console.error(`❌ Pad after restore failed for ${player.name}:`, e?.message || e);
+            }
+          }
           clearCardRecoveryCooldown(room, player, playerId);
           continue;
         }
@@ -3822,7 +3881,10 @@ async function ensureActivePlayersHaveCards(roomId, room) {
     if (shouldSkipCardRecovery(room, player, playerId)) continue;
     try {
       routineServerLog(`🔄 Dealing missing card for ${player.name} (active player recovery)`);
-      const card = await generateBingoCardForPlayer(roomId, playerId);
+      const card = await generateBingoCardForPlayer(roomId, playerId, {
+        append: have.length > 0,
+        fillToMax: true,
+      });
       if (card) {
         clearCardRecoveryCooldown(room, player, playerId);
         dealt++;
@@ -6244,7 +6306,14 @@ io.on('connection', (socket) => {
           }
           const seededLetters = sanitizeBingoColumnLetters(p.bingoColumnLetters);
           if (seededLetters) room.bingoColumnLetters = seededLetters;
-          if (p.maxPlayerBingoCards != null) {
+          // Never clobber a live / restored room's cards-per-player from saved prefs
+          // (after deploy, host rejoin used to reset max→1 and wipe second cards).
+          if (
+            p.maxPlayerBingoCards != null &&
+            !room.restoredFromLiveSnapshot &&
+            !room.mixFinalized &&
+            room.gameState === 'waiting'
+          ) {
             room.maxPlayerBingoCards = playerBingoCards.normalizeMaxPlayerBingoCards(
               p.maxPlayerBingoCards,
               1,
