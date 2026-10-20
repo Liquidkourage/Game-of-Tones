@@ -644,9 +644,17 @@ function collectPreservedSavedRoundCards(room, roundKey) {
 }
 
 function storePlayerBingoCards(room, playerId, player, cardsOrCard, preferredCardId = null) {
-  const list = playerBingoCards
+  let list = playerBingoCards
     .asBingoCardList(cardsOrCard)
     .map((c) => playerBingoCards.ensureBingoCardIdentity(c, playerId));
+  let repairedFreeSpace = false;
+  if (resolveRoomUsesFreeSpace(room, list)) {
+    list = list.map((c) => {
+      if (bingoCardHasFreeCenter(c)) return c;
+      repairedFreeSpace = true;
+      return ensureBingoCardFreeCenter(c);
+    });
+  }
   if (!room.bingoCards) room.bingoCards = new Map();
   room.bingoCards.set(playerId, list);
   if (player) {
@@ -661,6 +669,10 @@ function storePlayerBingoCards(room, playerId, player, cardsOrCard, preferredCar
     room.clientCards.set(player.clientId, list);
   }
   cacheSavedRoundPlayerCards(room, playerId, player, list);
+  if (repairedFreeSpace) {
+    routineServerLog(`🆓 Repaired FREE center on card(s) for ${player?.name || playerId}`);
+    void persistPlayerDataCard(room, player, list);
+  }
   return list;
 }
 
@@ -3731,7 +3743,13 @@ function rebindBingoCardsToActivePlayers(room) {
     const cards = resolveActivePlayerCards(room, player, playerId);
     if (!cards.length) continue;
 
+    const missingFree =
+      resolveRoomUsesFreeSpace(room, cards) && cards.some((c) => !bingoCardHasFreeCenter(c));
     storePlayerBingoCards(room, playerId, player, cards);
+    if (missingFree) {
+      const fixed = resolveActivePlayerCards(room, player, playerId);
+      emitBingoCardsToSocket(playerId, fixed, { isNewCard: false, room });
+    }
     rebound++;
   }
   return rebound;
@@ -10934,6 +10952,34 @@ function makeFreeSpaceSquare() {
   };
 }
 
+function bingoCardHasFreeCenter(card) {
+  const sq = card?.squares?.find((s) => s && s.position === '2-2');
+  return !!(sq && (sq.isFreeSpace || sq.songId === FREE_SPACE_SONG_ID));
+}
+
+/**
+ * Room flag wins when true; otherwise infer from already-dealt cards.
+ * Snapshot used to omit freeSpaceEnabled — first cards kept FREE, padded 2nd cards did not.
+ */
+function resolveRoomUsesFreeSpace(room, existingCards) {
+  if (room?.freeSpaceEnabled === true) return true;
+  const list = playerBingoCards.asBingoCardList(existingCards);
+  if (list.some(bingoCardHasFreeCenter)) {
+    if (room) room.freeSpaceEnabled = true;
+    return true;
+  }
+  return !!room?.freeSpaceEnabled;
+}
+
+/** Ensure center is FREE when the round uses free space (fixes padded cards dealt without the flag). */
+function ensureBingoCardFreeCenter(card) {
+  if (!card?.squares?.length || bingoCardHasFreeCenter(card)) return card;
+  const squares = card.squares.map((sq) =>
+    sq && sq.position === '2-2' ? makeFreeSpaceSquare() : sq,
+  );
+  return { ...card, squares };
+}
+
 /** Leftovers rounds: original playlist name for a third bingo-square line. */
 function bingoSquareOriginPlaylistFields(s) {
   const origin =
@@ -11567,7 +11613,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null, options =
       }
     }
 
-    const useFreeSpace = !!room.freeSpaceEnabled;
+    const useFreeSpace = resolveRoomUsesFreeSpace(room, null);
     const songsNeededPerCard = useFreeSpace ? 24 : 25;
     if (useFreeSpace) {
       routineServerLog('🆓 Free space enabled: center square (2-2) is FREE (24 song squares per card)');
@@ -12633,7 +12679,8 @@ async function generateBingoCardForPlayer(roomId, playerId, options = {}) {
   
   // Build a single card using the same 1x75 / 5x15 logic used for all players
   try {
-    const useFreeSpace = !!room.freeSpaceEnabled;
+    const existingForFree = resolveActivePlayerCards(room, room.players.get(playerId), playerId);
+    const useFreeSpace = resolveRoomUsesFreeSpace(room, existingForFree);
     const songsNeededPerCard = useFreeSpace ? 24 : 25;
 
     const hasLockedFive =

@@ -55,6 +55,8 @@ function sampleRoom() {
     round: 2,
     snippetLength: 30,
     randomStarts: 'early',
+    freeSpaceEnabled: true,
+    maxPlayerBingoCards: 2,
   };
 }
 
@@ -89,6 +91,8 @@ describe('liveRoomSnapshot', () => {
     assert.equal(room.players.size, 0);
     assert.equal(room.hostProjectorPrefsSeeded, true);
     assert.equal(room.restoredFromLiveSnapshot, true);
+    assert.equal(room.freeSpaceEnabled, true);
+    assert.equal(room.maxPlayerBingoCards, 2);
   });
 
   it('round-trip keeps bingo validation inputs aligned', () => {
