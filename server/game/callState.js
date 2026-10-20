@@ -31,8 +31,16 @@ function resetCalls(room) {
 /** Replace the entire called list (e.g. play-order prefix sync). */
 function setCalledSongIds(room, ids) {
   if (!room) return;
-  room.calledSongIds = Array.isArray(ids) ? ids.filter(Boolean) : [];
-  room.callSequence = (room.callSequence || 0) + 1;
+  const next = Array.isArray(ids) ? ids.filter(Boolean) : [];
+  const prev = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
+  const same =
+    prev.length === next.length && prev.every((id, i) => id === next[i]);
+  room.calledSongIds = next;
+  // No-op syncs (card telemetry, host pool refresh) must not bump — that invalidates
+  // the snippet auto-advance timer's callSequence guard and leaves tracks stuck.
+  if (!same) {
+    room.callSequence = (room.callSequence || 0) + 1;
+  }
 }
 
 /** Set or clear currentSong only (bump / undo / display). */
