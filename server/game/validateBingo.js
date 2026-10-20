@@ -867,6 +867,7 @@ module.exports = {
   LINE_PATTERN_MAX_LINES_SRV,
   normalizeLinesRequiredSrv,
   sanitizeCustomPatternNameSrv,
+  readOrientationBoolSrv,
   patternExtrasForClient,
   patternMetaForClient,
   listCompletedLinesPlayedStrict,

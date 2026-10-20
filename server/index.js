@@ -55,6 +55,7 @@ const {
   LINE_PATTERN_MAX_LINES_SRV,
   normalizeLinesRequiredSrv,
   sanitizeCustomPatternNameSrv,
+  readOrientationBoolSrv,
   patternExtrasForClient,
   patternMetaForClient,
   listCompletedLinesPlayedStrict,
@@ -9976,7 +9977,24 @@ io.on('connection', (socket) => {
         routineServerLog('✅ Game state set and playback attempt triggered');
       } catch (error) {
         console.error('❌ Error starting game:', error);
-        socket.emit('error', { message: 'Failed to start game' });
+        // Start mutates room early (gameState=playing, index/round). Roll back so Retry
+        // does not resume a half-started round (e.g. mid-pool index / song 75).
+        try {
+          if (room && room.gameState === 'playing') {
+            room.gameState = 'waiting';
+            room.needsHostResume = false;
+            room.currentSongIndex = 0;
+            callState.resetCalls(room);
+          }
+        } catch (_) {
+          /* ignore rollback errors */
+        }
+        socket.emit('error', {
+          message:
+            error && error.message
+              ? `Failed to start game: ${String(error.message).slice(0, 160)}`
+              : 'Failed to start game',
+        });
       }
     } else {
       routineServerLog('❌ Cannot start game: Room not found or not host');
