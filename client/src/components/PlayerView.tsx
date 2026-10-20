@@ -1506,18 +1506,25 @@ const PlayerView: React.FC = () => {
   }, [optionsOpen]);
 
   const cardTextFitSignature = useMemo(() => {
-    if (!bingoCard) return '';
+    if (!bingoCards.length) return '';
     const eventTitle = venueBranding?.eventTitle?.trim() || 'Free space';
-    return bingoCard.squares
-      .map((square) => {
-        const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
-        const vis = youtubeBingoSquareDisplay(square);
-        const title = free ? 'FREE' : vis.title;
-        const artist = free ? eventTitle : vis.artist;
-        return `${square.position}:${title}|${artist}`;
+    // Include every held card so multi-card autofit stays locked to one shared scale.
+    return bingoCards
+      .map((card, cardIdx) => {
+        const id = card.cardId || card.id || `i${cardIdx}`;
+        const cells = (card.squares || [])
+          .map((square) => {
+            const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
+            const vis = youtubeBingoSquareDisplay(square);
+            const title = free ? 'FREE' : vis.title;
+            const artist = free ? eventTitle : vis.artist;
+            return `${square.position}:${title}|${artist}`;
+          })
+          .join(';');
+        return `${id}:{${cells}}`;
       })
       .join('\n');
-  }, [bingoCard?.squares, venueBranding?.eventTitle]);
+  }, [bingoCards, venueBranding?.eventTitle]);
 
   /** Same-card duplicate titles — force artist visible even in compact title-only mode. */
   const titleCollisionPositions = useMemo(
@@ -1695,17 +1702,122 @@ const PlayerView: React.FC = () => {
         return TITLE_SCALE_MAX;
       };
 
+      // Multi-card: only the active grid is mounted. Probe other cards' cell copy in a
+      // same-size offscreen clone so both cards share one conservative text scale.
+      type ProbeCell = {
+        titleText: string;
+        artistText: string;
+        titleMaxLines: number;
+        artistMaxLines: number;
+        forceArtist: boolean;
+      };
+      const otherCardProbeCells: ProbeCell[] = [];
+      let probeEl: HTMLElement | null = null;
+      let probeCtx: SquareCtx | null = null;
+      const activeCardId = bingoCard?.cardId || bingoCard?.id || '';
+      if (bingoCards.length > 1 && contexts.length > 0) {
+        const eventTitle = venueBranding?.eventTitle?.trim() || 'Free space';
+        const template = contexts[0];
+        probeEl = template.el.cloneNode(true) as HTMLElement;
+        probeEl.setAttribute('data-fit-probe', '1');
+        probeEl.style.position = 'absolute';
+        probeEl.style.left = '-10000px';
+        probeEl.style.top = '0';
+        probeEl.style.width = `${template.el.clientWidth}px`;
+        probeEl.style.height = `${template.el.clientHeight}px`;
+        probeEl.style.visibility = 'hidden';
+        probeEl.style.pointerEvents = 'none';
+        probeEl.style.zIndex = '-1';
+        gridEl.appendChild(probeEl);
+        const probeContent = probeEl.querySelector<HTMLElement>('.square-content');
+        const probeTitle = probeEl.querySelector<HTMLElement>('.player-square-title');
+        const probeArtist = probeEl.querySelector<HTMLElement>('.player-square-artist');
+        if (probeContent && probeTitle && probeArtist) {
+          probeCtx = {
+            el: probeEl,
+            contentEl: probeContent,
+            titleEl: probeTitle,
+            artistEl: probeArtist,
+            titleMaxLines: 3,
+            artistMaxLines: 2,
+            forceArtist: false,
+          };
+          for (let cardIdx = 0; cardIdx < bingoCards.length; cardIdx += 1) {
+            const other = bingoCards[cardIdx];
+            const otherId = other.cardId || other.id || '';
+            if (otherId && activeCardId && otherId === activeCardId) continue;
+            if (!otherId && cardIdx === activeCardIndex) continue;
+            const collisions = playerCardTitleCollisionPositions(other.squares);
+            for (const square of other.squares || []) {
+              const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
+              const vis = youtubeBingoSquareDisplay(square);
+              const titlePlain = free ? 'FREE' : (vis.title || '').trim();
+              const artistPlain = free ? eventTitle : (vis.artist || '').trim();
+              const forceArtist = collisions.has(square.position);
+              otherCardProbeCells.push({
+                // Match rendered cells (soft hyphens) so probe metrics align with the live grid.
+                titleText: free ? 'FREE' : softHyphenateLongWords(titlePlain || '\u00a0'),
+                artistText: free
+                  ? softHyphenateLongWords(eventTitle)
+                  : softHyphenateLongWords(artistPlain || '\u00a0'),
+                titleMaxLines: derivePreferredTitleMaxLines(titlePlain),
+                artistMaxLines: derivePreferredArtistMaxLines(artistPlain, forceArtist),
+                forceArtist,
+              });
+            }
+          }
+        }
+      }
+
+      const loadProbeCell = (cell: ProbeCell) => {
+        if (!probeCtx || !probeEl) return null;
+        probeCtx.titleEl.textContent = cell.titleText;
+        probeCtx.artistEl.textContent = cell.artistText;
+        probeCtx.titleMaxLines = cell.titleMaxLines;
+        probeCtx.artistMaxLines = cell.artistMaxLines;
+        probeCtx.forceArtist = cell.forceArtist;
+        if (cell.forceArtist) probeEl.classList.add('bingo-square--title-collision');
+        else probeEl.classList.remove('bingo-square--title-collision');
+        return probeCtx;
+      };
+
       const perSquareTitleScales = contexts.map((ctx) => findMaxTitleScale(ctx));
-      let uniformTitleScale = Math.min(...perSquareTitleScales, TITLE_SCALE_MAX);
+      const otherTitleScales = otherCardProbeCells.map((cell) => {
+        const ctx = loadProbeCell(cell);
+        return ctx ? findMaxTitleScale(ctx) : TITLE_SCALE_MAX;
+      });
+      let uniformTitleScale = Math.min(
+        ...perSquareTitleScales,
+        ...otherTitleScales,
+        TITLE_SCALE_MAX,
+      );
       uniformTitleScale = Math.max(uniformTitleScale, TITLE_SCALE_PREFERRED_MIN);
 
-      const allFitAtTitle = (titleScale: number) =>
-        contexts.every((ctx) =>
-          fitsAtScales(ctx, titleScale, ARTIST_PROBE_SCALE, ctx.titleMaxLines, ctx.artistMaxLines),
-        );
+      const allFitAtTitle = (titleScale: number) => {
+        if (
+          !contexts.every((ctx) =>
+            fitsAtScales(ctx, titleScale, ARTIST_PROBE_SCALE, ctx.titleMaxLines, ctx.artistMaxLines),
+          )
+        ) {
+          return false;
+        }
+        for (const cell of otherCardProbeCells) {
+          const ctx = loadProbeCell(cell);
+          if (
+            ctx
+            && !fitsAtScales(ctx, titleScale, ARTIST_PROBE_SCALE, cell.titleMaxLines, cell.artistMaxLines)
+          ) {
+            return false;
+          }
+        }
+        return true;
+      };
 
       if (!allFitAtTitle(uniformTitleScale)) {
-        uniformTitleScale = Math.max(Math.min(...perSquareTitleScales), TITLE_SCALE_ABSOLUTE_MIN);
+        uniformTitleScale = Math.max(
+          Math.min(...perSquareTitleScales, ...otherTitleScales),
+          TITLE_SCALE_ABSOLUTE_MIN,
+        );
       }
 
       for (const ctx of contexts) {
@@ -1714,8 +1826,11 @@ const PlayerView: React.FC = () => {
 
       const artistFitContexts =
         titleOnlyCells ? contexts.filter((ctx) => ctx.forceArtist) : contexts;
+      const artistProbeCells = titleOnlyCells
+        ? otherCardProbeCells.filter((cell) => cell.forceArtist)
+        : otherCardProbeCells;
 
-      if (artistFitContexts.length > 0) {
+      if (artistFitContexts.length > 0 || artistProbeCells.length > 0) {
         const findMaxArtistScale = (ctx: SquareCtx) => {
           if (ctx.artistMaxLines === 0 || !ctx.artistEl.textContent?.trim()) {
             return ARTIST_SCALE_FLOOR;
@@ -1739,7 +1854,13 @@ const PlayerView: React.FC = () => {
           return artistLow;
         };
 
-        const perSquareArtistScales = artistFitContexts.map((ctx) => findMaxArtistScale(ctx));
+        const perSquareArtistScales = [
+          ...artistFitContexts.map((ctx) => findMaxArtistScale(ctx)),
+          ...artistProbeCells.map((cell) => {
+            const ctx = loadProbeCell(cell);
+            return ctx ? findMaxArtistScale(ctx) : ARTIST_SCALE_FLOOR;
+          }),
+        ];
         const sortedArtistScales = [...perSquareArtistScales].sort((a, b) => a - b);
         const percentileIndex = Math.min(
           sortedArtistScales.length - 1,
@@ -1749,13 +1870,36 @@ const PlayerView: React.FC = () => {
         uniformArtistScale = Math.max(uniformArtistScale, ARTIST_SCALE_FLOOR);
         uniformArtistScale = Math.min(uniformArtistScale, ARTIST_SCALE_MAX);
 
-        const fitsAllAtArtistScale = (artistScale: number) =>
-          artistFitContexts.every((ctx) =>
-            fitsAtScales(ctx, uniformTitleScale, artistScale, ctx.titleMaxLines, ctx.artistMaxLines),
-          );
+        const fitsAllAtArtistScale = (artistScale: number) => {
+          if (
+            !artistFitContexts.every((ctx) =>
+              fitsAtScales(ctx, uniformTitleScale, artistScale, ctx.titleMaxLines, ctx.artistMaxLines),
+            )
+          ) {
+            return false;
+          }
+          for (const cell of artistProbeCells) {
+            const ctx = loadProbeCell(cell);
+            if (
+              ctx
+              && !fitsAtScales(ctx, uniformTitleScale, artistScale, cell.titleMaxLines, cell.artistMaxLines)
+            ) {
+              return false;
+            }
+          }
+          return true;
+        };
 
         const respectsTitleHierarchy = (artistScale: number) => {
           for (const ctx of artistFitContexts) {
+            setScales(ctx, uniformTitleScale, artistScale);
+            const titlePx = Number.parseFloat(window.getComputedStyle(ctx.titleEl).fontSize || '0');
+            const artistPx = Number.parseFloat(window.getComputedStyle(ctx.artistEl).fontSize || '0');
+            if (titlePx > 0 && artistPx > titlePx * ARTIST_MAX_TITLE_RATIO) return false;
+          }
+          for (const cell of artistProbeCells) {
+            const ctx = loadProbeCell(cell);
+            if (!ctx) continue;
             setScales(ctx, uniformTitleScale, artistScale);
             const titlePx = Number.parseFloat(window.getComputedStyle(ctx.titleEl).fontSize || '0');
             const artistPx = Number.parseFloat(window.getComputedStyle(ctx.artistEl).fontSize || '0');
@@ -1775,6 +1919,12 @@ const PlayerView: React.FC = () => {
         for (const ctx of artistFitContexts) {
           setScales(ctx, uniformTitleScale, uniformArtistScale);
         }
+      }
+
+      if (probeEl) {
+        probeEl.remove();
+        probeEl = null;
+        probeCtx = null;
       }
 
       if (playerContainer) {
@@ -1820,7 +1970,17 @@ const PlayerView: React.FC = () => {
       container?.removeAttribute('data-fit-measuring');
       container?.removeAttribute('data-fit-silent');
     };
-  }, [cardTextFitSignature, compactCardCells, showArtists, cardGridEl, titleCollisionPositions]);
+  }, [
+    cardTextFitSignature,
+    compactCardCells,
+    showArtists,
+    cardGridEl,
+    titleCollisionPositions,
+    bingoCards,
+    bingoCard,
+    activeCardIndex,
+    venueBranding?.eventTitle,
+  ]);
 
   // Keep screen awake during game using Wake Lock API
   useEffect(() => {
