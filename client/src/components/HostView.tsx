@@ -3453,11 +3453,16 @@ const HostView: React.FC = () => {
   const playlistLibraryLetterIndex = useMemo(() => {
     const firstIndexByLetter = new Map<string, number>();
     libraryTablePlaylists.forEach((p, i) => {
-      const letter = playlistLibraryLetterBucket(p.name);
+      // Match the visible title (strip GoT / title flags) so A–Z isn't stuck on "G".
+      const rawDisplayName = stripGoTPrefix
+        ? stripTitleFlagPrefix(p.name, titleFlagStripList)
+        : p.name;
+      const { title: displayName } = playlistDisplayParts(rawDisplayName, p.tracks);
+      const letter = playlistLibraryLetterBucket(displayName || p.name);
       if (!firstIndexByLetter.has(letter)) firstIndexByLetter.set(letter, i);
     });
     return firstIndexByLetter;
-  }, [libraryTablePlaylists]);
+  }, [libraryTablePlaylists, stripGoTPrefix, titleFlagStripList]);
 
   const jumpPlaylistLibraryToLetter = useCallback(
     (letter: string) => {
