@@ -1695,7 +1695,12 @@ const HostView: React.FC = () => {
   const [hoveredLibraryPlaylistId, setHoveredLibraryPlaylistId] = useState<string | null>(null);
   /** Spotify playlist ids we already tried GET /playlist-metadata for this session. */
   const playlistDescResolvedRef = useRef<Set<string>>(new Set());
-  const playlistDescInflightRef = useRef<Set<string>>(new Set());
+  /** Single-flight hover-note queue: max 1 Spotify brief GET at a time; pending capped. */
+  const playlistDescQueueRef = useRef<string[]>([]);
+  const playlistDescQueuedSetRef = useRef<Set<string>>(new Set());
+  const playlistDescIdByCanonRef = useRef<Map<string, string>>(new Map());
+  const playlistDescActiveCanonRef = useRef<string | null>(null);
+  const PLAYLIST_DESC_QUEUE_MAX = 3;
   /** From GET /api/spotify/playlists: Spotify PagingObject total (null = unknown / not loaded). */
   const [spotifyMyPlaylistsTotal, setSpotifyMyPlaylistsTotal] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -3201,10 +3206,11 @@ const HostView: React.FC = () => {
   }, [playlistByLinkInput, showHostAckNotification]);
 
   /**
-   * Plan Rounds: load Spotify setlist description on hover (one GET /playlists/{id} per playlist).
-   * /me/playlists usually omits description; brief metadata includes it.
+   * Plan Rounds: load Spotify setlist description on hover.
+   * Single-flight: at most one GET /playlist-metadata at a time; pending queue capped at 3
+   * (newest wins — skim drops older pending so we don't burst Spotify).
    */
-  const ensurePlaylistDescriptionFromSpotify = useCallback(async (playlist: Playlist) => {
+  const ensurePlaylistDescriptionFromSpotify = useCallback((playlist: Playlist) => {
     if (!playlist || playlist.youtubeMusic || playlist.appleMusic || playlist.catalog) return;
     if (!readHostSpotifyWebEnabled()) return;
     if (gameStateRef.current === 'playing') return;
@@ -3216,52 +3222,92 @@ const HostView: React.FC = () => {
       playlistDescResolvedRef.current.add(canon);
       return;
     }
-    if (playlistDescResolvedRef.current.has(canon) || playlistDescInflightRef.current.has(canon)) {
+    if (playlistDescResolvedRef.current.has(canon)) return;
+    if (playlistDescQueuedSetRef.current.has(canon) || playlistDescActiveCanonRef.current === canon) {
+      playlistDescIdByCanonRef.current.set(canon, id);
       return;
     }
-    playlistDescInflightRef.current.add(canon);
-    try {
-      const res = await hostFetch(
-        `${API_BASE || ''}/api/spotify/playlist-metadata/${encodeURIComponent(id)}`,
-      );
-      if (!res.ok) {
-        // Soft-fail: 429 / live-lock / missing playlist — don't spam retries this session.
-        if (res.status === 429 || res.status === 401 || res.status === 403 || res.status === 404) {
-          playlistDescResolvedRef.current.add(canon);
-        }
+
+    playlistDescIdByCanonRef.current.set(canon, id);
+    // Coalesce: re-append as newest; drop oldest when over cap (skim shouldn't burst Spotify).
+    const q = playlistDescQueueRef.current.filter((c) => c !== canon);
+    q.push(canon);
+    while (q.length > PLAYLIST_DESC_QUEUE_MAX) {
+      const dropped = q.shift();
+      if (dropped) playlistDescQueuedSetRef.current.delete(dropped);
+    }
+    playlistDescQueueRef.current = q;
+    playlistDescQueuedSetRef.current = new Set(q);
+
+    const pump = async () => {
+      if (playlistDescActiveCanonRef.current) return;
+      if (gameStateRef.current === 'playing') {
+        playlistDescQueueRef.current = [];
+        playlistDescQueuedSetRef.current.clear();
         return;
       }
-      const d = (await res.json().catch(() => ({}))) as {
-        success?: boolean;
-        playlist?: { id?: string; description?: string | null; name?: string; tracks?: number };
-      };
-      playlistDescResolvedRef.current.add(canon);
-      const desc =
-        d.playlist && typeof d.playlist.description === 'string' ? d.playlist.description.trim() : '';
-      if (!desc) return;
-      setPlaylists((prev) =>
-        prev.map((p) => {
-          if (canonicalPlaylistIdForMatch(String(p.id)) !== canon) return p;
-          return {
-            ...p,
-            description: desc,
-            ...(typeof d.playlist?.name === 'string' && d.playlist.name.trim()
-              ? { name: d.playlist.name }
-              : {}),
-            ...(typeof d.playlist?.tracks === 'number' &&
-            Number.isFinite(d.playlist.tracks) &&
-            d.playlist.tracks >= 0 &&
-            (p.tracksLoaded == null || p.tracksLoaded <= 0)
-              ? { tracks: d.playlist.tracks }
-              : {}),
-          };
-        }),
-      );
-    } catch {
-      /* ignore — hover notes are best-effort */
-    } finally {
-      playlistDescInflightRef.current.delete(canon);
-    }
+      const nextCanon = playlistDescQueueRef.current.shift();
+      if (!nextCanon) return;
+      playlistDescQueuedSetRef.current.delete(nextCanon);
+      if (playlistDescResolvedRef.current.has(nextCanon)) {
+        void pump();
+        return;
+      }
+      const nextId = playlistDescIdByCanonRef.current.get(nextCanon) || nextCanon;
+      playlistDescActiveCanonRef.current = nextCanon;
+      try {
+        const res = await hostFetch(
+          `${API_BASE || ''}/api/spotify/playlist-metadata/${encodeURIComponent(nextId)}`,
+        );
+        if (!res.ok) {
+          // Soft-fail: 429 / live-lock / missing — don't retry this id this session.
+          if (res.status === 429 || res.status === 401 || res.status === 403 || res.status === 404) {
+            playlistDescResolvedRef.current.add(nextCanon);
+          }
+          // On 429, drain queue so we don't keep poking Spotify during cooldown.
+          if (res.status === 429) {
+            playlistDescQueueRef.current = [];
+            playlistDescQueuedSetRef.current.clear();
+          }
+          return;
+        }
+        const d = (await res.json().catch(() => ({}))) as {
+          success?: boolean;
+          playlist?: { id?: string; description?: string | null; name?: string; tracks?: number };
+        };
+        playlistDescResolvedRef.current.add(nextCanon);
+        const desc =
+          d.playlist && typeof d.playlist.description === 'string' ? d.playlist.description.trim() : '';
+        if (!desc) return;
+        setPlaylists((prev) =>
+          prev.map((p) => {
+            if (canonicalPlaylistIdForMatch(String(p.id)) !== nextCanon) return p;
+            return {
+              ...p,
+              description: desc,
+              ...(typeof d.playlist?.name === 'string' && d.playlist.name.trim()
+                ? { name: d.playlist.name }
+                : {}),
+              ...(typeof d.playlist?.tracks === 'number' &&
+              Number.isFinite(d.playlist.tracks) &&
+              d.playlist.tracks >= 0 &&
+              (p.tracksLoaded == null || p.tracksLoaded <= 0)
+                ? { tracks: d.playlist.tracks }
+                : {}),
+            };
+          }),
+        );
+      } catch {
+        /* ignore — hover notes are best-effort */
+      } finally {
+        playlistDescActiveCanonRef.current = null;
+        if (playlistDescQueueRef.current.length > 0) {
+          void pump();
+        }
+      }
+    };
+
+    void pump();
   }, []);
 
   const parsedPlaylistTitleFlags = useMemo(
