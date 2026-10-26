@@ -13552,62 +13552,72 @@ const HostView: React.FC = () => {
                                 gap: 5,
                                 alignItems: 'flex-start',
                               }}>
-                                <span style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  flexWrap: 'wrap',
-                                  gap: 8,
-                                  fontSize: '0.9rem',
-                                  color: isAcceptable ? '#00ff88' : '#fff',
-                                }}>
-                                  {displayName}
-                                  {poolSize ? (
-                                    <span
-                                      className="host-playlist-pool-size-chip"
-                                      aria-label={`${poolSize} song pool`}
-                                    >
-                                      {poolSize}+
-                                    </span>
-                                  ) : null}
-                                  {p.youtubeMusic ? (
+                                {(() => {
+                                  const plainDesc = p.description
+                                    ? stripPlaylistDescriptionHtml(p.description)
+                                    : '';
+                                  return (
                                     <span
                                       style={{
-                                        fontSize: '0.7rem',
-                                        padding: '2px 6px',
-                                        borderRadius: '4px',
-                                        background: 'rgba(255, 68, 68, 0.18)',
-                                        color: '#ffb4b4',
-                                        border: '1px solid rgba(255, 68, 68, 0.35)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        flexWrap: 'wrap',
+                                        gap: 8,
+                                        fontSize: '0.9rem',
+                                        color: isAcceptable ? '#00ff88' : '#fff',
                                       }}
-                                      title="YouTube Music playlist (items are videos)"
+                                      title={plainDesc || undefined}
                                     >
-                                      YT
-                                    </span>
-                                  ) : null}
-                                  {!p.youtubeMusic &&
-                                    parsedPlaylistTitleFlags.length > 0 &&
-                                    playlistMatchesTitleFlags(p.name, parsedPlaylistTitleFlags) && (
-                                      <span
-                                        style={{
-                                          fontSize: '0.7rem',
-                                          padding: '2px 6px',
-                                          borderRadius: '4px',
-                                          background: 'rgba(0, 255, 136, 0.2)',
-                                          color: '#00ff88',
-                                          border: '1px solid rgba(0, 255, 136, 0.3)',
-                                        }}
-                                        title={`Matches your title flags (${parsedPlaylistTitleFlags.join(', ')})`}
-                                      >
-                                        {playlistTitleFlagLabel}
-                                      </span>
-                                    )}
-                                </span>
-                                {(() => {
-                                  const plain = p.description ? stripPlaylistDescriptionHtml(p.description) : '';
-                                  if (!plain) return null;
-                                  return (
-                                    <span className="host-playlist-desc" title={plain}>
-                                      {plain}
+                                      {displayName}
+                                      {plainDesc ? (
+                                        <span
+                                          className="host-playlist-desc-hint"
+                                          title={plainDesc}
+                                          aria-label={`Playlist description: ${plainDesc}`}
+                                        >
+                                          note
+                                        </span>
+                                      ) : null}
+                                      {poolSize ? (
+                                        <span
+                                          className="host-playlist-pool-size-chip"
+                                          aria-label={`${poolSize} song pool`}
+                                        >
+                                          {poolSize}+
+                                        </span>
+                                      ) : null}
+                                      {p.youtubeMusic ? (
+                                        <span
+                                          style={{
+                                            fontSize: '0.7rem',
+                                            padding: '2px 6px',
+                                            borderRadius: '4px',
+                                            background: 'rgba(255, 68, 68, 0.18)',
+                                            color: '#ffb4b4',
+                                            border: '1px solid rgba(255, 68, 68, 0.35)',
+                                          }}
+                                          title="YouTube Music playlist (items are videos)"
+                                        >
+                                          YT
+                                        </span>
+                                      ) : null}
+                                      {!p.youtubeMusic &&
+                                        parsedPlaylistTitleFlags.length > 0 &&
+                                        playlistMatchesTitleFlags(p.name, parsedPlaylistTitleFlags) && (
+                                          <span
+                                            style={{
+                                              fontSize: '0.7rem',
+                                              padding: '2px 6px',
+                                              borderRadius: '4px',
+                                              background: 'rgba(0, 255, 136, 0.2)',
+                                              color: '#00ff88',
+                                              border: '1px solid rgba(0, 255, 136, 0.3)',
+                                            }}
+                                            title={`Matches your title flags (${parsedPlaylistTitleFlags.join(', ')})`}
+                                          >
+                                            {playlistTitleFlagLabel}
+                                          </span>
+                                        )}
                                     </span>
                                   );
                                 })()}
