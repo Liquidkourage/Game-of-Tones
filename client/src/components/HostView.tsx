@@ -1360,9 +1360,37 @@ function OnlinePlayerBadge({ compact }: { compact?: boolean }) {
   );
 }
 
-/** Spotify may return HTML in playlist descriptions; strip tags for display. */
+/** Decode common HTML entities (Spotify descriptions often include &quot; &amp; &#39; etc.). */
+function decodeHtmlEntities(raw: string): string {
+  if (!raw || !/[&]/.test(raw)) return raw;
+  // Prefer browser decode when available (named + numeric entities).
+  if (typeof document !== 'undefined') {
+    const el = document.createElement('textarea');
+    el.innerHTML = raw;
+    return el.value;
+  }
+  return raw
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*34;/g, '"')
+    .replace(/&apos;|&#0*39;/gi, "'")
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => {
+      const n = parseInt(h, 16);
+      return Number.isFinite(n) ? String.fromCodePoint(n) : _;
+    })
+    .replace(/&#(\d+);/g, (_, d) => {
+      const n = parseInt(d, 10);
+      return Number.isFinite(n) ? String.fromCodePoint(n) : _;
+    });
+}
+
+/** Spotify may return HTML in playlist descriptions; strip tags + decode entities for display. */
 function stripPlaylistDescriptionHtml(raw: string): string {
-  return raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  const noTags = raw.replace(/<[^>]*>/g, ' ');
+  return decodeHtmlEntities(noTags).replace(/\s+/g, ' ').trim();
 }
 
 const ORG_SHARED_PLAYLIST_DESC = 'Shared by a co-host in your organization';
