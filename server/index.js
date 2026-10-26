@@ -2370,6 +2370,28 @@ function parseSpotifyPlaylistIdFromUserInput(input) {
   return null;
 }
 
+/** Keep previously fetched Spotify descriptions when /me/playlists returns null for most rows. */
+function mergePlaylistListPreservingDescriptions(freshPlaylists, priorPlaylists) {
+  const fresh = Array.isArray(freshPlaylists) ? freshPlaylists : [];
+  const prior = Array.isArray(priorPlaylists) ? priorPlaylists : [];
+  if (prior.length === 0) return fresh;
+  const priorById = new Map();
+  for (const p of prior) {
+    if (!p || p.id == null) continue;
+    priorById.set(String(p.id).trim(), p);
+  }
+  return fresh.map((p) => {
+    if (!p || p.id == null) return p;
+    const nextDesc = typeof p.description === 'string' ? p.description.trim() : '';
+    if (nextDesc) return p;
+    const old = priorById.get(String(p.id).trim());
+    const oldDesc = old && typeof old.description === 'string' ? old.description.trim() : '';
+    // Skip org-shelf synthetic copy — not a real Spotify setlist note.
+    if (!oldDesc || oldDesc === 'Shared by a co-host in your organization') return p;
+    return { ...p, description: old.description };
+  });
+}
+
 async function saveHostPlaylistListCache(organizationId, { playlists, spotifyListTotal }) {
   if (!db) return false;
   try {
@@ -2388,6 +2410,37 @@ async function saveHostPlaylistListCache(organizationId, { playlists, spotifyLis
     return true;
   } catch (e) {
     console.error('saveHostPlaylistListCache:', e?.message || e);
+    return false;
+  }
+}
+
+/** Patch one playlist's description (and optional fields) in the host library list cache. */
+async function patchHostPlaylistListCacheMeta(organizationId, playlistId, fields) {
+  if (!db) return false;
+  const pid = String(playlistId || '').trim();
+  if (!pid || !fields || typeof fields !== 'object') return false;
+  try {
+    const row = await loadHostPlaylistListCache(organizationId);
+    if (!row || !Array.isArray(row.playlists) || row.playlists.length === 0) return false;
+    let changed = false;
+    const playlists = row.playlists.map((p) => {
+      if (!p || String(p.id || '').trim() !== pid) return p;
+      changed = true;
+      const next = { ...p };
+      if (typeof fields.description === 'string') next.description = fields.description;
+      if (typeof fields.name === 'string' && fields.name.trim()) next.name = fields.name;
+      if (typeof fields.tracks === 'number' && Number.isFinite(fields.tracks) && fields.tracks >= 0) {
+        next.tracks = fields.tracks;
+      }
+      return next;
+    });
+    if (!changed) return false;
+    return saveHostPlaylistListCache(organizationId, {
+      playlists,
+      spotifyListTotal: row.spotifyListTotal,
+    });
+  } catch (e) {
+    console.error('patchHostPlaylistListCacheMeta:', e?.message || e);
     return false;
   }
 }
@@ -17518,7 +17571,13 @@ app.get('/api/spotify/playlists', async (req, res) => {
       });
     }
 
-    const { playlists, spotifyListTotal } = await svc.getUserPlaylists();
+    const priorListCache = await loadHostPlaylistListCache(orgId);
+    const { playlists: livePlaylists, spotifyListTotal } = await svc.getUserPlaylists();
+    // /me/playlists often returns description:null — keep notes we already fetched via brief GET.
+    const playlists = mergePlaylistListPreservingDescriptions(
+      livePlaylists,
+      priorListCache && priorListCache.playlists,
+    );
     await saveHostPlaylistListCache(orgId, { playlists, spotifyListTotal });
     logSpotifyPlaylistSuccessProof(orgId, svc, { spotifyListTotal, playlists });
 
@@ -17588,11 +17647,75 @@ app.post('/api/spotify/playlist-lookup', async (req, res) => {
       });
     }
     const playlist = await svc.getPlaylistMetadataBrief(pid, { emergencyBypassQuarantine: true });
+    if (playlist && typeof playlist.description === 'string' && playlist.description.trim()) {
+      await patchHostPlaylistListCacheMeta(orgId, playlist.id, {
+        description: playlist.description,
+        name: playlist.name,
+        tracks: playlist.tracks,
+      });
+    }
     return res.json({ success: true, playlist });
   } catch (error) {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('POST /api/spotify/playlist-lookup:', error);
     res.status(500).json({ error: 'playlist_lookup_failed', message: error && error.message ? String(error.message) : 'error' });
+  }
+});
+
+/**
+ * On-demand playlist note for Plan Rounds hover.
+ * Uses GET /v1/playlists/{id} (description usually present) — never bulk-called from shelf load.
+ */
+app.get('/api/spotify/playlist-metadata/:playlistId', async (req, res) => {
+  try {
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    if (uid == null) {
+      return res.status(401).json({ error: 'login_required', message: 'Sign in with Google first.' });
+    }
+    const orgId = `user_${uid}`;
+    await multiTenantSpotify.ensureOrgTokensLoaded(orgId);
+    if (!multiTenantSpotify.getTokens(orgId)) {
+      return res.status(400).json({ error: 'spotify_not_connected', message: 'Connect Spotify from the host screen first.' });
+    }
+    const svc = spotifyForRequest(req);
+    if (!svc) {
+      return res.status(401).json({ error: 'login_required' });
+    }
+    if (typeof svc.isNonEssentialTrafficBlocked === 'function' && svc.isNonEssentialTrafficBlocked()) {
+      return respondSpotifyNonEssentialBlocked(
+        res,
+        svc,
+        'Cannot load playlist notes while a live round is in progress (or during Spotify quarantine).',
+      );
+    }
+    const pid = parseSpotifyPlaylistIdFromUserInput(req.params.playlistId);
+    if (!pid) {
+      return res.status(400).json({ error: 'bad_input', message: 'Invalid Spotify playlist id.' });
+    }
+    if (isInternalPlaylistId(pid)) {
+      return res.status(400).json({
+        error: 'internal_playlist_id',
+        message: 'This playlist id is a server snapshot, not a Spotify playlist.',
+      });
+    }
+    // No emergency bypass — hover notes are non-essential; respect quarantine.
+    const playlist = await svc.getPlaylistMetadataBrief(pid);
+    if (playlist && typeof playlist.description === 'string' && playlist.description.trim()) {
+      await patchHostPlaylistListCacheMeta(orgId, playlist.id, {
+        description: playlist.description,
+        name: playlist.name,
+        tracks: playlist.tracks,
+      });
+    }
+    res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+    return res.json({ success: true, playlist });
+  } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
+    console.error('GET /api/spotify/playlist-metadata:', error);
+    res.status(500).json({
+      error: 'playlist_metadata_failed',
+      message: error && error.message ? String(error.message) : 'error',
+    });
   }
 });
 

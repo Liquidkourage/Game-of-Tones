@@ -1365,6 +1365,15 @@ function stripPlaylistDescriptionHtml(raw: string): string {
   return raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+const ORG_SHARED_PLAYLIST_DESC = 'Shared by a co-host in your organization';
+
+/** True when we already have a real setlist note (not empty / not org shelf placeholder). */
+function playlistHasRealDescription(description: unknown): boolean {
+  if (typeof description !== 'string') return false;
+  const plain = stripPlaylistDescriptionHtml(description);
+  return Boolean(plain) && plain !== ORG_SHARED_PLAYLIST_DESC;
+}
+
 /** Match public display: trim optional "GoT" playlist prefix for column headers (case-sensitive). */
 function stripGotPlaylistPrefix(raw: string): string {
   return raw.replace(/^\s*GoT(?=$|[\s\-–—:])\s*[-–—:]*\s*/, '').trim();
@@ -1682,6 +1691,11 @@ const HostView: React.FC = () => {
   const [playlistByLinkInput, setPlaylistByLinkInput] = useState('');
   const [playlistByLinkLoading, setPlaylistByLinkLoading] = useState(false);
   const [playlistByLinkError, setPlaylistByLinkError] = useState<string | null>(null);
+  /** Plan Rounds library: which row is hovered (for description tooltip after on-demand fetch). */
+  const [hoveredLibraryPlaylistId, setHoveredLibraryPlaylistId] = useState<string | null>(null);
+  /** Spotify playlist ids we already tried GET /playlist-metadata for this session. */
+  const playlistDescResolvedRef = useRef<Set<string>>(new Set());
+  const playlistDescInflightRef = useRef<Set<string>>(new Set());
   /** From GET /api/spotify/playlists: Spotify PagingObject total (null = unknown / not loaded). */
   const [spotifyMyPlaylistsTotal, setSpotifyMyPlaylistsTotal] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -3002,7 +3016,17 @@ const HostView: React.FC = () => {
             }
           }
           // Merge org co-host playlist refs + round-assigned ids that aren't in this Spotify library.
-          const byId = new Map(allPlaylists.map((p) => [canonicalPlaylistIdForMatch(String(p.id)), p]));
+          // Prefer live list rows, but keep hover-fetched Spotify descriptions when list returns null.
+          const byId = new Map<string, Playlist>();
+          for (const pl of allPlaylists) {
+            const canon = canonicalPlaylistIdForMatch(String(pl.id));
+            const was = prevById.get(canon);
+            if (was && playlistHasRealDescription(was.description) && !playlistHasRealDescription(pl.description)) {
+              byId.set(canon, { ...pl, description: was.description });
+            } else {
+              byId.set(canon, pl);
+            }
+          }
           const snapshotCounts = new Map<string, number>();
           for (const round of eventRoundsRef.current) {
             for (const song of round.savedMixSnapshot?.songs || []) {
@@ -3054,7 +3078,7 @@ const HostView: React.FC = () => {
               id,
               name: ref.name || 'Team playlist',
               tracks: bestListed,
-              description: 'Shared by a co-host in your organization',
+              description: ORG_SHARED_PLAYLIST_DESC,
               orgShared: true,
             });
           }
@@ -3176,7 +3200,69 @@ const HostView: React.FC = () => {
     }
   }, [playlistByLinkInput, showHostAckNotification]);
 
-
+  /**
+   * Plan Rounds: load Spotify setlist description on hover (one GET /playlists/{id} per playlist).
+   * /me/playlists usually omits description; brief metadata includes it.
+   */
+  const ensurePlaylistDescriptionFromSpotify = useCallback(async (playlist: Playlist) => {
+    if (!playlist || playlist.youtubeMusic || playlist.appleMusic || playlist.catalog) return;
+    if (!readHostSpotifyWebEnabled()) return;
+    if (gameStateRef.current === 'playing') return;
+    const id = String(playlist.id || '').trim();
+    if (!id || id.startsWith('__')) return;
+    if (isLeftoversPlaylistId(id) || isRequestsPlaylistId(id)) return;
+    const canon = canonicalPlaylistIdForMatch(id);
+    if (playlistHasRealDescription(playlist.description)) {
+      playlistDescResolvedRef.current.add(canon);
+      return;
+    }
+    if (playlistDescResolvedRef.current.has(canon) || playlistDescInflightRef.current.has(canon)) {
+      return;
+    }
+    playlistDescInflightRef.current.add(canon);
+    try {
+      const res = await hostFetch(
+        `${API_BASE || ''}/api/spotify/playlist-metadata/${encodeURIComponent(id)}`,
+      );
+      if (!res.ok) {
+        // Soft-fail: 429 / live-lock / missing playlist — don't spam retries this session.
+        if (res.status === 429 || res.status === 401 || res.status === 403 || res.status === 404) {
+          playlistDescResolvedRef.current.add(canon);
+        }
+        return;
+      }
+      const d = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        playlist?: { id?: string; description?: string | null; name?: string; tracks?: number };
+      };
+      playlistDescResolvedRef.current.add(canon);
+      const desc =
+        d.playlist && typeof d.playlist.description === 'string' ? d.playlist.description.trim() : '';
+      if (!desc) return;
+      setPlaylists((prev) =>
+        prev.map((p) => {
+          if (canonicalPlaylistIdForMatch(String(p.id)) !== canon) return p;
+          return {
+            ...p,
+            description: desc,
+            ...(typeof d.playlist?.name === 'string' && d.playlist.name.trim()
+              ? { name: d.playlist.name }
+              : {}),
+            ...(typeof d.playlist?.tracks === 'number' &&
+            Number.isFinite(d.playlist.tracks) &&
+            d.playlist.tracks >= 0 &&
+            (p.tracksLoaded == null || p.tracksLoaded <= 0)
+              ? { tracks: d.playlist.tracks }
+              : {}),
+          };
+        }),
+      );
+    } catch {
+      /* ignore — hover notes are best-effort */
+    } finally {
+      playlistDescInflightRef.current.delete(canon);
+    }
+  }, []);
 
   const parsedPlaylistTitleFlags = useMemo(
     () => parsePlaylistTitleFlags(playlistTitleFlags),
@@ -13492,6 +13578,15 @@ const HostView: React.FC = () => {
                           );
                           const needsForPool = trackCount >= 50 && trackCount < 75 ? 75 - trackCount : 0;
                           
+                          const plainDesc = p.description
+                            ? stripPlaylistDescriptionHtml(p.description)
+                            : '';
+                          const showDescTooltip =
+                            Boolean(plainDesc) &&
+                            hoveredLibraryPlaylistId != null &&
+                            canonicalPlaylistIdForMatch(String(hoveredLibraryPlaylistId)) ===
+                              canonicalPlaylistIdForMatch(String(p.id));
+
                           return (
                             <div
                               key={p.id}
@@ -13512,6 +13607,13 @@ const HostView: React.FC = () => {
                               onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
                               onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
                               onDoubleClick={(e) => handleLibraryPlaylistDoubleClick(e, p.id)}
+                              onMouseEnter={() => {
+                                setHoveredLibraryPlaylistId(p.id);
+                                void ensurePlaylistDescriptionFromSpotify(p);
+                              }}
+                              onMouseLeave={() =>
+                                setHoveredLibraryPlaylistId((cur) => (cur === p.id ? null : cur))
+                              }
                             >
                               <span
                                 className={
@@ -13552,75 +13654,72 @@ const HostView: React.FC = () => {
                                 gap: 5,
                                 alignItems: 'flex-start',
                               }}>
-                                {(() => {
-                                  const plainDesc = p.description
-                                    ? stripPlaylistDescriptionHtml(p.description)
-                                    : '';
-                                  return (
+                                <span
+                                  style={{
+                                    position: 'relative',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: 8,
+                                    fontSize: '0.9rem',
+                                    color: isAcceptable ? '#00ff88' : '#fff',
+                                  }}
+                                >
+                                  {displayName}
+                                  {plainDesc ? (
+                                    <span
+                                      className="host-playlist-desc-hint"
+                                      aria-label={`Playlist description: ${plainDesc}`}
+                                    >
+                                      note
+                                    </span>
+                                  ) : null}
+                                  {poolSize ? (
+                                    <span
+                                      className="host-playlist-pool-size-chip"
+                                      aria-label={`${poolSize} song pool`}
+                                    >
+                                      {poolSize}+
+                                    </span>
+                                  ) : null}
+                                  {p.youtubeMusic ? (
                                     <span
                                       style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        flexWrap: 'wrap',
-                                        gap: 8,
-                                        fontSize: '0.9rem',
-                                        color: isAcceptable ? '#00ff88' : '#fff',
+                                        fontSize: '0.7rem',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        background: 'rgba(255, 68, 68, 0.18)',
+                                        color: '#ffb4b4',
+                                        border: '1px solid rgba(255, 68, 68, 0.35)',
                                       }}
-                                      title={plainDesc || undefined}
+                                      title="YouTube Music playlist (items are videos)"
                                     >
-                                      {displayName}
-                                      {plainDesc ? (
-                                        <span
-                                          className="host-playlist-desc-hint"
-                                          title={plainDesc}
-                                          aria-label={`Playlist description: ${plainDesc}`}
-                                        >
-                                          note
-                                        </span>
-                                      ) : null}
-                                      {poolSize ? (
-                                        <span
-                                          className="host-playlist-pool-size-chip"
-                                          aria-label={`${poolSize} song pool`}
-                                        >
-                                          {poolSize}+
-                                        </span>
-                                      ) : null}
-                                      {p.youtubeMusic ? (
-                                        <span
-                                          style={{
-                                            fontSize: '0.7rem',
-                                            padding: '2px 6px',
-                                            borderRadius: '4px',
-                                            background: 'rgba(255, 68, 68, 0.18)',
-                                            color: '#ffb4b4',
-                                            border: '1px solid rgba(255, 68, 68, 0.35)',
-                                          }}
-                                          title="YouTube Music playlist (items are videos)"
-                                        >
-                                          YT
-                                        </span>
-                                      ) : null}
-                                      {!p.youtubeMusic &&
-                                        parsedPlaylistTitleFlags.length > 0 &&
-                                        playlistMatchesTitleFlags(p.name, parsedPlaylistTitleFlags) && (
-                                          <span
-                                            style={{
-                                              fontSize: '0.7rem',
-                                              padding: '2px 6px',
-                                              borderRadius: '4px',
-                                              background: 'rgba(0, 255, 136, 0.2)',
-                                              color: '#00ff88',
-                                              border: '1px solid rgba(0, 255, 136, 0.3)',
-                                            }}
-                                            title={`Matches your title flags (${parsedPlaylistTitleFlags.join(', ')})`}
-                                          >
-                                            {playlistTitleFlagLabel}
-                                          </span>
-                                        )}
+                                      YT
                                     </span>
-                                  );
-                                })()}
+                                  ) : null}
+                                  {!p.youtubeMusic &&
+                                    parsedPlaylistTitleFlags.length > 0 &&
+                                    playlistMatchesTitleFlags(p.name, parsedPlaylistTitleFlags) && (
+                                      <span
+                                        style={{
+                                          fontSize: '0.7rem',
+                                          padding: '2px 6px',
+                                          borderRadius: '4px',
+                                          background: 'rgba(0, 255, 136, 0.2)',
+                                          color: '#00ff88',
+                                          border: '1px solid rgba(0, 255, 136, 0.3)',
+                                        }}
+                                        title={`Matches your title flags (${parsedPlaylistTitleFlags.join(', ')})`}
+                                      >
+                                        {playlistTitleFlagLabel}
+                                      </span>
+                                    )}
+                                  {showDescTooltip ? (
+                                    <span className="host-playlist-desc-tooltip" role="tooltip">
+                                      {plainDesc}
+                                    </span>
+                                  ) : null}
+                                </span>
                               </span>
                               <span
                                 style={{

@@ -2662,7 +2662,7 @@
   word-break: break-word;
 }
 
-/* Spotify setlist description — on-demand (native title tooltip on hover). */
+/* Spotify setlist description — fetched on Plan Rounds library hover. */
 .host-playlist-desc-hint {
   flex-shrink: 0;
   font-size: 0.65rem;
@@ -2677,10 +2677,32 @@
   cursor: help;
 }
 
-.host-playlist-desc-hint:hover {
+.host-playlist-library-row:hover .host-playlist-desc-hint {
   color: #00ff88;
   border-color: rgba(0, 255, 136, 0.35);
   background: rgba(0, 255, 136, 0.1);
+}
+
+.host-playlist-desc-tooltip {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  max-width: min(420px, 70vw);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.35;
+  color: #e8eaed;
+  background: rgba(12, 18, 28, 0.96);
+  border: 1px solid rgba(0, 255, 136, 0.28);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* -------------------------------------------------------------------------- */
