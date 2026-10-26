@@ -2507,7 +2507,8 @@ const HostView: React.FC = () => {
     key: 'none' | 'name' | 'tracks';
     dir: 'asc' | 'desc';
   }>({ key: 'none', dir: 'asc' });
-  const [playlistLibraryPage, setPlaylistLibraryPage] = useState(0);
+  /** Window start into the filtered library (letter jump pins that letter at row 1). */
+  const [playlistLibraryStartIndex, setPlaylistLibraryStartIndex] = useState(0);
   const [playlistLibraryPageSize, setPlaylistLibraryPageSize] = useState(readPlaylistLibraryPageSize);
   /** Library source: host's own Spotify, shared Tempo Library (GoT-labeled catalog), or YouTube. */
   const [playlistLibrarySource, setPlaylistLibrarySource] = useState<
@@ -3449,29 +3450,48 @@ const HostView: React.FC = () => {
     [libraryTablePlaylists.length, playlistLibraryPageSize],
   );
 
+  const playlistLibraryStartClamped = useMemo(() => {
+    if (libraryTablePlaylists.length === 0) return 0;
+    return Math.min(
+      Math.max(0, playlistLibraryStartIndex),
+      libraryTablePlaylists.length - 1,
+    );
+  }, [playlistLibraryStartIndex, libraryTablePlaylists.length]);
+
+  /** Approximate page number for the pager control (1-based). */
   const playlistLibraryPageClamped = useMemo(
-    () => Math.min(playlistLibraryPage, playlistLibraryPageCount - 1),
-    [playlistLibraryPage, playlistLibraryPageCount]
+    () =>
+      Math.min(
+        playlistLibraryPageCount - 1,
+        Math.floor(playlistLibraryStartClamped / playlistLibraryPageSize),
+      ),
+    [playlistLibraryStartClamped, playlistLibraryPageSize, playlistLibraryPageCount],
   );
 
+  const playlistLibraryCanPrev = playlistLibraryStartClamped > 0;
+  const playlistLibraryCanNext =
+    playlistLibraryStartClamped + playlistLibraryPageSize < libraryTablePlaylists.length;
+
   const paginatedPlaylists = useMemo(() => {
-    const start = playlistLibraryPageClamped * playlistLibraryPageSize;
-    return libraryTablePlaylists.slice(start, start + playlistLibraryPageSize);
-  }, [libraryTablePlaylists, playlistLibraryPageClamped, playlistLibraryPageSize]);
+    return libraryTablePlaylists.slice(
+      playlistLibraryStartClamped,
+      playlistLibraryStartClamped + playlistLibraryPageSize,
+    );
+  }, [libraryTablePlaylists, playlistLibraryStartClamped, playlistLibraryPageSize]);
 
   const playlistLibraryPageRangeLabel = useMemo(() => {
     if (libraryTablePlaylists.length === 0) return '';
-    const start = playlistLibraryPageClamped * playlistLibraryPageSize + 1;
+    const start = playlistLibraryStartClamped + 1;
     const end = Math.min(
       libraryTablePlaylists.length,
-      (playlistLibraryPageClamped + 1) * playlistLibraryPageSize,
+      playlistLibraryStartClamped + playlistLibraryPageSize,
     );
     return `${start}–${end} of ${libraryTablePlaylists.length}`;
-  }, [libraryTablePlaylists.length, playlistLibraryPageClamped, playlistLibraryPageSize]);
+  }, [libraryTablePlaylists.length, playlistLibraryStartClamped, playlistLibraryPageSize]);
 
   /**
    * A–Z index over an alphabetical copy of the current library (display titles).
-   * Letter clicks force name↑ sort so pages match contiguous letter groups.
+   * Letter clicks force name↑ sort and pin that letter at the top row.
    */
   const playlistLibraryLetterIndex = useMemo(() => {
     const alpha = [...libraryTablePlaylists].sort((a, b) =>
@@ -3495,11 +3515,11 @@ const HostView: React.FC = () => {
     (letter: string) => {
       const idx = playlistLibraryLetterIndex.get(letter);
       if (idx == null || idx < 0) return;
-      // Ensure list is A→Z by display title so the jump lands in a contiguous letter block.
+      // A→Z by display title, then put the first matching letter at row 1 (not mid-page).
       setPlaylistSort({ key: 'name', dir: 'asc' });
-      setPlaylistLibraryPage(Math.floor(idx / playlistLibraryPageSize));
+      setPlaylistLibraryStartIndex(idx);
     },
-    [playlistLibraryLetterIndex, playlistLibraryPageSize],
+    [playlistLibraryLetterIndex],
   );
 
   const setPlaylistLibraryPageSizeAndPersist = useCallback((size: number) => {
@@ -3507,13 +3527,21 @@ const HostView: React.FC = () => {
       ? size
       : 25;
     setPlaylistLibraryPageSize(next);
-    setPlaylistLibraryPage(0);
+    setPlaylistLibraryStartIndex(0);
     try {
       localStorage.setItem(PLAYLIST_LIBRARY_PAGE_SIZE_KEY, String(next));
     } catch {
       /* ignore */
     }
   }, []);
+
+  const goPlaylistLibraryPageAligned = useCallback(
+    (pageZeroBased: number) => {
+      const page = Math.min(playlistLibraryPageCount - 1, Math.max(0, pageZeroBased));
+      setPlaylistLibraryStartIndex(page * playlistLibraryPageSize);
+    },
+    [playlistLibraryPageCount, playlistLibraryPageSize],
+  );
 
   const playlistLibrarySourceCounts = useMemo(() => {
     const spotify = sortedFilteredPlaylists.filter((p) => !p.youtubeMusic && !p.appleMusic && !p.catalog).length;
@@ -3523,19 +3551,25 @@ const HostView: React.FC = () => {
   }, [sortedFilteredPlaylists, tempoLibraryPacks.length]);
 
   useEffect(() => {
-    setPlaylistLibraryPage(0);
+    setPlaylistLibraryStartIndex(0);
   }, [
     playlistQuery,
     showAllPlaylists,
     parsedPlaylistTitleFlags,
-    // Intentionally omit playlistSort — A–Z jump sets name↑ + page together; resetting would wipe the jump.
+    // Intentionally omit playlistSort — A–Z jump sets name↑ + start index together.
     playlistLibrarySource,
     playlistLibraryPageSize,
   ]);
 
   useEffect(() => {
-    setPlaylistLibraryPage((p) => Math.min(p, Math.max(0, playlistLibraryPageCount - 1)));
-  }, [playlistLibraryPageCount]);
+    if (libraryTablePlaylists.length === 0) {
+      setPlaylistLibraryStartIndex(0);
+      return;
+    }
+    setPlaylistLibraryStartIndex((i) =>
+      Math.min(Math.max(0, i), libraryTablePlaylists.length - 1),
+    );
+  }, [libraryTablePlaylists.length]);
 
   /** Spotify + YouTube + Apple Music rows so round buckets resolve dragged ids from either source. */
   const playlistsForRoundPlanner = useMemo(() => {
@@ -3622,7 +3656,7 @@ const HostView: React.FC = () => {
       if (prev.key !== key) return { key, dir: 'asc' };
       return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
     });
-    setPlaylistLibraryPage(0);
+    setPlaylistLibraryStartIndex(0);
   }, []);
 
   useEffect(() => {
@@ -13436,7 +13470,7 @@ const HostView: React.FC = () => {
                               type="button"
                               onClick={() => {
                                 setPlaylistSort({ key: 'none', dir: 'asc' });
-                                setPlaylistLibraryPage(0);
+                                setPlaylistLibraryStartIndex(0);
                               }}
                               className="host-playlist-sort-reset"
                               title="Restore Spotify library order"
@@ -13485,18 +13519,22 @@ const HostView: React.FC = () => {
                           <button
                             type="button"
                             className="host-playlist-library-table-head__pager-btn"
-                            disabled={playlistLibraryPageClamped <= 0}
+                            disabled={!playlistLibraryCanPrev}
                             aria-label="First page"
-                            onClick={() => setPlaylistLibraryPage(0)}
+                            onClick={() => setPlaylistLibraryStartIndex(0)}
                           >
                             «
                           </button>
                           <button
                             type="button"
                             className="host-playlist-library-table-head__pager-btn"
-                            disabled={playlistLibraryPageClamped <= 0}
+                            disabled={!playlistLibraryCanPrev}
                             aria-label="Previous page"
-                            onClick={() => setPlaylistLibraryPage((p) => Math.max(0, p - 1))}
+                            onClick={() =>
+                              setPlaylistLibraryStartIndex((i) =>
+                                Math.max(0, i - playlistLibraryPageSize),
+                              )
+                            }
                           >
                             ‹
                           </button>
@@ -13517,7 +13555,7 @@ const HostView: React.FC = () => {
                                   playlistLibraryPageCount,
                                   Math.max(1, raw),
                                 );
-                                setPlaylistLibraryPage(page - 1);
+                                goPlaylistLibraryPageAligned(page - 1);
                               }}
                             />
                             <span className="host-playlist-library-table-head__pager-label">
@@ -13527,12 +13565,17 @@ const HostView: React.FC = () => {
                           <button
                             type="button"
                             className="host-playlist-library-table-head__pager-btn"
-                            disabled={playlistLibraryPageClamped >= playlistLibraryPageCount - 1}
+                            disabled={!playlistLibraryCanNext}
                             aria-label="Next page"
                             onClick={() =>
-                              setPlaylistLibraryPage((p) =>
-                                Math.min(playlistLibraryPageCount - 1, p + 1),
-                              )
+                              setPlaylistLibraryStartIndex((i) => {
+                                const next = i + playlistLibraryPageSize;
+                                const maxStart = Math.max(
+                                  0,
+                                  libraryTablePlaylists.length - playlistLibraryPageSize,
+                                );
+                                return Math.min(next, Math.max(i, maxStart));
+                              })
                             }
                           >
                             ›
@@ -13540,9 +13583,13 @@ const HostView: React.FC = () => {
                           <button
                             type="button"
                             className="host-playlist-library-table-head__pager-btn"
-                            disabled={playlistLibraryPageClamped >= playlistLibraryPageCount - 1}
+                            disabled={!playlistLibraryCanNext}
                             aria-label="Last page"
-                            onClick={() => setPlaylistLibraryPage(playlistLibraryPageCount - 1)}
+                            onClick={() =>
+                              setPlaylistLibraryStartIndex(
+                                Math.max(0, libraryTablePlaylists.length - playlistLibraryPageSize),
+                              )
+                            }
                           >
                             »
                           </button>
