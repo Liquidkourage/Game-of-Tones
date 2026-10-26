@@ -504,8 +504,30 @@ interface Playlist {
   orgShared?: boolean;
 }
 
-/** Playlists per page in the playlist-round modal (fits viewport without scrolling). */
-const PLAYLIST_LIBRARY_PAGE_SIZE = 15;
+/** Default / allowed page sizes for Plan Rounds playlist library navigation. */
+const PLAYLIST_LIBRARY_PAGE_SIZE_OPTIONS = [15, 25, 50] as const;
+const PLAYLIST_LIBRARY_PAGE_SIZE_KEY = 'tempo_host_playlist_library_page_size';
+
+function readPlaylistLibraryPageSize(): number {
+  try {
+    const raw = localStorage.getItem(PLAYLIST_LIBRARY_PAGE_SIZE_KEY);
+    const n = raw != null ? parseInt(raw, 10) : NaN;
+    if ((PLAYLIST_LIBRARY_PAGE_SIZE_OPTIONS as readonly number[]).includes(n)) return n;
+  } catch {
+    /* ignore */
+  }
+  return 25;
+}
+
+/** First letter bucket for A–Z jump (non A–Z → "#"). */
+function playlistLibraryLetterBucket(name: unknown): string {
+  const c = String(name || '')
+    .trim()
+    .charAt(0)
+    .toUpperCase();
+  if (c >= 'A' && c <= 'Z') return c;
+  return '#';
+}
 
 /** In-process Web API 429 cool-down (from GET /api/spotify/status and error bodies). */
 type WebApiQuarantineState =
@@ -2473,6 +2495,7 @@ const HostView: React.FC = () => {
     dir: 'asc' | 'desc';
   }>({ key: 'none', dir: 'asc' });
   const [playlistLibraryPage, setPlaylistLibraryPage] = useState(0);
+  const [playlistLibraryPageSize, setPlaylistLibraryPageSize] = useState(readPlaylistLibraryPageSize);
   /** Library source: host's own Spotify, shared Tempo Library (GoT-labeled catalog), or YouTube. */
   const [playlistLibrarySource, setPlaylistLibrarySource] = useState<
     'spotify' | 'tempo' | 'youtube' | 'apple'
@@ -3402,8 +3425,8 @@ const HostView: React.FC = () => {
   }, [catalogPackOptions, playlistQuery]);
 
   const playlistLibraryPageCount = useMemo(
-    () => Math.max(1, Math.ceil(libraryTablePlaylists.length / PLAYLIST_LIBRARY_PAGE_SIZE)),
-    [libraryTablePlaylists.length]
+    () => Math.max(1, Math.ceil(libraryTablePlaylists.length / playlistLibraryPageSize)),
+    [libraryTablePlaylists.length, playlistLibraryPageSize],
   );
 
   const playlistLibraryPageClamped = useMemo(
@@ -3412,19 +3435,51 @@ const HostView: React.FC = () => {
   );
 
   const paginatedPlaylists = useMemo(() => {
-    const start = playlistLibraryPageClamped * PLAYLIST_LIBRARY_PAGE_SIZE;
-    return libraryTablePlaylists.slice(start, start + PLAYLIST_LIBRARY_PAGE_SIZE);
-  }, [libraryTablePlaylists, playlistLibraryPageClamped]);
+    const start = playlistLibraryPageClamped * playlistLibraryPageSize;
+    return libraryTablePlaylists.slice(start, start + playlistLibraryPageSize);
+  }, [libraryTablePlaylists, playlistLibraryPageClamped, playlistLibraryPageSize]);
 
   const playlistLibraryPageRangeLabel = useMemo(() => {
     if (libraryTablePlaylists.length === 0) return '';
-    const start = playlistLibraryPageClamped * PLAYLIST_LIBRARY_PAGE_SIZE + 1;
+    const start = playlistLibraryPageClamped * playlistLibraryPageSize + 1;
     const end = Math.min(
       libraryTablePlaylists.length,
-      (playlistLibraryPageClamped + 1) * PLAYLIST_LIBRARY_PAGE_SIZE
+      (playlistLibraryPageClamped + 1) * playlistLibraryPageSize,
     );
     return `${start}–${end} of ${libraryTablePlaylists.length}`;
-  }, [libraryTablePlaylists.length, playlistLibraryPageClamped]);
+  }, [libraryTablePlaylists.length, playlistLibraryPageClamped, playlistLibraryPageSize]);
+
+  /** Letters that appear in the current filtered library (for A–Z jump). */
+  const playlistLibraryLetterIndex = useMemo(() => {
+    const firstIndexByLetter = new Map<string, number>();
+    libraryTablePlaylists.forEach((p, i) => {
+      const letter = playlistLibraryLetterBucket(p.name);
+      if (!firstIndexByLetter.has(letter)) firstIndexByLetter.set(letter, i);
+    });
+    return firstIndexByLetter;
+  }, [libraryTablePlaylists]);
+
+  const jumpPlaylistLibraryToLetter = useCallback(
+    (letter: string) => {
+      const idx = playlistLibraryLetterIndex.get(letter);
+      if (idx == null || idx < 0) return;
+      setPlaylistLibraryPage(Math.floor(idx / playlistLibraryPageSize));
+    },
+    [playlistLibraryLetterIndex, playlistLibraryPageSize],
+  );
+
+  const setPlaylistLibraryPageSizeAndPersist = useCallback((size: number) => {
+    const next = (PLAYLIST_LIBRARY_PAGE_SIZE_OPTIONS as readonly number[]).includes(size)
+      ? size
+      : 25;
+    setPlaylistLibraryPageSize(next);
+    setPlaylistLibraryPage(0);
+    try {
+      localStorage.setItem(PLAYLIST_LIBRARY_PAGE_SIZE_KEY, String(next));
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const playlistLibrarySourceCounts = useMemo(() => {
     const spotify = sortedFilteredPlaylists.filter((p) => !p.youtubeMusic && !p.appleMusic && !p.catalog).length;
@@ -3435,7 +3490,15 @@ const HostView: React.FC = () => {
 
   useEffect(() => {
     setPlaylistLibraryPage(0);
-  }, [playlistQuery, showAllPlaylists, parsedPlaylistTitleFlags, playlistSort.key, playlistSort.dir, playlistLibrarySource]);
+  }, [
+    playlistQuery,
+    showAllPlaylists,
+    parsedPlaylistTitleFlags,
+    playlistSort.key,
+    playlistSort.dir,
+    playlistLibrarySource,
+    playlistLibraryPageSize,
+  ]);
 
   useEffect(() => {
     setPlaylistLibraryPage((p) => Math.min(p, Math.max(0, playlistLibraryPageCount - 1)));
@@ -13361,8 +13424,36 @@ const HostView: React.FC = () => {
                         <nav
                           className="host-playlist-library-table-head__pager"
                           aria-label="Playlist pages"
-                          title={playlistLibraryPageRangeLabel}
                         >
+                          <label
+                            className="host-playlist-library-table-head__pager-size"
+                            title="Rows per page"
+                          >
+                            <span className="host-playlist-library-table-head__pager-size-label">Rows</span>
+                            <select
+                              className="host-playlist-library-table-head__pager-select"
+                              value={playlistLibraryPageSize}
+                              aria-label="Playlists per page"
+                              onChange={(e) =>
+                                setPlaylistLibraryPageSizeAndPersist(parseInt(e.target.value, 10))
+                              }
+                            >
+                              {PLAYLIST_LIBRARY_PAGE_SIZE_OPTIONS.map((n) => (
+                                <option key={n} value={n}>
+                                  {n}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <button
+                            type="button"
+                            className="host-playlist-library-table-head__pager-btn"
+                            disabled={playlistLibraryPageClamped <= 0}
+                            aria-label="First page"
+                            onClick={() => setPlaylistLibraryPage(0)}
+                          >
+                            «
+                          </button>
                           <button
                             type="button"
                             className="host-playlist-library-table-head__pager-btn"
@@ -13372,9 +13463,30 @@ const HostView: React.FC = () => {
                           >
                             ‹
                           </button>
-                          <span className="host-playlist-library-table-head__pager-label">
-                            {playlistLibraryPageClamped + 1}/{playlistLibraryPageCount}
-                          </span>
+                          <label className="host-playlist-library-table-head__pager-goto">
+                            <span className="sr-only">Page</span>
+                            <input
+                              type="number"
+                              className="host-playlist-library-table-head__pager-input"
+                              min={1}
+                              max={playlistLibraryPageCount}
+                              value={playlistLibraryPageClamped + 1}
+                              aria-label={`Page number, ${playlistLibraryPageRangeLabel}`}
+                              title={playlistLibraryPageRangeLabel}
+                              onChange={(e) => {
+                                const raw = parseInt(e.target.value, 10);
+                                if (!Number.isFinite(raw)) return;
+                                const page = Math.min(
+                                  playlistLibraryPageCount,
+                                  Math.max(1, raw),
+                                );
+                                setPlaylistLibraryPage(page - 1);
+                              }}
+                            />
+                            <span className="host-playlist-library-table-head__pager-label">
+                              / {playlistLibraryPageCount}
+                            </span>
+                          </label>
                           <button
                             type="button"
                             className="host-playlist-library-table-head__pager-btn"
@@ -13382,15 +13494,62 @@ const HostView: React.FC = () => {
                             aria-label="Next page"
                             onClick={() =>
                               setPlaylistLibraryPage((p) =>
-                                Math.min(playlistLibraryPageCount - 1, p + 1)
+                                Math.min(playlistLibraryPageCount - 1, p + 1),
                               )
                             }
                           >
                             ›
                           </button>
+                          <button
+                            type="button"
+                            className="host-playlist-library-table-head__pager-btn"
+                            disabled={playlistLibraryPageClamped >= playlistLibraryPageCount - 1}
+                            aria-label="Last page"
+                            onClick={() => setPlaylistLibraryPage(playlistLibraryPageCount - 1)}
+                          >
+                            »
+                          </button>
                         </nav>
                       ) : null}
                       </div>
+                      {libraryTablePlaylists.length > PLAYLIST_LIBRARY_PAGE_SIZE_OPTIONS[0] ? (
+                        <div
+                          className="host-playlist-library-az"
+                          role="navigation"
+                          aria-label="Jump to playlist letter"
+                        >
+                          <span className="host-playlist-library-az__range" aria-live="polite">
+                            {playlistLibraryPageRangeLabel}
+                          </span>
+                          <div className="host-playlist-library-az__letters">
+                            {(['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')] as string[]).map(
+                              (letter) => {
+                                const enabled = playlistLibraryLetterIndex.has(letter);
+                                return (
+                                  <button
+                                    key={letter}
+                                    type="button"
+                                    className={
+                                      enabled
+                                        ? 'host-playlist-library-az__btn'
+                                        : 'host-playlist-library-az__btn host-playlist-library-az__btn--empty'
+                                    }
+                                    disabled={!enabled}
+                                    aria-label={
+                                      enabled
+                                        ? `Jump to playlists starting with ${letter === '#' ? 'a number or symbol' : letter}`
+                                        : undefined
+                                    }
+                                    onClick={() => jumpPlaylistLibraryToLetter(letter)}
+                                  >
+                                    {letter}
+                                  </button>
+                                );
+                              },
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="host-playlist-library-table__rows">
                       <div
                         className="host-playlist-library-row host-playlist-library-row--virtual"
