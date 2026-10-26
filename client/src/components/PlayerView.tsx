@@ -40,6 +40,8 @@ import {
   unionCompositeHighlightPositions,
   normalizeLinesRequired,
   countCompletedLinesVisual,
+  countCompletedRowsVisual,
+  countCompletedColsVisual,
   evaluateCustomPatternVisual,
   customMaskHighlightPositions,
 } from '../patternDefinitions';
@@ -90,6 +92,17 @@ interface GameState {
   customMatchAnywhere?: boolean;
   /** Audience label for custom shapes (server / host). */
   customPatternName?: string;
+  /** Multi-prize open goals from server pattern meta (asymmetric-safe labels only). */
+  prizeSlots?: {
+    multiSlotWinPolicy?: string;
+    slots: Array<{
+      id: string;
+      label: string;
+      pattern: string;
+      linesRequired?: number;
+      open: boolean;
+    }>;
+  } | null;
 }
 
 interface VenueBranding {
@@ -160,6 +173,7 @@ function patternFieldsFromServerPayload(
     | 'customMatchAllowMirror'
     | 'customMatchAnywhere'
     | 'customPatternName'
+    | 'prizeSlots'
   >,
 ): Pick<
   GameState,
@@ -172,6 +186,7 @@ function patternFieldsFromServerPayload(
   | 'customMatchAllowMirror'
   | 'customMatchAnywhere'
   | 'customPatternName'
+  | 'prizeSlots'
 > {
   const raw =
     typeof data?.pattern === 'string' && data.pattern.length > 0
@@ -198,6 +213,13 @@ function patternFieldsFromServerPayload(
       ? normalizePatternComposite(data?.patternComposite) ?? prev?.patternComposite ?? undefined
       : undefined;
 
+  const prizeSlots =
+    data?.prizeSlots && Array.isArray(data.prizeSlots.slots)
+      ? data.prizeSlots
+      : data?.prizeSlots === null
+        ? null
+        : prev?.prizeSlots ?? null;
+
   if (pattern === 'custom') {
     const nameFromServer =
       typeof data?.customPatternName === 'string' ? data.customPatternName.trim().slice(0, 80) : null;
@@ -211,6 +233,7 @@ function patternFieldsFromServerPayload(
       customMatchAllowMirror: !!data?.customMatchAllowMirror,
       customMatchAnywhere: !!data?.customMatchAnywhere,
       customPatternName: nameFromServer != null ? nameFromServer : prev?.customPatternName || '',
+      prizeSlots,
     };
   }
 
@@ -224,6 +247,7 @@ function patternFieldsFromServerPayload(
     customMatchAllowMirror: false,
     customMatchAnywhere: false,
     customPatternName: undefined,
+    prizeSlots,
   };
 }
 
@@ -1330,6 +1354,9 @@ const PlayerView: React.FC = () => {
 
     // Handle confirmed bingo wins
     newSocket.on('bingo-called', (data: any) => {
+      if (data?.prizeSlotsSummary) {
+        setGameState((prev) => ({ ...prev, prizeSlots: data.prizeSlotsSummary }));
+      }
       // Only celebrate if this is a verified/confirmed bingo
       if (data.verified && !data.awaitingVerification) {
         // Check if this is someone else's verified bingo
@@ -1337,9 +1364,19 @@ const PlayerView: React.FC = () => {
           // Play celebration sound for other players
           playNotificationSound();
           // Show celebration message
-          setBingoMessage(`🏆 ${data.playerName} WINS BINGO!`);
+          const prizeBit =
+            Array.isArray(data.awardedPrizeSlots) && data.awardedPrizeSlots.length
+              ? ` (${data.awardedPrizeSlots.map((s: { label?: string }) => s.label).filter(Boolean).join(', ')})`
+              : '';
+          setBingoMessage(`🏆 ${data.playerName} WINS BINGO!${prizeBit}`);
           setTimeout(() => setBingoMessage(''), 3000);
         }
+      }
+    });
+
+    newSocket.on('bingo-confirmed', (data: any) => {
+      if (data?.prizeSlotsSummary) {
+        setGameState((prev) => ({ ...prev, prizeSlots: data.prizeSlotsSummary }));
       }
     });
 
@@ -2180,6 +2217,7 @@ const PlayerView: React.FC = () => {
     gameState.customMatchAllowRotation,
     gameState.customMatchAllowMirror,
     gameState.customMatchAnywhere,
+    gameState.prizeSlots,
   ]);
 
   // Check if a visual pattern is complete (only checks if squares are marked, not if songs played)
@@ -2193,6 +2231,51 @@ const PlayerView: React.FC = () => {
       if (isPlayerFreeSpaceSquare(square)) return true;
       return square.marked === true;
     };
+
+    const checkSlotPattern = (slotPattern: string, linesRequired?: number): boolean => {
+      const need = normalizeLinesRequired(linesRequired ?? 1);
+      if (slotPattern === 'line_row') return countCompletedRowsVisual(card) >= need;
+      if (slotPattern === 'line_col') return countCompletedColsVisual(card) >= need;
+      if (slotPattern === 'line') return countCompletedLinesVisual(card) >= need;
+      if (slotPattern === 'full_card' || slotPattern === 'blackout') {
+        if (!validateBingoCardGrid(card)) return false;
+        return STANDARD_BINGO_POSITIONS.every((pos) => {
+          const square = card.squares.find((s) => s.position === pos);
+          return square ? isSquareMarked(square) : false;
+        });
+      }
+      if (slotPattern === 'four_corners') {
+        return ['0-0', '0-4', '4-0', '4-4'].every((pos) => {
+          const square = card.squares.find((s) => s.position === pos);
+          return square ? isSquareMarked(square) : false;
+        });
+      }
+      if (slotPattern === 'x') {
+        for (let i = 0; i < 5; i++) {
+          const a = card.squares.find((s) => s.position === `${i}-${i}`);
+          const b = card.squares.find((s) => s.position === `${i}-${4 - i}`);
+          if (!a || !isSquareMarked(a) || !b || !isSquareMarked(b)) return false;
+        }
+        return true;
+      }
+      const presets: Record<string, string[]> = {
+        t: ['0-0', '0-1', '0-2', '0-3', '0-4', '1-2', '2-2', '3-2', '4-2'],
+        l: ['0-0', '1-0', '2-0', '3-0', '4-0', '4-1', '4-2', '4-3', '4-4'],
+        u: ['0-0', '1-0', '2-0', '3-0', '4-0', '0-4', '1-4', '2-4', '3-4', '4-4', '4-1', '4-2', '4-3'],
+        plus: ['2-0', '2-1', '2-2', '2-3', '2-4', '0-2', '1-2', '3-2', '4-2'],
+      };
+      const positions = presets[slotPattern];
+      if (!positions) return false;
+      return positions.every((pos) => {
+        const square = card.squares.find((s) => s.position === pos);
+        return square ? isSquareMarked(square) : false;
+      });
+    };
+
+    const openSlots = (gameState.prizeSlots?.slots || []).filter((s) => s.open);
+    if (openSlots.length > 0) {
+      return openSlots.some((s) => checkSlotPattern(s.pattern, s.linesRequired));
+    }
     
     // Full card / blackout — real 5×5 grid, then every cell marked (fail closed if card is truncated/duplicate)
     if (pattern === 'full_card' || pattern === 'blackout') {
@@ -2586,6 +2669,9 @@ const PlayerView: React.FC = () => {
               customMatchAnywhere={gameState.customMatchAnywhere}
               customPatternName={gameState.customPatternName}
               patternComposite={gameState.patternComposite}
+              prizeSlotGoals={(gameState.prizeSlots?.slots || [])
+                .filter((s) => s.open)
+                .map((s) => ({ label: s.label, pattern: s.pattern }))}
               card={bingoCard}
             />
           ) : null}

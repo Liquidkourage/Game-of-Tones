@@ -46,12 +46,23 @@ function patternExtrasForClient(room) {
 
 /** Single source of truth for player/host/display pattern payloads. */
 function patternMetaForClient(room) {
-  return {
+  const meta = {
     pattern: room?.pattern || 'line',
     customMask: Array.from(room?.customPattern || []),
     patternComposite: patternCompositeForClient(room),
     ...patternExtrasForClient(room),
   };
+  // Lazy require avoids circular load with prizeSlots.js
+  if (Array.isArray(room?.prizeSlots) && room.prizeSlots.length > 0) {
+    try {
+      const { prizeSlotsPublicSummary } = require('./prizeSlots');
+      const summary = prizeSlotsPublicSummary(room);
+      if (summary) meta.prizeSlots = summary;
+    } catch {
+      /* ignore */
+    }
+  }
+  return meta;
 }
 
 function listCompletedLinesPlayedStrict(card, isMarkedSquareValid) {
@@ -871,6 +882,7 @@ module.exports = {
   patternExtrasForClient,
   patternMetaForClient,
   listCompletedLinesPlayedStrict,
+  unionLineWinningPositions,
   checkBingoWithPlayedSongs,
   validateBingoCardGrid,
   cardWithClientMarks,

@@ -17,6 +17,8 @@ export type PlayerPatternHintProps = {
   customMatchAnywhere?: boolean;
   customPatternName?: string;
   patternComposite?: PatternCompositeSpec | null;
+  /** Multi-prize open goals (labels only — no call spoilers). */
+  prizeSlotGoals?: Array<{ label: string; pattern: string }> | null;
   /** Active card — used for line-mode spaces/lines progress. */
   card?: { squares: Array<{ position: string; marked?: boolean; isFreeSpace?: boolean; songId?: string }> } | null;
 };
@@ -32,18 +34,27 @@ const PlayerPatternHint: React.FC<PlayerPatternHintProps> = ({
   customMatchAnywhere,
   customPatternName,
   patternComposite,
+  prizeSlotGoals,
   card,
 }) => {
-  const label = useMemo(
-    () =>
-      getPatternHintLabel(pattern, {
-        linesRequired,
-        patternComposite,
-        customPatternName,
-        customMatchAnywhere,
-      }),
-    [pattern, linesRequired, patternComposite, customPatternName, customMatchAnywhere],
-  );
+  const label = useMemo(() => {
+    if (Array.isArray(prizeSlotGoals) && prizeSlotGoals.length > 0) {
+      return prizeSlotGoals.map((g) => g.label || g.pattern).join(' · ');
+    }
+    return getPatternHintLabel(pattern, {
+      linesRequired,
+      patternComposite,
+      customPatternName,
+      customMatchAnywhere,
+    });
+  }, [
+    prizeSlotGoals,
+    pattern,
+    linesRequired,
+    patternComposite,
+    customPatternName,
+    customMatchAnywhere,
+  ]);
 
   const lineProgress = useMemo(() => {
     if (pattern !== 'line' || !card) return null;

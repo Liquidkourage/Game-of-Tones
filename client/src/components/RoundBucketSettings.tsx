@@ -12,10 +12,17 @@ import {
   deleteCustomPattern,
   getSavedCustomPatterns,
   renameCustomPattern,
+  PRIZE_SLOT_PATTERN_OPTIONS,
+  MULTI_SLOT_WIN_POLICY_OPTIONS,
+  newClientPrizeSlotId,
+  defaultPrizeSlotLabel,
   type BingoPattern,
   type HostPatternCategory,
   type PatternCompositeSpec,
   type SavedCustomPattern,
+  type RoundPrizeSlot,
+  type PrizeSlotPattern,
+  type MultiSlotWinPolicy,
 } from '../patternDefinitions';
 import HostPatternMiniPreview from './HostPatternMiniPreview';
 
@@ -35,6 +42,9 @@ export interface RoundBucketSettingsRound {
   savedMixSnapshot?: { songs: { length: number }; mixGeometry: string; savedAt: number };
   /** Optional prize shown on projector + night winners board. */
   prize?: string;
+  /** Multi-prize slots (when set, each slot is its own win condition + prize). */
+  prizeSlots?: RoundPrizeSlot[];
+  multiSlotWinPolicy?: MultiSlotWinPolicy;
 }
 
 export interface RoundBucketBingoPatch {
@@ -48,6 +58,8 @@ export interface RoundBucketBingoPatch {
   customMatchAllowMirror?: boolean;
   customMatchAnywhere?: boolean;
   prize?: string;
+  prizeSlots?: RoundPrizeSlot[];
+  multiSlotWinPolicy?: MultiSlotWinPolicy;
 }
 
 interface RoundBucketSettingsProps {
@@ -236,8 +248,133 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
             placeholder="e.g. Free pitcher"
             value={round.prize ?? ''}
             onChange={(e) => onUpdateBingo(roundIndex, { prize: e.target.value })}
+            disabled={(round.prizeSlots?.length ?? 0) > 0}
           />
         </label>
+      </div>
+
+      <div className="round-bucket-settings__prize-slots">
+        <div className="round-bucket-settings__row" style={{ alignItems: 'center', gap: 12 }}>
+          <span className="round-bucket-settings__label">Multi-prize slots</span>
+          <button
+            type="button"
+            className="round-bucket-settings__pattern-editor-btn"
+            onClick={() => {
+              const added: RoundPrizeSlot = {
+                id: newClientPrizeSlotId(),
+                pattern: 'line_row',
+                label: defaultPrizeSlotLabel('line_row'),
+                linesRequired: 1,
+              };
+              const next = [...(round.prizeSlots || []), added].slice(0, 5);
+              onUpdateBingo(roundIndex, { prizeSlots: next });
+            }}
+            disabled={(round.prizeSlots?.length ?? 0) >= 5}
+          >
+            Add prize slot
+          </button>
+          {(round.prizeSlots?.length ?? 0) > 0 ? (
+            <button
+              type="button"
+              className="round-bucket-settings__pattern-editor-btn"
+              onClick={() => onUpdateBingo(roundIndex, { prizeSlots: [] })}
+            >
+              Clear slots
+            </button>
+          ) : null}
+        </div>
+        {(round.prizeSlots?.length ?? 0) > 0 ? (
+          <>
+            <label className="round-bucket-settings__field" style={{ marginTop: 8 }}>
+              <span className="round-bucket-settings__label">Same-player rule</span>
+              <select
+                className="round-bucket-settings__select"
+                value={round.multiSlotWinPolicy || 'multi_slot_any'}
+                onChange={(e) =>
+                  onUpdateBingo(roundIndex, {
+                    multiSlotWinPolicy: e.target.value as MultiSlotWinPolicy,
+                  })
+                }
+              >
+                {MULTI_SLOT_WIN_POLICY_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <ul className="round-bucket-settings__prize-slot-list" style={{ listStyle: 'none', padding: 0, margin: '8px 0 0' }}>
+              {(round.prizeSlots || []).map((slot, slotIndex) => (
+                <li
+                  key={slot.id}
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                    alignItems: 'center',
+                    marginBottom: 8,
+                  }}
+                >
+                  <select
+                    className="round-bucket-settings__select"
+                    value={slot.pattern}
+                    onChange={(e) => {
+                      const pattern = e.target.value as PrizeSlotPattern;
+                      const next = (round.prizeSlots || []).map((s, i) =>
+                        i === slotIndex
+                          ? {
+                              ...s,
+                              pattern,
+                              label: s.label?.trim() ? s.label : defaultPrizeSlotLabel(pattern),
+                              linesRequired:
+                                pattern === 'line' || pattern === 'line_row' || pattern === 'line_col'
+                                  ? normalizeLinesRequired(s.linesRequired ?? 1)
+                                  : undefined,
+                            }
+                          : s,
+                      );
+                      onUpdateBingo(roundIndex, { prizeSlots: next });
+                    }}
+                  >
+                    {PRIZE_SLOT_PATTERN_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    className="round-bucket-settings__input"
+                    maxLength={80}
+                    placeholder="Prize label"
+                    value={slot.label}
+                    onChange={(e) => {
+                      const next = (round.prizeSlots || []).map((s, i) =>
+                        i === slotIndex ? { ...s, label: e.target.value } : s,
+                      );
+                      onUpdateBingo(roundIndex, { prizeSlots: next });
+                    }}
+                    style={{ flex: 1, minWidth: 120 }}
+                  />
+                  <button
+                    type="button"
+                    className="round-bucket-settings__pattern-editor-btn"
+                    aria-label="Remove prize slot"
+                    onClick={() => {
+                      const next = (round.prizeSlots || []).filter((_, i) => i !== slotIndex);
+                      onUpdateBingo(roundIndex, { prizeSlots: next });
+                    }}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p style={{ fontSize: '0.8rem', opacity: 0.75, margin: '4px 0 0' }}>
+              When slots are set, each open pattern is its own prize. A matching card can win every open slot it completes (FIFO verify queue). Legacy single Pattern below still seeds the room default.
+            </p>
+          </>
+        ) : null}
       </div>
 
       <div className="round-bucket-settings__row">

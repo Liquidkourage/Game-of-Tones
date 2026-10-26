@@ -68,6 +68,8 @@ import {
   clauseSupportsMatchVariants,
   describeCompositePatternAudienceSentence,
   type SavedCompositePattern,
+  type RoundPrizeSlot,
+  type MultiSlotWinPolicy,
   getSavedCompositePatterns,
   saveCompositePattern,
   deleteSavedCompositePattern,
@@ -689,6 +691,9 @@ interface EventRound {
   playRecap?: RoundPlayRecap;
   /** Optional prize label for this round (shown on projector + night winners board). */
   prize?: string;
+  /** Multi-prize slots — each pattern + prize label is its own win condition this round. */
+  prizeSlots?: RoundPrizeSlot[];
+  multiSlotWinPolicy?: MultiSlotWinPolicy;
   /** Stamped when this event round completes (survives refresh; pairs with server roundWinners). */
   winnerName?: string;
   winnerAvatar?: string;
@@ -6898,6 +6903,8 @@ const HostView: React.FC = () => {
         savedRoundId: useSavedRoundPlayback ? roundForStart?.id : undefined,
         roundName: roundForStart?.name || `Round ${(currentRoundIndex ?? 0) + 1}`,
         prize: typeof roundForStart?.prize === 'string' ? roundForStart.prize.trim() : '',
+        prizeSlots: roundForStart?.prizeSlots?.slice() ?? [],
+        multiSlotWinPolicy: roundForStart?.multiSlotWinPolicy || 'multi_slot_any',
       });
       
       // Safety timeout in case no response comes back
@@ -15598,6 +15605,33 @@ const HostView: React.FC = () => {
                   </>
                 ) : null}
               </p>
+              {Array.isArray(pendingVerification.matchedPrizeSlots) &&
+              pendingVerification.matchedPrizeSlots.length > 0 ? (
+                <p style={{ color: '#00ff88', fontSize: '0.9rem', marginTop: 8 }}>
+                  Awards on approve:{' '}
+                  <strong>
+                    {pendingVerification.matchedPrizeSlots
+                      .map((s: { label?: string; pattern?: string }) => s.label || s.pattern || 'prize')
+                      .join(' · ')}
+                  </strong>
+                  {Array.isArray(pendingVerification.openPrizeSlots) &&
+                  pendingVerification.openPrizeSlots.length >
+                    pendingVerification.matchedPrizeSlots.length ? (
+                    <span style={{ color: '#ccc' }}>
+                      {' '}
+                      ({pendingVerification.openPrizeSlots.length -
+                        pendingVerification.matchedPrizeSlots.length}{' '}
+                      other prize
+                      {pendingVerification.openPrizeSlots.length -
+                        pendingVerification.matchedPrizeSlots.length ===
+                      1
+                        ? ''
+                        : 's'}{' '}
+                      still open after this)
+                    </span>
+                  ) : null}
+                </p>
+              ) : null}
               {bingoVerificationBehindCount > 0 ? (
                 <p
                   style={{

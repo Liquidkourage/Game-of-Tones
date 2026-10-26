@@ -68,6 +68,16 @@ const {
   normalizePatternComposite,
   patternCompositeForClient,
 } = require('./game/validateBingo');
+const {
+  normalizePrizeSlots,
+  normalizeMultiSlotWinPolicy,
+  roomHasPrizeSlots,
+  openPrizeSlots,
+  matchOpenPrizeSlots,
+  filterMatchedSlotsByPolicy,
+  markPrizeSlotsClaimed,
+  prizeSlotsPublicSummary,
+} = require('./game/prizeSlots');
 const callState = require('./game/callState');
 
 /** Host-facing bingo patterns; `blackout` incoming values normalize to `full_card`. */
@@ -8184,7 +8194,54 @@ io.on('connection', (socket) => {
     const claimCard = hasClientMarks
       ? cardWithClientMarks(bingoCard, claimMarkedPositions)
       : bingoCard;
-    const validationResult = validateBingoForPattern(claimCard, room);
+
+    /** @type {{ valid: boolean, reason?: string, type?: string|null, matchedSlotIds?: string[], matchedSlots?: object[] }} */
+    let validationResult;
+    let matchedSlotPayload = null;
+    if (roomHasPrizeSlots(room)) {
+      const rawMatched = matchOpenPrizeSlots(claimCard, room);
+      const matched = filterMatchedSlotsByPolicy(
+        rawMatched,
+        room,
+        { ...player, id: socket.id },
+        claimCardId,
+      );
+      if (matched.length > 0) {
+        const unionPos = new Set();
+        const reasons = [];
+        for (const m of matched) {
+          for (const p of m.validation.winningPositions || []) unionPos.add(p);
+          if (m.validation.reason) reasons.push(`${m.slot.label}: ${m.validation.reason}`);
+        }
+        validationResult = {
+          valid: true,
+          reason: reasons.join(' · ') || 'Prize slot(s) complete!',
+          type: matched.map((m) => m.slot.pattern).join('+'),
+          lineWinningPositions: Array.from(unionPos),
+        };
+        matchedSlotPayload = matched.map((m) => ({
+          id: m.slot.id,
+          label: m.slot.label,
+          pattern: m.slot.pattern,
+          winningPositions: m.validation.winningPositions || [],
+        }));
+      } else if (rawMatched.length > 0) {
+        validationResult = {
+          valid: false,
+          reason:
+            'You already won a prize this round under the host’s multi-prize rule — other players can still claim remaining prizes.',
+          type: null,
+        };
+      } else {
+        validationResult = {
+          valid: false,
+          reason: 'No open prize patterns are complete on this card yet.',
+          type: null,
+        };
+      }
+    } else {
+      validationResult = validateBingoForPattern(claimCard, room);
+    }
 
     const hybridMode = !!room.hybridInPersonPlusOnline;
     const isRemotePlayer = hybridMode && player.inPerson === false;
@@ -8216,7 +8273,10 @@ io.on('connection', (socket) => {
     }
     
     // Get winning pattern positions for verification display
-    const winningPatternPositions = getWinningPatternPositions(claimCard, room, validationResult);
+    const winningPatternPositions =
+      Array.isArray(validationResult.lineWinningPositions) && validationResult.lineWinningPositions.length
+        ? validationResult.lineWinningPositions
+        : getWinningPatternPositions(claimCard, room, validationResult);
     
     if (validationResult.valid) {
       // AUTO-PAUSE the game for host verification
@@ -8368,6 +8428,11 @@ io.on('connection', (socket) => {
         validationReason: validationResult.reason,
         winningPatternPositions: winningPatternPositions, // Positions that form the winning pattern
         winningPatternType: validationResult.type || room.pattern, // Type of winning pattern
+        matchedPrizeSlots: matchedSlotPayload,
+        openPrizeSlots: roomHasPrizeSlots(room)
+          ? openPrizeSlots(room).map((s) => ({ id: s.id, label: s.label, pattern: s.pattern }))
+          : null,
+        prizeSlotsSummary: prizeSlotsPublicSummary(room),
         // Add debug info for troubleshooting
         debugInfo: {
           totalCalledIds: calledIds.length,
@@ -8563,10 +8628,32 @@ io.on('connection', (socket) => {
       );
     }
     if (approved) {
+      // Multi-prize: award still-open matched slots from the claim; auto-continue while slots remain.
+      const claimedCardIdEarly =
+        headData.cardId ||
+        headData.playerCard?.cardId ||
+        player.bingoCard?.cardId ||
+        null;
+      let awardedSlots = [];
+      if (roomHasPrizeSlots(room)) {
+        const wantIds = Array.isArray(headData.matchedPrizeSlots)
+          ? headData.matchedPrizeSlots.map((s) => s && s.id).filter(Boolean)
+          : [];
+        awardedSlots = markPrizeSlotsClaimed(room, wantIds, {
+          playerId: resolvedPlayerId,
+          participantId: player.participantId || headData.participantId || null,
+          playerName: player.name,
+          cardId: claimedCardIdEarly,
+        });
+      }
+      const slotsStillOpen = roomHasPrizeSlots(room) ? openPrizeSlots(room).length > 0 : false;
       // APPROVED: Confirm the win — either end the round or award & keep playing
-      const keepPlayingEarly = continueRound === true;
+      const keepPlayingEarly =
+        continueRound === true || (roomHasPrizeSlots(room) && slotsStillOpen);
       routineServerLog(
-        `✅ Host approved bingo for ${player.name}${keepPlayingEarly ? ' (continue round)' : ''}`,
+        `✅ Host approved bingo for ${player.name}${keepPlayingEarly ? ' (continue round)' : ''}${
+          awardedSlots.length ? ` — slots: ${awardedSlots.map((s) => s.label).join(', ')}` : ''
+        }`,
       );
       // End-round always marks a session win; continue only does so under one_win policy
       // (set again after card DQ below). For any_round + continue, other cards can still win.
@@ -8580,11 +8667,14 @@ io.on('connection', (socket) => {
       io.to(resolvedPlayerId).emit('bingo-result', {
         success: true,
         message: keepPlayingEarly
-          ? 'BINGO CONFIRMED! You win — the round continues.'
+          ? awardedSlots.length > 1
+            ? `BINGO CONFIRMED! You win ${awardedSlots.length} prizes — the round continues.`
+            : 'BINGO CONFIRMED! You win — the round continues.'
           : 'BINGO CONFIRMED! You win!',
         isWinner: true,
         verified: true,
         continueRound: keepPlayingEarly,
+        awardedPrizeSlots: awardedSlots.map((s) => ({ id: s.id, label: s.label, pattern: s.pattern })),
       });
       
       // Notify all players of confirmed win
@@ -8593,6 +8683,8 @@ io.on('connection', (socket) => {
         playerName: player.name,
         verified: true,
         continueRound: keepPlayingEarly,
+        awardedPrizeSlots: awardedSlots.map((s) => ({ id: s.id, label: s.label, pattern: s.pattern })),
+        prizeSlotsSummary: prizeSlotsPublicSummary(room),
       });
       
       // Serialize winning card + pattern positions for public display modal.
@@ -8600,11 +8692,7 @@ io.on('connection', (socket) => {
       const sourceCardList = playerBingoCards.asBingoCardList(
         room.bingoCards?.get(resolvedPlayerId) || player.bingoCards || player.bingoCard,
       );
-      const claimedCardId =
-        headData.cardId ||
-        headData.playerCard?.cardId ||
-        player.bingoCard?.cardId ||
-        null;
+      const claimedCardId = claimedCardIdEarly;
       const sourceCard =
         playerBingoCards.findBingoCardInList(sourceCardList, claimedCardId) ||
         (headData.playerCard && Array.isArray(headData.playerCard.squares)
@@ -8619,8 +8707,15 @@ io.on('connection', (socket) => {
       let winningCardPayload = null;
       let winningPositions = [];
       if (sourceCard && Array.isArray(sourceCard.squares)) {
-        const validationResult = validateBingoForPattern(sourceCard, room);
-        winningPositions = getWinningPatternPositions(sourceCard, room, validationResult);
+        if (
+          Array.isArray(headData.winningPatternPositions) &&
+          headData.winningPatternPositions.length
+        ) {
+          winningPositions = headData.winningPatternPositions;
+        } else {
+          const validationResult = validateBingoForPattern(sourceCard, room);
+          winningPositions = getWinningPatternPositions(sourceCard, room, validationResult);
+        }
         if (!winningPositions.length) {
           winningPositions = sourceCard.squares.filter((s) => s.marked).map((s) => s.position);
         }
@@ -8640,9 +8735,8 @@ io.on('connection', (socket) => {
         };
       }
       
-      // Store round winner (prize/name from Start Game) before display events
+      // Store round winner(s) — one night-board row per awarded prize slot when multi-prize.
       if (!room.roundWinners) room.roundWinners = [];
-      const winnerPrize = sanitizeRoundPrizeText(room.currentRoundPrize || '');
       const winnerRoundName =
         sanitizeRoundNameText(room.currentRoundName || '') ||
         `Round ${(room.roundWinners.length || 0) + 1}`;
@@ -8650,23 +8744,43 @@ io.on('connection', (socket) => {
       if (typeof room.liveNightBoardRoundNumber !== 'number') {
         room.liveNightBoardRoundNumber = (room.roundWinners.length || 0) + 1;
       }
-      const roundWinnerEntry = {
-        roundNumber: room.liveNightBoardRoundNumber,
-        playerName: player.name,
-        avatar: typeof player.avatar === 'string' ? player.avatar : '',
-        playerId: resolvedPlayerId,
-        timestamp: new Date().toISOString(),
-        continued: keepPlayingEarly === true,
-        ...(winnerPrize ? { prize: winnerPrize } : {}),
-        ...(winnerRoundName ? { roundName: winnerRoundName } : {}),
-      };
-      room.roundWinners.push(roundWinnerEntry);
+      const prizeRows =
+        awardedSlots.length > 0
+          ? awardedSlots
+          : [
+              {
+                label: sanitizeRoundPrizeText(room.currentRoundPrize || ''),
+                id: null,
+                pattern: room.pattern || 'line',
+              },
+            ];
+      let lastRoundWinnerEntry = null;
+      for (const slotRow of prizeRows) {
+        const winnerPrize = sanitizeRoundPrizeText(slotRow.label || room.currentRoundPrize || '');
+        lastRoundWinnerEntry = {
+          roundNumber: room.liveNightBoardRoundNumber,
+          playerName: player.name,
+          avatar: typeof player.avatar === 'string' ? player.avatar : '',
+          playerId: resolvedPlayerId,
+          timestamp: new Date().toISOString(),
+          continued: keepPlayingEarly === true,
+          ...(winnerPrize ? { prize: winnerPrize } : {}),
+          ...(winnerRoundName ? { roundName: winnerRoundName } : {}),
+          ...(slotRow.id ? { prizeSlotId: slotRow.id } : {}),
+          ...(slotRow.pattern ? { prizeSlotPattern: slotRow.pattern } : {}),
+        };
+        room.roundWinners.push(lastRoundWinnerEntry);
+      }
+      const roundWinnerEntry = lastRoundWinnerEntry;
+      const winnerPrize = sanitizeRoundPrizeText(
+        (awardedSlots[0] && awardedSlots[0].label) || room.currentRoundPrize || '',
+      );
       // Approval shows the winner card only — winners list waits until the host advances.
       clearNightBoardAutoHideTimer(room);
       room.showNightBoard = false;
 
       // NOW emit the actual winner event for public display
-      const keepPlaying = continueRound === true;
+      const keepPlaying = keepPlayingEarly;
       const bingoCalledPayload = { 
         playerId: resolvedPlayerId, 
         playerName: player.name,
@@ -8681,13 +8795,18 @@ io.on('connection', (socket) => {
         winningPositions,
         prize: winnerPrize || null,
         roundName: winnerRoundName || null,
-        roundNumber: roundWinnerEntry.roundNumber,
+        roundNumber: roundWinnerEntry?.roundNumber,
         roundWinners: room.roundWinners,
         showNightBoard: false,
         continueRound: keepPlaying,
+        awardedPrizeSlots: awardedSlots.map((s) => ({ id: s.id, label: s.label, pattern: s.pattern })),
+        prizeSlotsSummary: prizeSlotsPublicSummary(room),
       };
       storeLastDisplayWinnerFromBingoCalled(room, bingoCalledPayload);
       io.to(roomId).emit('bingo-called', bingoCalledPayload);
+      if (roomHasPrizeSlots(room)) {
+        io.to(roomId).emit('pattern-updated', patternMetaForClient(room));
+      }
 
       if (player.playerUserId != null) {
         void playerAccountsStore
@@ -9597,7 +9716,7 @@ io.on('connection', (socket) => {
   // hostOnly not used here: start-game may recreate a missing room for the owner before host binds.
   socketGate.on(socket, 'start-game', { requireRoomId: true }, async (data) => {
     routineServerLog('🎮 Start game event received:', data);
-    const { roomId, playlists, snippetLength = 30, deviceId, songList, lockedPlayOrder, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchReverse: incomingCustomReverse, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, customMatchAnywhere: incomingCustomAnywhere, customPatternName: incomingCustomPatternName, freeSpace, savedRoundPlayback, savedRoundId, roundName: incomingRoundName, prize: incomingRoundPrize } = data;
+    const { roomId, playlists, snippetLength = 30, deviceId, songList, lockedPlayOrder, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchReverse: incomingCustomReverse, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, customMatchAnywhere: incomingCustomAnywhere, customPatternName: incomingCustomPatternName, freeSpace, savedRoundPlayback, savedRoundId, roundName: incomingRoundName, prize: incomingRoundPrize, prizeSlots: incomingPrizeSlots, multiSlotWinPolicy: incomingMultiSlotWinPolicy } = data;
     const room = rooms.get(roomId);
     
     routineServerLog('🔍 Room found:', !!room);
@@ -9640,6 +9759,18 @@ io.on('connection', (socket) => {
         room.randomStarts = randomStarts || 'none';
         room.currentRoundName = sanitizeRoundNameText(incomingRoundName) || `Round ${(room.roundWinners?.length || 0) + 1}`;
         room.currentRoundPrize = sanitizeRoundPrizeText(incomingRoundPrize);
+        // Multi-prize slots for this round (empty = legacy single pattern + prize).
+        room.prizeSlots = normalizePrizeSlots(incomingPrizeSlots).map((s) => ({
+          ...s,
+          claimedBy: null,
+        }));
+        room.multiSlotWinPolicy = normalizeMultiSlotWinPolicy(incomingMultiSlotWinPolicy);
+        if (room.prizeSlots.length > 0 && !room.currentRoundPrize) {
+          // Host-facing fallback label when slots are used without a legacy prize string.
+          room.currentRoundPrize = sanitizeRoundPrizeText(
+            room.prizeSlots.map((s) => s.label).filter(Boolean).join(' · '),
+          );
+        }
         {
           const fromPlaylists = sanitizeRoundPlaylistNames(
             Array.isArray(playlists) ? playlists.map((playlist) => playlist?.name) : [],

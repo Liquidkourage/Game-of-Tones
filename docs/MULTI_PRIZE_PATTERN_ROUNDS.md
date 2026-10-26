@@ -1,6 +1,6 @@
 # Multi-prize pattern rounds
 
-**Status:** planned (not implemented yet)  
+**Status:** implemented on branch `cursor/multi-prize-pattern-rounds` (v1)  
 **Branch:** `cursor/multi-prize-pattern-rounds`
 
 Add host-configured prize slots per round—each with its own pattern and prize label—so multiple distinct wins can be awarded in one round via the existing bingo verify queue, with a host setting for whether the same player/card can take more than one slot.

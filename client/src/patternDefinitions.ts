@@ -13,6 +13,59 @@ export type BingoPattern =
   | 'custom'
   | 'composite';
 
+/** Patterns allowed on a multi-prize slot (v1 — no custom/composite per slot). */
+export type PrizeSlotPattern =
+  | 'line'
+  | 'line_row'
+  | 'line_col'
+  | 'four_corners'
+  | 'x'
+  | 't'
+  | 'l'
+  | 'u'
+  | 'plus'
+  | 'full_card'
+  | 'blackout';
+
+export type MultiSlotWinPolicy =
+  | 'multi_slot_any'
+  | 'multi_slot_one_per_player'
+  | 'multi_slot_one_per_card';
+
+export interface RoundPrizeSlot {
+  id: string;
+  label: string;
+  pattern: PrizeSlotPattern;
+  linesRequired?: number;
+}
+
+export const PRIZE_SLOT_PATTERN_OPTIONS: ReadonlyArray<{ value: PrizeSlotPattern; label: string }> = [
+  { value: 'line', label: 'Any line' },
+  { value: 'line_row', label: 'Row only' },
+  { value: 'line_col', label: 'Column only' },
+  { value: 'four_corners', label: 'Four corners' },
+  { value: 'x', label: 'X' },
+  { value: 't', label: 'T' },
+  { value: 'l', label: 'L' },
+  { value: 'u', label: 'U' },
+  { value: 'plus', label: 'Plus' },
+  { value: 'full_card', label: 'Blackout' },
+];
+
+export const MULTI_SLOT_WIN_POLICY_OPTIONS: ReadonlyArray<{ value: MultiSlotWinPolicy; label: string }> = [
+  { value: 'multi_slot_any', label: 'Same player can win multiple prizes' },
+  { value: 'multi_slot_one_per_player', label: 'One prize per player this round' },
+  { value: 'multi_slot_one_per_card', label: 'One prize per card this round' },
+];
+
+export function newClientPrizeSlotId(): string {
+  return `ps_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function defaultPrizeSlotLabel(pattern: PrizeSlotPattern): string {
+  return PRIZE_SLOT_PATTERN_OPTIONS.find((o) => o.value === pattern)?.label || pattern;
+}
+
 /** Presets allowed as sub-clauses inside a combined pattern (not `custom` / `composite`). */
 export type CompositeClausePreset =
   | 'line'
@@ -466,6 +519,32 @@ export function countCompletedLinesVisual(card: { squares: CardSqLite[] }): numb
   }
   if (d1) n++;
   if (d2) n++;
+  return n;
+}
+
+/** Complete horizontal rows only (multi-prize `line_row`). */
+export function countCompletedRowsVisual(card: { squares: CardSqLite[] }): number {
+  const isOn = (pos: string) => {
+    const sq = card.squares.find((s) => s.position === pos);
+    return isLiteVisuallyDaubed(sq);
+  };
+  let n = 0;
+  for (let row = 0; row < 5; row++) {
+    if ([0, 1, 2, 3, 4].every((c) => isOn(`${row}-${c}`))) n++;
+  }
+  return n;
+}
+
+/** Complete vertical columns only (multi-prize `line_col`). */
+export function countCompletedColsVisual(card: { squares: CardSqLite[] }): number {
+  const isOn = (pos: string) => {
+    const sq = card.squares.find((s) => s.position === pos);
+    return isLiteVisuallyDaubed(sq);
+  };
+  let n = 0;
+  for (let col = 0; col < 5; col++) {
+    if ([0, 1, 2, 3, 4].every((r) => isOn(`${r}-${col}`))) n++;
+  }
   return n;
 }
 
