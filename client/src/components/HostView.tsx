@@ -529,6 +529,19 @@ function playlistLibraryLetterBucket(name: unknown): string {
   return '#';
 }
 
+/** Visible title used for name-sort + A–Z (respects Short names / title-flag strip). */
+function playlistLibraryDisplayTitle(
+  playlist: { name?: string; tracks?: number },
+  stripPrefix: boolean,
+  flags: string[],
+): string {
+  const raw = stripPrefix
+    ? stripTitleFlagPrefix(String(playlist.name || ''), flags)
+    : String(playlist.name || '');
+  const { title } = playlistDisplayParts(raw, playlist.tracks ?? 0);
+  return (title || playlist.name || '').trim();
+}
+
 /** In-process Web API 429 cool-down (from GET /api/spotify/status and error bodies). */
 type WebApiQuarantineState =
   | { active: false }
@@ -3396,10 +3409,17 @@ const HostView: React.FC = () => {
       if (playlistSort.key === 'tracks') {
         return (a.tracks - b.tracks) * m;
       }
-      return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }) * m;
+      // Name sort follows visible titles (stripped GoT / flags), same as A–Z rail.
+      return (
+        playlistLibraryDisplayTitle(a, stripGoTPrefix, titleFlagStripList).localeCompare(
+          playlistLibraryDisplayTitle(b, stripGoTPrefix, titleFlagStripList),
+          undefined,
+          { sensitivity: 'base' },
+        ) * m
+      );
     });
     return rows;
-  }, [filteredPlaylists, playlistSort]);
+  }, [filteredPlaylists, playlistSort, stripGoTPrefix, titleFlagStripList]);
 
   const libraryTablePlaylists = useMemo(() => {
     if (playlistLibrarySource === 'youtube') {
@@ -3449,16 +3469,23 @@ const HostView: React.FC = () => {
     return `${start}–${end} of ${libraryTablePlaylists.length}`;
   }, [libraryTablePlaylists.length, playlistLibraryPageClamped, playlistLibraryPageSize]);
 
-  /** Letters that appear in the current filtered library (for A–Z jump). */
+  /**
+   * A–Z index over an alphabetical copy of the current library (display titles).
+   * Letter clicks force name↑ sort so pages match contiguous letter groups.
+   */
   const playlistLibraryLetterIndex = useMemo(() => {
+    const alpha = [...libraryTablePlaylists].sort((a, b) =>
+      playlistLibraryDisplayTitle(a, stripGoTPrefix, titleFlagStripList).localeCompare(
+        playlistLibraryDisplayTitle(b, stripGoTPrefix, titleFlagStripList),
+        undefined,
+        { sensitivity: 'base' },
+      ),
+    );
     const firstIndexByLetter = new Map<string, number>();
-    libraryTablePlaylists.forEach((p, i) => {
-      // Match the visible title (strip GoT / title flags) so A–Z isn't stuck on "G".
-      const rawDisplayName = stripGoTPrefix
-        ? stripTitleFlagPrefix(p.name, titleFlagStripList)
-        : p.name;
-      const { title: displayName } = playlistDisplayParts(rawDisplayName, p.tracks);
-      const letter = playlistLibraryLetterBucket(displayName || p.name);
+    alpha.forEach((p, i) => {
+      const letter = playlistLibraryLetterBucket(
+        playlistLibraryDisplayTitle(p, stripGoTPrefix, titleFlagStripList),
+      );
       if (!firstIndexByLetter.has(letter)) firstIndexByLetter.set(letter, i);
     });
     return firstIndexByLetter;
@@ -3468,6 +3495,8 @@ const HostView: React.FC = () => {
     (letter: string) => {
       const idx = playlistLibraryLetterIndex.get(letter);
       if (idx == null || idx < 0) return;
+      // Ensure list is A→Z by display title so the jump lands in a contiguous letter block.
+      setPlaylistSort({ key: 'name', dir: 'asc' });
       setPlaylistLibraryPage(Math.floor(idx / playlistLibraryPageSize));
     },
     [playlistLibraryLetterIndex, playlistLibraryPageSize],
@@ -3499,8 +3528,7 @@ const HostView: React.FC = () => {
     playlistQuery,
     showAllPlaylists,
     parsedPlaylistTitleFlags,
-    playlistSort.key,
-    playlistSort.dir,
+    // Intentionally omit playlistSort — A–Z jump sets name↑ + page together; resetting would wipe the jump.
     playlistLibrarySource,
     playlistLibraryPageSize,
   ]);
@@ -3594,6 +3622,7 @@ const HostView: React.FC = () => {
       if (prev.key !== key) return { key, dir: 'asc' };
       return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
     });
+    setPlaylistLibraryPage(0);
   }, []);
 
   useEffect(() => {
@@ -13405,7 +13434,10 @@ const HostView: React.FC = () => {
                           {playlistSort.key !== 'none' && (
                             <button
                               type="button"
-                              onClick={() => setPlaylistSort({ key: 'none', dir: 'asc' })}
+                              onClick={() => {
+                                setPlaylistSort({ key: 'none', dir: 'asc' });
+                                setPlaylistLibraryPage(0);
+                              }}
                               className="host-playlist-sort-reset"
                               title="Restore Spotify library order"
                               style={{
