@@ -344,6 +344,8 @@ const PlayerView: React.FC = () => {
   const [requestTitle, setRequestTitle] = useState('');
   const [requestArtist, setRequestArtist] = useState('');
   const [requestStatus, setRequestStatus] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle');
+  /** Shown when requestStatus === 'error' — prefer server reason (limit) over generic connection copy. */
+  const [requestErrorMessage, setRequestErrorMessage] = useState('');
   const [mySongRequests, setMySongRequests] = useState<MySongRequest[]>([]);
   const [hybridPrizeInPersonOnly, setHybridPrizeInPersonOnly] = useState(false);
   const wasReconnectingRef = useRef<boolean>(false);
@@ -866,14 +868,17 @@ const PlayerView: React.FC = () => {
     const artist = requestArtist.trim();
     if (!title || requestStatus === 'submitting') return;
     if (!socket?.connected) {
+      setRequestErrorMessage('Could not send. Check your connection.');
       setRequestStatus('error');
       return;
     }
+    setRequestErrorMessage('');
     setRequestStatus('submitting');
     let settled = false;
     const timeoutId = window.setTimeout(() => {
       if (settled) return;
       settled = true;
+      setRequestErrorMessage('Could not send. Check your connection.');
       setRequestStatus('error');
     }, 5000);
     socket.emit(
@@ -885,6 +890,7 @@ const PlayerView: React.FC = () => {
         mySongRequests?: unknown;
         reason?: string;
         message?: string;
+        maxSongRequestsPerPlayer?: number;
       } | undefined) => {
         if (settled) return;
         settled = true;
@@ -892,6 +898,7 @@ const PlayerView: React.FC = () => {
         if (result?.ok) {
           setRequestTitle('');
           setRequestArtist('');
+          setRequestErrorMessage('');
           setRequestStatus('sent');
           if (Array.isArray(result.mySongRequests)) {
             setMySongRequests(mergeMySongRequests([], result.mySongRequests));
@@ -899,10 +906,23 @@ const PlayerView: React.FC = () => {
             setMySongRequests((prev) => mergeMySongRequests(prev, result.request));
           }
         } else {
-          setRequestStatus('error');
-          if (result?.reason === 'limit_reached' && result.message) {
-            window.alert(result.message);
+          const reason = typeof result?.reason === 'string' ? result.reason : '';
+          const serverMsg =
+            typeof result?.message === 'string' && result.message.trim() ? result.message.trim() : '';
+          if (reason === 'limit_reached') {
+            const cap = Number(result?.maxSongRequestsPerPlayer);
+            setRequestErrorMessage(
+              serverMsg ||
+                (Number.isFinite(cap) && cap > 0
+                  ? `Request limit reached (${cap} per player). Ask the host if you need more.`
+                  : 'Request limit reached. Ask the host if you need more.'),
+            );
+          } else if (reason === 'too_fast') {
+            setRequestErrorMessage(serverMsg || 'Slow down — wait a second and try again.');
+          } else {
+            setRequestErrorMessage(serverMsg || 'Could not send. Check your connection.');
           }
+          setRequestStatus('error');
         }
       },
     );
@@ -1527,11 +1547,33 @@ const PlayerView: React.FC = () => {
 
   /** True after the first successful fit for the current card content — refits must not blank the grid. */
   const cardTextFitEverReadyRef = useRef(false);
+  /**
+   * Multi-card: each card used to fit independently (card 2 with shorter titles looked larger).
+   * Store each card's unconstrained best scales; apply the min across measured cards so swipe
+   * keeps title/artist size consistent.
+   */
+  const multiCardTextScalesRef = useRef<Map<string, { title: number; artist: number }>>(new Map());
+  const multiCardDealKeyRef = useRef('');
+
+  const multiCardDealKey = useMemo(
+    () =>
+      bingoCards
+        .map((c) => String(c.cardId || c.id || ''))
+        .filter(Boolean)
+        .join('|'),
+    [bingoCards],
+  );
 
   useLayoutEffect(() => {
     cardTextFitEverReadyRef.current = false;
     setCardTextFitReady(false);
   }, [cardTextFitSignature]);
+
+  useLayoutEffect(() => {
+    if (multiCardDealKeyRef.current === multiCardDealKey) return;
+    multiCardDealKeyRef.current = multiCardDealKey;
+    multiCardTextScalesRef.current.clear();
+  }, [multiCardDealKey]);
 
   useLayoutEffect(() => {
     if (!bingoCard || !cardGridEl) {
@@ -1715,6 +1757,7 @@ const PlayerView: React.FC = () => {
       const artistFitContexts =
         titleOnlyCells ? contexts.filter((ctx) => ctx.forceArtist) : contexts;
 
+      let cardArtistScale = ARTIST_SCALE_FLOOR;
       if (artistFitContexts.length > 0) {
         const findMaxArtistScale = (ctx: SquareCtx) => {
           if (ctx.artistMaxLines === 0 || !ctx.artistEl.textContent?.trim()) {
@@ -1771,9 +1814,32 @@ const PlayerView: React.FC = () => {
           uniformArtistScale -= 0.02;
         }
         uniformArtistScale = Math.max(uniformArtistScale, ARTIST_SCALE_MIN);
+        cardArtistScale = uniformArtistScale;
 
         for (const ctx of artistFitContexts) {
           setScales(ctx, uniformTitleScale, uniformArtistScale);
+        }
+      } else {
+        for (const ctx of contexts) {
+          setScales(ctx, uniformTitleScale, ARTIST_SCALE_FLOOR);
+        }
+      }
+
+      // Multi-card: apply the strictest title/artist scales measured across held cards.
+      if (bingoCards.length > 1 && bingoCard) {
+        const cardKey = String(bingoCard.cardId || bingoCard.id || activeCardIndex);
+        multiCardTextScalesRef.current.set(cardKey, {
+          title: uniformTitleScale,
+          artist: cardArtistScale,
+        });
+        let sharedTitle = uniformTitleScale;
+        let sharedArtist = cardArtistScale;
+        Array.from(multiCardTextScalesRef.current.values()).forEach((s) => {
+          sharedTitle = Math.min(sharedTitle, s.title);
+          sharedArtist = Math.min(sharedArtist, s.artist);
+        });
+        for (const ctx of contexts) {
+          setScales(ctx, sharedTitle, sharedArtist);
         }
       }
 
@@ -1820,7 +1886,16 @@ const PlayerView: React.FC = () => {
       container?.removeAttribute('data-fit-measuring');
       container?.removeAttribute('data-fit-silent');
     };
-  }, [cardTextFitSignature, compactCardCells, showArtists, cardGridEl, titleCollisionPositions]);
+  }, [
+    cardTextFitSignature,
+    compactCardCells,
+    showArtists,
+    cardGridEl,
+    titleCollisionPositions,
+    bingoCards.length,
+    bingoCard,
+    activeCardIndex,
+  ]);
 
   // Keep screen awake during game using Wake Lock API
   useEffect(() => {
@@ -2963,6 +3038,7 @@ const PlayerView: React.FC = () => {
                       className="player-v2-inline-button player-v2-feedback-open"
                       onClick={() => {
                         setRequestOpen(true);
+                        setRequestErrorMessage('');
                         setRequestStatus('idle');
                       }}
                     >
@@ -2979,7 +3055,10 @@ const PlayerView: React.FC = () => {
                         aria-label="Requested song title"
                         onChange={(event) => {
                           setRequestTitle(event.target.value);
-                          if (requestStatus !== 'submitting') setRequestStatus('idle');
+                          if (requestStatus !== 'submitting') {
+                            setRequestErrorMessage('');
+                            setRequestStatus('idle');
+                          }
                         }}
                       />
                       <input
@@ -2991,7 +3070,10 @@ const PlayerView: React.FC = () => {
                         aria-label="Requested song artist"
                         onChange={(event) => {
                           setRequestArtist(event.target.value);
-                          if (requestStatus !== 'submitting') setRequestStatus('idle');
+                          if (requestStatus !== 'submitting') {
+                            setRequestErrorMessage('');
+                            setRequestStatus('idle');
+                          }
                         }}
                       />
                       <div className="player-v2-feedback-actions">
@@ -3003,7 +3085,7 @@ const PlayerView: React.FC = () => {
                           {requestStatus === 'sent'
                             ? 'Sent to host'
                             : requestStatus === 'error'
-                              ? 'Could not send. Check your connection.'
+                              ? requestErrorMessage || 'Could not send. Check your connection.'
                               : 'Host approval required'}
                         </span>
                         <button
