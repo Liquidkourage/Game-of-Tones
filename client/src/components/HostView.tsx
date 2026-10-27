@@ -1758,12 +1758,15 @@ const HostView: React.FC = () => {
   const [hoveredLibraryPlaylistId, setHoveredLibraryPlaylistId] = useState<string | null>(null);
   /** Spotify playlist ids we already tried GET /playlist-metadata for this session. */
   const playlistDescResolvedRef = useRef<Set<string>>(new Set());
-  /** Single-flight hover-note queue: max 1 Spotify brief GET at a time; pending capped. */
+  /** After any playlist-metadata 429, stop all note fetches for this browser session. */
+  const playlistDescQuotaBlockedRef = useRef(false);
+  const [playlistDescQuotaBlocked, setPlaylistDescQuotaBlocked] = useState(false);
+  /** Single-flight note queue: click-to-load only (never row hover) — max 1 in flight, pending 1. */
   const playlistDescQueueRef = useRef<string[]>([]);
   const playlistDescQueuedSetRef = useRef<Set<string>>(new Set());
   const playlistDescIdByCanonRef = useRef<Map<string, string>>(new Map());
   const playlistDescActiveCanonRef = useRef<string | null>(null);
-  const PLAYLIST_DESC_QUEUE_MAX = 3;
+  const PLAYLIST_DESC_QUEUE_MAX = 1;
   /** From GET /api/spotify/playlists: Spotify PagingObject total (null = unknown / not loaded). */
   const [spotifyMyPlaylistsTotal, setSpotifyMyPlaylistsTotal] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -3271,13 +3274,14 @@ const HostView: React.FC = () => {
   }, [playlistByLinkInput, showHostAckNotification]);
 
   /**
-   * Plan Rounds: load Spotify setlist description on hover.
-   * Single-flight: at most one GET /playlist-metadata at a time; pending queue capped at 3
-   * (newest wins — skim drops older pending so we don't burst Spotify).
+   * Plan Rounds: load Spotify setlist description — click-to-load only (never row hover).
+   * A–Z / skim used to mouseEnter every row → many getPlaylistMetadataBrief → QUOTA_EXCEEDED.
+   * Single-flight; pending capped at 1; any 429 kills note fetches for the rest of the session.
    */
   const ensurePlaylistDescriptionFromSpotify = useCallback((playlist: Playlist) => {
     if (!playlist || playlist.youtubeMusic || playlist.appleMusic || playlist.catalog) return;
     if (!readHostSpotifyWebEnabled()) return;
+    if (playlistDescQuotaBlockedRef.current) return;
     if (gameStateRef.current === 'playing') return;
     const id = String(playlist.id || '').trim();
     if (!id || id.startsWith('__')) return;
@@ -3294,7 +3298,7 @@ const HostView: React.FC = () => {
     }
 
     playlistDescIdByCanonRef.current.set(canon, id);
-    // Coalesce: re-append as newest; drop oldest when over cap (skim shouldn't burst Spotify).
+    // Keep only the newest explicit request (pending max 1).
     const q = playlistDescQueueRef.current.filter((c) => c !== canon);
     q.push(canon);
     while (q.length > PLAYLIST_DESC_QUEUE_MAX) {
@@ -3306,6 +3310,11 @@ const HostView: React.FC = () => {
 
     const pump = async () => {
       if (playlistDescActiveCanonRef.current) return;
+      if (playlistDescQuotaBlockedRef.current) {
+        playlistDescQueueRef.current = [];
+        playlistDescQueuedSetRef.current.clear();
+        return;
+      }
       if (gameStateRef.current === 'playing') {
         playlistDescQueueRef.current = [];
         playlistDescQueuedSetRef.current.clear();
@@ -3325,14 +3334,24 @@ const HostView: React.FC = () => {
           `${API_BASE || ''}/api/spotify/playlist-metadata/${encodeURIComponent(nextId)}`,
         );
         if (!res.ok) {
-          // Soft-fail: 429 / live-lock / missing — don't retry this id this session.
-          if (res.status === 429 || res.status === 401 || res.status === 403 || res.status === 404) {
-            playlistDescResolvedRef.current.add(nextCanon);
-          }
-          // On 429, drain queue so we don't keep poking Spotify during cooldown.
           if (res.status === 429) {
+            // Development Mode QUOTA_EXCEEDED can be multi-hour — stop all note traffic.
+            playlistDescQuotaBlockedRef.current = true;
+            setPlaylistDescQuotaBlocked(true);
             playlistDescQueueRef.current = [];
             playlistDescQueuedSetRef.current.clear();
+            playlistDescResolvedRef.current.add(nextCanon);
+            showHostAckNotification({
+              id: 'playlist-note-429',
+              title: 'Spotify quota — playlist notes paused',
+              variant: 'warning',
+              message:
+                'Spotify returned QUOTA_EXCEEDED while loading a playlist note. Tempo will not fetch more notes this session. Library list and track caches still work; wait out Retry-After before notes again.',
+            });
+            return;
+          }
+          if (res.status === 401 || res.status === 403 || res.status === 404) {
+            playlistDescResolvedRef.current.add(nextCanon);
           }
           return;
         }
@@ -3363,17 +3382,20 @@ const HostView: React.FC = () => {
           }),
         );
       } catch {
-        /* ignore — hover notes are best-effort */
+        /* ignore — notes are best-effort */
       } finally {
         playlistDescActiveCanonRef.current = null;
-        if (playlistDescQueueRef.current.length > 0) {
+        if (
+          !playlistDescQuotaBlockedRef.current &&
+          playlistDescQueueRef.current.length > 0
+        ) {
           void pump();
         }
       }
     };
 
     void pump();
-  }, []);
+  }, [showHostAckNotification]);
 
   const parsedPlaylistTitleFlags = useMemo(
     () => parsePlaylistTitleFlags(playlistTitleFlags),
@@ -13924,10 +13946,7 @@ const HostView: React.FC = () => {
                               onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
                               onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
                               onDoubleClick={(e) => handleLibraryPlaylistDoubleClick(e, p.id)}
-                              onMouseEnter={() => {
-                                setHoveredLibraryPlaylistId(p.id);
-                                void ensurePlaylistDescriptionFromSpotify(p);
-                              }}
+                              onMouseEnter={() => setHoveredLibraryPlaylistId(p.id)}
                               onMouseLeave={() =>
                                 setHoveredLibraryPlaylistId((cur) => (cur === p.id ? null : cur))
                               }
@@ -13990,6 +14009,24 @@ const HostView: React.FC = () => {
                                     >
                                       note
                                     </span>
+                                  ) : !p.youtubeMusic &&
+                                    !p.appleMusic &&
+                                    !p.catalog &&
+                                    !playlistDescQuotaBlocked ? (
+                                    <button
+                                      type="button"
+                                      className="host-playlist-desc-hint host-playlist-desc-hint--load"
+                                      title="Load Spotify playlist description (one API call)"
+                                      aria-label={`Load description for ${displayName}`}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        ensurePlaylistDescriptionFromSpotify(p);
+                                      }}
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                    >
+                                      note?
+                                    </button>
                                   ) : null}
                                   {poolSize ? (
                                     <span

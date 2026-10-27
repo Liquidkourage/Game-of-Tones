@@ -17663,8 +17663,8 @@ app.post('/api/spotify/playlist-lookup', async (req, res) => {
 });
 
 /**
- * On-demand playlist note for Plan Rounds hover.
- * Uses GET /v1/playlists/{id} (description usually present) — never bulk-called from shelf load.
+ * On-demand playlist note for Plan Rounds (click-to-load only on the host).
+ * Uses GET /v1/playlists/{id} — never bulk / never shelf auto-hydrate.
  */
 app.get('/api/spotify/playlist-metadata/:playlistId', async (req, res) => {
   try {
@@ -17681,11 +17681,15 @@ app.get('/api/spotify/playlist-metadata/:playlistId', async (req, res) => {
     if (!svc) {
       return res.status(401).json({ error: 'login_required' });
     }
-    if (typeof svc.isNonEssentialTrafficBlocked === 'function' && svc.isNonEssentialTrafficBlocked()) {
+    // Refuse before any Spotify call when already quarantined / live-locked.
+    if (
+      (typeof svc.isQuarantined === 'function' && svc.isQuarantined()) ||
+      (typeof svc.isNonEssentialTrafficBlocked === 'function' && svc.isNonEssentialTrafficBlocked())
+    ) {
       return respondSpotifyNonEssentialBlocked(
         res,
         svc,
-        'Cannot load playlist notes while a live round is in progress (or during Spotify quarantine).',
+        'Cannot load playlist notes while Spotify quarantine is active or a live round is in progress.',
       );
     }
     const pid = parseSpotifyPlaylistIdFromUserInput(req.params.playlistId);
@@ -17698,7 +17702,7 @@ app.get('/api/spotify/playlist-metadata/:playlistId', async (req, res) => {
         message: 'This playlist id is a server snapshot, not a Spotify playlist.',
       });
     }
-    // No emergency bypass — hover notes are non-essential; respect quarantine.
+    // No emergency bypass — playlist notes are non-essential; respect quarantine.
     const playlist = await svc.getPlaylistMetadataBrief(pid);
     if (playlist && typeof playlist.description === 'string' && playlist.description.trim()) {
       await patchHostPlaylistListCacheMeta(orgId, playlist.id, {

@@ -2797,6 +2797,20 @@
   background: rgba(0, 255, 136, 0.1);
 }
 
+button.host-playlist-desc-hint--load {
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+button.host-playlist-desc-hint--load:hover {
+  opacity: 1;
+}
+
 .host-playlist-desc-tooltip {
   position: absolute;
   left: 0;
