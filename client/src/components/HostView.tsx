@@ -150,6 +150,7 @@ import {
 import { getYoutubeHostPlaybackChannelName } from '../utils/youtubeHostPlaybackChannel';
 import { applyPlaylistIdOrder, sortRoundPlaylistsByBingoColumns } from '../utils/roundPlaylistOrder';
 import { shuffleSongs } from '../utils/shuffleSongs';
+import { previewFiveByFifteenPool } from '../utils/fiveByFifteenAssign';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
 import './HostView.css';
 import './HostGlassTheme.css';
@@ -963,7 +964,11 @@ function confirmTrackTitleArtistCollisions(
   songs: Song[],
   playlists: Array<{ id: string; name: string }>,
 ): boolean {
-  const collisions = findTrackTitleArtistCollisions(songs, playlists);
+  // 5×15 assign already prefers alternate tracks for same title+artist; only warn
+  // about soft collisions that would still remain in the final 75.
+  const poolForCheck: Song[] =
+    playlists.length === 5 ? (previewFiveByFifteenPool(playlists, songs) as Song[]) : songs;
+  const collisions = findTrackTitleArtistCollisions(poolForCheck, playlists);
   if (collisions.length === 0) return true;
 
   const maxShown = 12;
@@ -983,8 +988,8 @@ function confirmTrackTitleArtistCollisions(
 
   return window.confirm(
     `Possible duplicate tracks found\n\n` +
-      `These tracks have the same normalized title and artist but different IDs. ` +
-      `In a 5×15 round they can land in separate columns.\n\n` +
+      `These tracks have the same normalized title and artist but different IDs, ` +
+      `and there weren’t enough alternate tracks to keep only one copy in the 5×15 pool.\n\n` +
       `${details.join('\n\n')}\n\n` +
       `Continue finalizing this mix?`,
   );

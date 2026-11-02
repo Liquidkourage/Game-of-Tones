@@ -1,5 +1,6 @@
 /**
  * 5×15 column assignment: 15 globally unique tracks per playlist column (75 total).
+ * Uniqueness is by Spotify id and by normalized title+artist (remasters / alt ids).
  */
 
 function canonicalPlaylistIdForMatch(id) {
@@ -7,6 +8,28 @@ function canonicalPlaylistIdForMatch(id) {
   const m = /^spotify:playlist:([a-zA-Z0-9]+)$/i.exec(s);
   if (m) return m[1];
   return s;
+}
+
+/** Same normalization as host night-wide leftovers / collision warning. */
+function normalizeTrackLabelForDedup(raw) {
+  return String(raw || '')
+    .toLowerCase()
+    .replace(/^\s*got\s*[-–:]*\s*/i, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/**
+ * Soft identity for the same song under different Spotify ids.
+ * Falls back to id when title or artist is missing.
+ */
+function trackTitleArtistDedupKey(song) {
+  if (!song || typeof song !== 'object') return null;
+  const title = normalizeTrackLabelForDedup(song.customSongName || song.name || '');
+  const artist = normalizeTrackLabelForDedup(song.customArtistName || song.artist || '');
+  if (title && artist) return `${title}\0${artist}`;
+  const id = String(song.id || '').trim();
+  return id || null;
 }
 
 function dedupeSongsByIdPreserveOrder(arr) {
@@ -36,11 +59,13 @@ const FIVE_BY_FIFTEEN_COLUMN_SLOTS = 15;
 /**
  * Assign 15 globally unique tracks per column. Exclusive tracks first, then backfill
  * neediest columns from full playlist + extra song list (host order / API).
+ * Skips a candidate when its Spotify id OR title+artist soft-key is already used.
  */
 function assignGloballyUniqueFiveByFifteenColumns(perListUnique, songOrderExtra = []) {
   const n = perListUnique.length;
   const columnPools = Array.from({ length: n }, () => []);
-  const globalSeen = new Set();
+  const globalSeenIds = new Set();
+  const globalSeenSoft = new Set();
 
   const trackOwners = new Map();
   for (let i = 0; i < n; i++) {
@@ -52,9 +77,12 @@ function assignGloballyUniqueFiveByFifteenColumns(perListUnique, songOrderExtra 
   }
 
   const tryAdd = (index, song) => {
-    if (!song?.id || globalSeen.has(song.id)) return false;
+    if (!song?.id || globalSeenIds.has(song.id)) return false;
     if (columnPools[index].length >= FIVE_BY_FIFTEEN_COLUMN_SLOTS) return false;
-    globalSeen.add(song.id);
+    const soft = trackTitleArtistDedupKey(song);
+    if (soft && globalSeenSoft.has(soft)) return false;
+    globalSeenIds.add(song.id);
+    if (soft) globalSeenSoft.add(soft);
     columnPools[index].push(song);
     return true;
   };
@@ -72,7 +100,14 @@ function assignGloballyUniqueFiveByFifteenColumns(perListUnique, songOrderExtra 
     return merged;
   };
 
-  // 1) Tracks that appear on only one playlist — never contested
+  const isAvailable = (song) => {
+    if (!song?.id || globalSeenIds.has(song.id)) return false;
+    const soft = trackTitleArtistDedupKey(song);
+    if (soft && globalSeenSoft.has(soft)) return false;
+    return true;
+  };
+
+  // 1) Tracks that appear on only one playlist — never contested by id
   for (let i = 0; i < n; i++) {
     for (const song of perListUnique[i].songs) {
       const owners = trackOwners.get(song.id);
@@ -101,8 +136,7 @@ function assignGloballyUniqueFiveByFifteenColumns(perListUnique, songOrderExtra 
   const stillNeedy = () =>
     [...Array(n).keys()].filter((i) => columnPools[i].length < FIVE_BY_FIFTEEN_COLUMN_SLOTS);
 
-  const remainingOptions = (index) =>
-    sourcesForColumn(index).filter((s) => s?.id && !globalSeen.has(s.id)).length;
+  const remainingOptions = (index) => sourcesForColumn(index).filter(isAvailable).length;
 
   for (const index of stillNeedy().sort((a, b) => remainingOptions(a) - remainingOptions(b))) {
     for (const song of sourcesForColumn(index)) {
@@ -123,7 +157,7 @@ function assignGloballyUniqueFiveByFifteenColumns(perListUnique, songOrderExtra 
         );
       } else {
         warnings.push(
-          `Playlist "${pl.name}" could only get ${songs.length} of 15 globally unique column slots (${inPlaylist} in mix; ${shortage} short). Another column may be using overlapping tracks — add a few more unique songs to this playlist on Spotify.`,
+          `Playlist "${pl.name}" could only get ${songs.length} of 15 globally unique column slots (${inPlaylist} in mix; ${shortage} short). Another column may be using overlapping tracks (same Spotify id or same title+artist) — add a few more unique songs to this playlist on Spotify.`,
         );
       }
     }
@@ -147,6 +181,8 @@ function flattenFiveByFifteenColumns(perListGloballyUnique) {
 
 module.exports = {
   canonicalPlaylistIdForMatch,
+  normalizeTrackLabelForDedup,
+  trackTitleArtistDedupKey,
   dedupeSongsByIdPreserveOrder,
   buildPerListUnique,
   assignGloballyUniqueFiveByFifteenColumns,
