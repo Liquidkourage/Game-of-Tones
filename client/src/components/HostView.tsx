@@ -149,6 +149,7 @@ import {
 } from '../utils/effectiveBingoPoolPreview';
 import { getYoutubeHostPlaybackChannelName } from '../utils/youtubeHostPlaybackChannel';
 import { applyPlaylistIdOrder, sortRoundPlaylistsByBingoColumns } from '../utils/roundPlaylistOrder';
+import { shuffleSongs } from '../utils/shuffleSongs';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
 import './HostView.css';
 import './HostGlassTheme.css';
@@ -2505,11 +2506,13 @@ const HostView: React.FC = () => {
   const [playlistTitleFlags, setPlaylistTitleFlags] = useState<string>(DEFAULT_PLAYLIST_TITLE_FLAGS);
   /** Inline title-flags editor in the library toolbar. */
   const [showTitleFlagsEditor, setShowTitleFlagsEditor] = useState<boolean>(false);
-  /** Playlist table: Spotify order until user sorts by name or track count */
+  /** Playlist table order: Spotify default, name, tracks, or a session shuffle. */
   const [playlistSort, setPlaylistSort] = useState<{
-    key: 'none' | 'name' | 'tracks';
+    key: 'none' | 'name' | 'tracks' | 'shuffle';
     dir: 'asc' | 'desc';
   }>({ key: 'none', dir: 'asc' });
+  /** Stable Fisher–Yates id order while sort mode is `shuffle` (reshuffle replaces this). */
+  const [playlistShuffleOrder, setPlaylistShuffleOrder] = useState<string[] | null>(null);
   /** Window start into the filtered library (letter jump pins that letter at row 1). */
   const [playlistLibraryStartIndex, setPlaylistLibraryStartIndex] = useState(0);
   const [playlistLibraryPageSize, setPlaylistLibraryPageSize] = useState(readPlaylistLibraryPageSize);
@@ -3426,7 +3429,8 @@ const HostView: React.FC = () => {
 
   const sortedFilteredPlaylists = useMemo(() => {
     const rows = [...filteredPlaylists];
-    if (playlistSort.key === 'none') return rows;
+    // Shuffle is applied after the library-source filter so we randomize what you are viewing.
+    if (playlistSort.key === 'none' || playlistSort.key === 'shuffle') return rows;
     const m = playlistSort.dir === 'asc' ? 1 : -1;
     rows.sort((a, b) => {
       if (playlistSort.key === 'tracks') {
@@ -3445,15 +3449,62 @@ const HostView: React.FC = () => {
   }, [filteredPlaylists, playlistSort, stripGoTPrefix, titleFlagStripList]);
 
   const libraryTablePlaylists = useMemo(() => {
+    let rows: Playlist[];
     if (playlistLibrarySource === 'youtube') {
-      return sortedFilteredPlaylists.filter((p) => p.youtubeMusic);
+      rows = sortedFilteredPlaylists.filter((p) => p.youtubeMusic);
+    } else if (playlistLibrarySource === 'apple') {
+      rows = sortedFilteredPlaylists.filter((p) => p.appleMusic);
+    } else {
+      // 'spotify' (My Spotify). The 'tempo' source renders the shared catalog list instead of this table.
+      rows = sortedFilteredPlaylists.filter((p) => !p.youtubeMusic && !p.appleMusic && !p.catalog);
     }
-    if (playlistLibrarySource === 'apple') {
-      return sortedFilteredPlaylists.filter((p) => p.appleMusic);
+    if (playlistSort.key !== 'shuffle' || !playlistShuffleOrder?.length) return rows;
+    const byId = new Map(rows.map((p) => [String(p.id), p]));
+    const ordered: Playlist[] = [];
+    for (const id of playlistShuffleOrder) {
+      const hit = byId.get(String(id));
+      if (hit) {
+        ordered.push(hit);
+        byId.delete(String(id));
+      }
     }
-    // 'spotify' (My Spotify). The 'tempo' source renders the shared catalog list instead of this table.
-    return sortedFilteredPlaylists.filter((p) => !p.youtubeMusic && !p.appleMusic && !p.catalog);
-  }, [sortedFilteredPlaylists, playlistLibrarySource]);
+    ordered.push(...Array.from(byId.values()));
+    return ordered;
+  }, [sortedFilteredPlaylists, playlistLibrarySource, playlistSort.key, playlistShuffleOrder]);
+
+  const playlistLibrarySortModeLabel = useMemo(() => {
+    switch (playlistSort.key) {
+      case 'name':
+        return playlistSort.dir === 'asc' ? 'Name A→Z' : 'Name Z→A';
+      case 'tracks':
+        return playlistSort.dir === 'asc' ? 'Tracks ↑ (fewest first)' : 'Tracks ↓ (most first)';
+      case 'shuffle':
+        return 'Shuffled';
+      default:
+        return playlistLibrarySource === 'spotify'
+          ? 'Spotify library order'
+          : playlistLibrarySource === 'youtube'
+            ? 'YouTube library order'
+            : playlistLibrarySource === 'apple'
+              ? 'Apple Music library order'
+              : 'Default order';
+    }
+  }, [playlistSort, playlistLibrarySource]);
+
+  const playlistLibrarySortModeHint = useMemo(() => {
+    switch (playlistSort.key) {
+      case 'name':
+        return 'Alphabetical by the title shown in the list. A–Z rail jumps to that letter.';
+      case 'tracks':
+        return 'Ordered by listed track count. A–Z rail switches to Name A→Z.';
+      case 'shuffle':
+        return 'Random order for this session. Click Shuffled again to reshuffle. A–Z rail switches to Name A→Z.';
+      default:
+        return playlistLibrarySource === 'spotify'
+          ? 'Same order as your Spotify library. A–Z rail switches to Name A→Z.'
+          : 'Provider library order. A–Z rail switches to Name A→Z.';
+    }
+  }, [playlistSort.key, playlistLibrarySource]);
 
   /** Shared Tempo Library: catalog packs, strictly filtered by the GoT label (eligibility tag). */
   const tempoLibraryPacks = useMemo(() => {
@@ -3538,6 +3589,7 @@ const HostView: React.FC = () => {
       const idx = playlistLibraryLetterIndex.get(letter);
       if (idx == null || idx < 0) return;
       // A→Z by display title, then put the first matching letter at row 1 (not mid-page).
+      setPlaylistShuffleOrder(null);
       setPlaylistSort({ key: 'name', dir: 'asc' });
       setPlaylistLibraryStartIndex(idx);
     },
@@ -3582,6 +3634,12 @@ const HostView: React.FC = () => {
     playlistLibrarySource,
     playlistLibraryPageSize,
   ]);
+
+  // Switching library source drops a shuffle that was built for a different row set.
+  useEffect(() => {
+    setPlaylistShuffleOrder(null);
+    setPlaylistSort((prev) => (prev.key === 'shuffle' ? { key: 'none', dir: 'asc' } : prev));
+  }, [playlistLibrarySource]);
 
   useEffect(() => {
     if (libraryTablePlaylists.length === 0) {
@@ -3674,12 +3732,32 @@ const HostView: React.FC = () => {
   }, [appleMusicConnected]);
 
   const togglePlaylistSort = useCallback((key: 'name' | 'tracks') => {
+    setPlaylistShuffleOrder(null);
     setPlaylistSort((prev) => {
       if (prev.key !== key) return { key, dir: 'asc' };
       return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
     });
     setPlaylistLibraryStartIndex(0);
   }, []);
+
+  const resetPlaylistLibrarySort = useCallback(() => {
+    setPlaylistSort({ key: 'none', dir: 'asc' });
+    setPlaylistShuffleOrder(null);
+    setPlaylistLibraryStartIndex(0);
+  }, []);
+
+  /** Shuffle the playlists currently shown for this library source (My Spotify / YT / Apple). */
+  const applyPlaylistLibraryShuffle = useCallback(() => {
+    const sourceRows =
+      playlistLibrarySource === 'youtube'
+        ? filteredPlaylists.filter((p) => p.youtubeMusic)
+        : playlistLibrarySource === 'apple'
+          ? filteredPlaylists.filter((p) => p.appleMusic)
+          : filteredPlaylists.filter((p) => !p.youtubeMusic && !p.appleMusic && !p.catalog);
+    setPlaylistShuffleOrder(shuffleSongs(sourceRows.map((p) => String(p.id))));
+    setPlaylistSort({ key: 'shuffle', dir: 'asc' });
+    setPlaylistLibraryStartIndex(0);
+  }, [filteredPlaylists, playlistLibrarySource]);
 
   useEffect(() => {
     let cancelled = false;
@@ -13407,11 +13485,98 @@ const HostView: React.FC = () => {
                           : playlistLibrarySource === 'apple'
                             ? 'Apple Music playlists'
                           : 'My Spotify playlists'}
+                      {playlistLibrarySource !== 'tempo' ? (
+                        <span className="host-playlist-library-table-zone__sort-chip">
+                          {playlistLibrarySortModeLabel}
+                        </span>
+                      ) : null}
                     </h3>
                     {playlistLibrarySource === 'tempo' ? (
                       tempoLibrarySection
                     ) : (
                         <div className="host-playlist-library-table">
+                      <div
+                        className="host-playlist-library-sort-bar"
+                        role="group"
+                        aria-label="Playlist list sort"
+                      >
+                        <span className="host-playlist-library-sort-bar__label">Sort</span>
+                        <div className="host-playlist-library-sort-bar__options">
+                          <button
+                            type="button"
+                            className={
+                              playlistSort.key === 'none'
+                                ? 'host-playlist-library-sort-bar__btn is-active'
+                                : 'host-playlist-library-sort-bar__btn'
+                            }
+                            aria-pressed={playlistSort.key === 'none'}
+                            title={
+                              playlistLibrarySource === 'spotify'
+                                ? 'Restore Spotify library order'
+                                : 'Restore library order'
+                            }
+                            onClick={resetPlaylistLibrarySort}
+                          >
+                            {playlistLibrarySource === 'spotify' ? 'Spotify order' : 'Library order'}
+                          </button>
+                          <button
+                            type="button"
+                            className={
+                              playlistSort.key === 'name'
+                                ? 'host-playlist-library-sort-bar__btn is-active'
+                                : 'host-playlist-library-sort-bar__btn'
+                            }
+                            aria-pressed={playlistSort.key === 'name'}
+                            title="Sort by display title (click again to reverse)"
+                            onClick={() => togglePlaylistSort('name')}
+                          >
+                            Name
+                            {playlistSort.key === 'name'
+                              ? playlistSort.dir === 'asc'
+                                ? ' A→Z'
+                                : ' Z→A'
+                              : ''}
+                          </button>
+                          <button
+                            type="button"
+                            className={
+                              playlistSort.key === 'tracks'
+                                ? 'host-playlist-library-sort-bar__btn is-active'
+                                : 'host-playlist-library-sort-bar__btn'
+                            }
+                            aria-pressed={playlistSort.key === 'tracks'}
+                            title="Sort by track count (click again to reverse)"
+                            onClick={() => togglePlaylistSort('tracks')}
+                          >
+                            Tracks
+                            {playlistSort.key === 'tracks'
+                              ? playlistSort.dir === 'asc'
+                                ? ' ↑'
+                                : ' ↓'
+                              : ''}
+                          </button>
+                          <button
+                            type="button"
+                            className={
+                              playlistSort.key === 'shuffle'
+                                ? 'host-playlist-library-sort-bar__btn is-active'
+                                : 'host-playlist-library-sort-bar__btn'
+                            }
+                            aria-pressed={playlistSort.key === 'shuffle'}
+                            title={
+                              playlistSort.key === 'shuffle'
+                                ? 'Reshuffle this list'
+                                : 'Shuffle this list into a random order'
+                            }
+                            onClick={applyPlaylistLibraryShuffle}
+                          >
+                            {playlistSort.key === 'shuffle' ? 'Shuffled · again' : 'Shuffled'}
+                          </button>
+                        </div>
+                        <p className="host-playlist-library-sort-bar__hint" aria-live="polite">
+                          <strong>{playlistLibrarySortModeLabel}.</strong> {playlistLibrarySortModeHint}
+                        </p>
+                      </div>
                       <div className="host-playlist-library-table-head">
                       <div className="host-playlist-library-table-head__cols">
                         <span style={{ width: 18, textAlign: 'center' }} title="Include in game mix">Mix</span>
@@ -13447,6 +13612,11 @@ const HostView: React.FC = () => {
                           {playlistSort.key === 'name' && (
                             <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
                               {playlistSort.dir === 'asc' ? '↑' : '↓'}
+                            </span>
+                          )}
+                          {playlistSort.key === 'shuffle' && (
+                            <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
+                              ⇄
                             </span>
                           )}
                         </button>
@@ -13490,12 +13660,13 @@ const HostView: React.FC = () => {
                           {playlistSort.key !== 'none' && (
                             <button
                               type="button"
-                              onClick={() => {
-                                setPlaylistSort({ key: 'none', dir: 'asc' });
-                                setPlaylistLibraryStartIndex(0);
-                              }}
+                              onClick={resetPlaylistLibrarySort}
                               className="host-playlist-sort-reset"
-                              title="Restore Spotify library order"
+                              title={
+                                playlistLibrarySource === 'spotify'
+                                  ? 'Restore Spotify library order'
+                                  : 'Restore library order'
+                              }
                               style={{
                                 fontSize: '0.62rem',
                                 textTransform: 'none',
