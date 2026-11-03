@@ -899,7 +899,27 @@ async function fulfillOneTimePurchase(db, orgId, session) {
   }
 }
 
+/** Optional: (tipRow) => void — wired from index.js to toast the live host. */
+let hostTipNotifier = null;
+function setHostTipNotifier(fn) {
+  hostTipNotifier = typeof fn === 'function' ? fn : null;
+}
+
 async function handleCheckoutSessionCompleted(db, stripe, session) {
+  // Host tip jar Checkouts (Connect destination) — not org billing.
+  if (session?.metadata?.type === 'host_tip') {
+    const tips = require('./tips');
+    const { tip } = await tips.handleTipCheckoutCompleted(db, session);
+    if (tip && hostTipNotifier) {
+      try {
+        hostTipNotifier(tip);
+      } catch (e) {
+        console.warn('[tips] host tip notifier failed:', e?.message || e);
+      }
+    }
+    return;
+  }
+
   const orgId = parseInt(session.metadata?.organization_id || '', 10);
   if (!Number.isFinite(orgId) || orgId <= 0) return;
 
@@ -1091,4 +1111,5 @@ module.exports = {
   stripeWebhookUrl,
   billingSetupStatus,
   eventCredits,
+  setHostTipNotifier,
 };

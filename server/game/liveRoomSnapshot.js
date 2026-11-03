@@ -70,6 +70,7 @@ const PLAIN_FIELDS = [
   'activeSavedRoundCardKey',
   'playerDataRoundToken',
   'venueBranding',
+  'tipJar',
   'selectedDeviceId',
   'createdAt',
   'callSequence',

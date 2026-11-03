@@ -96,6 +96,15 @@ Optional: `STRIPE_WEBHOOK_BASE_URL` if API host ≠ app host.
 - `invoice.payment_succeeded` (or `invoice.paid`)
 - `invoice.payment_failed`
 
+### Host tip jar (Stripe Connect)
+
+Player card tips use **Connect Express** destination charges (`application_fee_amount: 0` — host keeps the tip minus Stripe fees).
+
+1. Stripe Dashboard → **Connect** → enable Express.
+2. Same `STRIPE_SECRET_KEY` + webhook as above (`checkout.session.completed` with metadata `type=host_tip`).
+3. Host: **Settings → Tip jar** → enable → **Connect with Stripe** → add optional Venmo/Cash App/PayPal links.
+4. Players see **Tip** on their phone sheet when the tip jar is enabled and (card ready or a link is set).
+
 ## 7. Admin: bonus credits for an org
 
 ```http

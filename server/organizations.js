@@ -370,7 +370,9 @@ function sanitizeVenueSettings(raw) {
   let vc = volCap == null || volCap === '' ? null : parseInt(String(volCap), 10);
   if (!Number.isFinite(vc)) vc = null;
   else vc = Math.min(100, Math.max(1, vc));
-  return {
+  const tips = require('./tips');
+  const tipJar = tips.sanitizeTipJar(o.tipJar);
+  const out = {
     eventTitle: trimStr(o.eventTitle, MAX_VENUE.eventTitle),
     sponsorLine: trimStr(o.sponsorLine, MAX_VENUE.sponsorLine),
     footerText: trimStr(o.footerText, MAX_VENUE.footerText),
@@ -381,6 +383,11 @@ function sanitizeVenueSettings(raw) {
     defaultSnippetLength: dsl,
     volumeCap: vc,
   };
+  // Keep tip jar even when disabled so Connect account id survives venue branding edits.
+  if (o.tipJar != null || tipJar.stripeConnectAccountId || tipJar.enabled) {
+    out.tipJar = tipJar;
+  }
+  return out;
 }
 
 function venueBrandingPayloadFromSettings(s) {
@@ -768,10 +775,10 @@ async function patchOrganizationVenueSettings(db, orgId, patch) {
 }
 
 async function getVenueBrandingContextForHostUserId(db, userId) {
-  if (!db || userId == null) return { branding: null, orgId: null };
+  if (!db || userId == null) return { branding: null, orgId: null, tipJar: null };
   await ensureOrganizationsTable(db);
   const uid = Number(userId);
-  if (!Number.isFinite(uid)) return { branding: null, orgId: null };
+  if (!Number.isFinite(uid)) return { branding: null, orgId: null, tipJar: null };
   const r = await db.query(
     `SELECT u.organization_id AS org_id, o.venue_settings
      FROM users u
@@ -781,20 +788,20 @@ async function getVenueBrandingContextForHostUserId(db, userId) {
   );
   if (r.rows.length === 0) {
     console.warn(`[venue-branding] no users row for host user id ${uid} (JWT sub must match users.id)`);
-    return { branding: null, orgId: null };
+    return { branding: null, orgId: null, tipJar: null };
   }
   const { org_id: orgId, venue_settings: vs } = r.rows[0];
   if (orgId == null) {
     console.warn(
       `[venue-branding] host user id ${uid} has organization_id NULL — in Admin assign this user to organization id with your logo (e.g. 1)`
     );
-    return { branding: null, orgId: null };
+    return { branding: null, orgId: null, tipJar: null };
   }
   if (vs == null) {
     console.warn(
       `[venue-branding] host user id ${uid} points to organization ${orgId} but venue_settings is missing (data issue)`
     );
-    return { branding: null, orgId: null };
+    return { branding: null, orgId: null, tipJar: null };
   }
   const merged = sanitizeVenueSettings(vs);
   const payload = venueBrandingPayloadFromSettings(merged);
@@ -803,7 +810,9 @@ async function getVenueBrandingContextForHostUserId(db, userId) {
       `[venue-branding] organization ${orgId} (user ${uid}) has no displayable fields after sanitize — check logoUrl is https or /path`
     );
   }
-  return { branding: payload || null, orgId };
+  const tips = require('./tips');
+  const tipJar = tips.tipJarPublicPayload(merged.tipJar);
+  return { branding: payload || null, orgId, tipJar };
 }
 
 async function getVenueBrandingForHostUserId(db, userId) {

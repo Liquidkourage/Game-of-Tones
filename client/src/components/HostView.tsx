@@ -4535,6 +4535,14 @@ const HostView: React.FC = () => {
           : feedback.message;
       showToast(`Feedback from ${feedback.playerName}: ${toastMessage}`, 'info');
     });
+    newSocket.on('host-tip-received', (data: any) => {
+      const msg =
+        typeof data?.message === 'string' && data.message.trim()
+          ? data.message.trim()
+          : 'Someone tipped you';
+      showToast(msg, 'success');
+      addLog(msg, 'info');
+    });
     newSocket.on('song-request-updated', (data: any) => {
       const request = normalizeSongRequestEntry(data);
       if (!request) return;

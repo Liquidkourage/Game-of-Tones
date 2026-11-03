@@ -2,6 +2,7 @@ import React from 'react';
 import { Copy, Download, Link2, LayoutTemplate } from 'lucide-react';
 import HostActivityFeed from './HostActivityFeed';
 import HostEventActivationBar from './HostEventActivationBar';
+import HostTipJarPanel from './HostTipJarPanel';
 import HostPlayerFeedbackList, { type PlayerFeedbackEntry } from './HostPlayerFeedbackList';
 import type { HostActivityEntry } from '../../host/hostActivityLog';
 import {
@@ -328,6 +329,10 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
             <span>Hybrid (in-person + online)</span>
           </label>
         </div>
+      </section>
+
+      <section className="host-glass-panel host-settings-cockpit" aria-label="Tip jar">
+        <HostTipJarPanel />
       </section>
 
       {roomId ? <HostEventActivationBar roomId={roomId} /> : null}

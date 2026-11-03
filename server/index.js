@@ -16,6 +16,7 @@ const hostAuth = require('./hostAuth');
 const usersStore = require('./users');
 const organizationsStore = require('./organizations');
 const billingStore = require('./billing');
+const tipsStore = require('./tips');
 const hostRoomPrepStore = require('./hostRoomPrep');
 const orgHostSharedAssetsStore = require('./orgHostSharedAssets');
 const roomSongRequestsStore = require('./roomSongRequests');
@@ -1075,6 +1076,21 @@ function emitToHostAndDisplays(roomId, room, event, payload) {
     io.to(sid).emit(event, payload);
   }
 }
+
+/** Stripe tip webhook → quiet host toast (not projector). */
+billingStore.setHostTipNotifier((tip) => {
+  if (!tip?.room_id) return;
+  const room = rooms.get(String(tip.room_id));
+  if (!room) return;
+  const dollars = (Number(tip.amount_cents) / 100).toFixed(2);
+  const who = (tip.player_name && String(tip.player_name).trim()) || 'A player';
+  emitToHostAndDisplays(String(tip.room_id), room, 'host-tip-received', {
+    playerName: who,
+    amountCents: tip.amount_cents,
+    currency: tip.currency || 'usd',
+    message: `${who} tipped $${dollars}`,
+  });
+});
 
 /** True for host / projector seats — may receive call identity, pool order, roster fan-out. */
 function isStaffRoomSocket(room, socketId) {
@@ -2255,6 +2271,7 @@ async function initializeDatabase() {
     await usersStore.ensureHostAllowlistTable(db);
     await organizationsStore.ensureOrganizationsTable(db);
     await billingStore.ensureBillingTables(db);
+    await tipsStore.ensureHostTipsTable(db);
     await songAliasesStore.ensureSongAliasesTable(db);
     await hostRoomPrepStore.ensureHostRoomPrepTable(db);
     await orgHostSharedAssetsStore.ensureOrgHostSharedAssetsTable(db);
@@ -4056,6 +4073,7 @@ function emitRoomCallLogReset(roomId, room) {
     publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
     publicDisplayLetterRevealToast: letterRevealToastEnabledForRoom(room),
     venueBranding: venueBrandingForRoom(room),
+    tipJar: tipJarForRoom(room),
     playedSongs: [],
     playedSongIds: [],
     totalPlayedCount: 0,
@@ -4703,6 +4721,7 @@ function syncRoomStateAfterSongStart(roomId, room) {
     publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
     publicDisplayLetterRevealToast: letterRevealToastEnabledForRoom(room),
     venueBranding: venueBrandingForRoom(room),
+    tipJar: tipJarForRoom(room),
     playedSongs: playedSongsPayloadForRoomState(room, playedSongIds),
     playedSongIds,
     totalPlayedCount: playedSongIds.length,
@@ -6736,6 +6755,7 @@ io.on('connection', (socket) => {
       playerCount: getNonHostPlayerCount(room),
       hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline,
       venueBranding: venueBrandingForRoom(room),
+    tipJar: tipJarForRoom(room),
     });
 
     // Log join roster count only (full name list is noisy with 50+ players).
@@ -6783,6 +6803,7 @@ io.on('connection', (socket) => {
             publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
             publicDisplayLetterRevealToast: letterRevealToastEnabledForRoom(room),
             venueBranding: venueBrandingForRoom(room),
+    tipJar: tipJarForRoom(room),
             ...publicDisplayRoomStateExtras(room),
           });
           if (room.needsHostResume) {
@@ -7631,6 +7652,7 @@ io.on('connection', (socket) => {
           previewOnly: isPreviewOnly,
           freeSpace: useFreeSpace,
           venueBranding: venueBrandingForRoom(room),
+    tipJar: tipJarForRoom(room),
         });
         routineServerLog(
           `📄 Exported ${count} printable bingo cards for room ${roomId} (${useRoundSnapshot ? 'round snapshot' : 'live finalized pool'})`,
@@ -9358,6 +9380,7 @@ io.on('connection', (socket) => {
         publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
         publicDisplayLetterRevealToast: letterRevealToastEnabledForRoom(room),
         venueBranding: venueBrandingForRoom(room),
+    tipJar: tipJarForRoom(room),
         // Include played songs for PublicDisplay sync (includes current song)
         playedSongs: playedSongsPayloadForRoomState(room, playedSongIds),
         // Also send song IDs array for client state sync
@@ -14407,6 +14430,7 @@ app.get('/api/display/:roomId/venue-branding', async (req, res) => {
       ok: true,
       roomExists: true,
       venueBranding: venueBrandingForRoom(room),
+    tipJar: tipJarForRoom(room),
     });
   } catch (e) {
     console.error('GET /api/display/:roomId/venue-branding', e);
@@ -15255,6 +15279,10 @@ app.get('/api/org/me', async (req, res) => {
         : [];
     const members =
       ctx.organization ? await organizationsStore.listOrganizationMembers(db, ctx.organization.id) : [];
+    let tipJar = null;
+    if (ctx.organization?.id) {
+      tipJar = await tipsStore.getTipJarForOrganization(db, ctx.organization.id);
+    }
     return res.json({
       role: ctx.role,
       organization: ctx.organization,
@@ -15262,10 +15290,144 @@ app.get('/api/org/me', async (req, res) => {
       invites,
       payments,
       billing,
+      tipJar,
     });
   } catch (e) {
     console.error('GET /api/org/me:', e);
     res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+/** Host tip jar settings (stored on organization venue_settings.tipJar). */
+app.get('/api/org/tip-jar', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization?.id) {
+      return res.status(400).json({
+        error: 'no_organization',
+        message: 'Join or create an organization before setting up tipping.',
+      });
+    }
+    await tipsStore.ensureHostTipsTable(db);
+    let tipJar = await tipsStore.getTipJarForOrganization(db, ctx.organization.id);
+    try {
+      tipJar = await tipsStore.refreshConnectStatus(db, ctx.organization.id);
+    } catch (e) {
+      console.warn('[tips] refresh connect status:', e?.message || e);
+    }
+    return res.json({
+      tipJar,
+      public: tipsStore.tipJarPublicPayload(tipJar),
+      stripeConfigured: !!(process.env.STRIPE_SECRET_KEY || '').trim(),
+    });
+  } catch (e) {
+    console.error('GET /api/org/tip-jar:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.put('/api/org/tip-jar', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization?.id) {
+      return res.status(400).json({ error: 'no_organization' });
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const tipJar = await tipsStore.patchTipJarForOrganization(db, ctx.organization.id, body);
+    // Refresh live rooms owned by this host so players see tip jar updates.
+    for (const [roomId, room] of rooms) {
+      if (Number(room.ownerUserId) !== Number(uid)) continue;
+      try {
+        await resolveRoomVenueBranding(room);
+        io.to(roomId).emit('tip-jar', { tipJar: tipJarForRoom(room) });
+      } catch {
+        /* ignore */
+      }
+    }
+    return res.json({ tipJar, public: tipsStore.tipJarPublicPayload(tipJar) });
+  } catch (e) {
+    console.error('PUT /api/org/tip-jar:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.post('/api/org/tip-jar/stripe-connect/onboard', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required' });
+    if (!(process.env.STRIPE_SECRET_KEY || '').trim()) {
+      return res.status(503).json({ error: 'stripe_not_configured' });
+    }
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization?.id) {
+      return res.status(400).json({ error: 'no_organization' });
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const result = await tipsStore.createConnectOnboardingLink(db, {
+      organizationId: ctx.organization.id,
+      hostUserId: uid,
+      returnPath: typeof body.returnPath === 'string' ? body.returnPath : '/org',
+    });
+    return res.json({ url: result.url, accountId: result.accountId });
+  } catch (e) {
+    console.error('POST /api/org/tip-jar/stripe-connect/onboard:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+/** Player: create Stripe Checkout for a tip to the room host (Connect destination). */
+app.post('/api/rooms/:roomId/tips/checkout', async (req, res) => {
+  try {
+    const roomId = String(req.params.roomId || '').trim();
+    if (!roomId || roomId.length > 80) {
+      return res.status(400).json({ error: 'invalid_room_id' });
+    }
+    if (!db) return res.status(503).json({ error: 'database_required' });
+    if (!(process.env.STRIPE_SECRET_KEY || '').trim()) {
+      return res.status(503).json({ error: 'stripe_not_configured' });
+    }
+    const room = rooms.get(roomId);
+    if (!room) return res.status(404).json({ error: 'room_not_found' });
+    try {
+      ensureRoomOwnerFromHostSocket(room);
+      await resolveRoomVenueBranding(room);
+    } catch {
+      /* ignore */
+    }
+    const orgId = room.dbOrganizationId;
+    if (!orgId) {
+      return res.status(400).json({
+        error: 'no_organization',
+        message: 'This host has no organization for tipping.',
+      });
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const amountCents = body.amountCents;
+    const playerName = typeof body.playerName === 'string' ? body.playerName : '';
+    const playerId = typeof body.playerId === 'string' ? body.playerId : '';
+    const checkout = await tipsStore.createHostTipCheckout(db, {
+      organizationId: orgId,
+      roomId,
+      amountCents,
+      playerId,
+      playerName,
+    });
+    return res.json({ ok: true, url: checkout.url, amountCents: checkout.amountCents });
+  } catch (e) {
+    const code = e?.code || 'failed';
+    const status =
+      code === 'tips_disabled' || code === 'tips_card_unavailable' || code === 'tips_bad_amount'
+        ? 400
+        : 500;
+    if (status === 500) console.error('POST /api/rooms/:roomId/tips/checkout:', e);
+    return res.status(status).json({ error: code, message: e?.message || 'Failed' });
   }
 });
 
@@ -16296,14 +16458,19 @@ async function resolveRoomVenueBranding(room) {
   if (!room) return;
   if (!db || room.ownerUserId == null) {
     room.venueBranding = null;
+    room.tipJar = null;
     return;
   }
   const uid = Number(room.ownerUserId);
   if (!Number.isFinite(uid)) {
     room.venueBranding = null;
+    room.tipJar = null;
     return;
   }
-  const { branding, orgId } = await organizationsStore.getVenueBrandingContextForHostUserId(db, uid);
+  const { branding, orgId, tipJar } = await organizationsStore.getVenueBrandingContextForHostUserId(
+    db,
+    uid,
+  );
   if (orgId != null) room.dbOrganizationId = Number(orgId);
   let b = branding;
   if (b && b.logoUrl && orgId != null) {
@@ -16315,6 +16482,7 @@ async function resolveRoomVenueBranding(room) {
     }
   }
   room.venueBranding = b;
+  room.tipJar = tipJar || null;
 }
 
 async function resolveOrgBillingRowForRoom(room) {
@@ -16410,6 +16578,10 @@ async function resolveHostRoomForOrgBilling(req, res, roomIdRaw) {
 
 function venueBrandingForRoom(room) {
   return room && room.venueBranding ? room.venueBranding : null;
+}
+
+function tipJarForRoom(room) {
+  return room && room.tipJar ? room.tipJar : null;
 }
 
 /** Normalize to origin for Spotify app redirect allowlist (https; localhost http allowed). */
