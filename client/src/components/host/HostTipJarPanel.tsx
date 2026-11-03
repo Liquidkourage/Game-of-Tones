@@ -106,15 +106,32 @@ const HostTipJarPanel: React.FC<HostTipJarPanelProps> = ({ className }) => {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.message || data?.error || 'Save failed');
       const tj = data.tipJar || body;
+      const savedLinks = (tj.links && typeof tj.links === 'object' ? tj.links : {}) as HostTipJarLinks;
+      const dropped: string[] = [];
+      for (const [key, label] of [
+        ['venmo', 'Venmo'],
+        ['cashapp', 'Cash App'],
+        ['paypal', 'PayPal'],
+        ['otherUrl', 'Other tip URL'],
+      ] as const) {
+        const before = String(tipJar.links[key] || '').trim();
+        const after = String(savedLinks[key] || '').trim();
+        if (before && !after) dropped.push(label);
+      }
       setTipJar({
         enabled: tj.enabled === true,
         displayName: tj.displayName || 'Tip the host',
         presetCents: Array.isArray(tj.presetCents) ? tj.presetCents : body.presetCents,
         allowCustomAmount: tj.allowCustomAmount !== false,
-        links: tj.links || {},
+        links: savedLinks,
         stripeConnectAccountId: tj.stripeConnectAccountId,
         stripeConnectChargesEnabled: tj.stripeConnectChargesEnabled === true,
       });
+      if (dropped.length) {
+        setError(
+          `${dropped.join(', ')} link was not saved — use a full URL (e.g. https://venmo.com/YourName) or just your handle.`,
+        );
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
@@ -244,18 +261,21 @@ const HostTipJarPanel: React.FC<HostTipJarPanelProps> = ({ className }) => {
         </span>
         {(
           [
-            ['venmo', 'Venmo URL'],
-            ['cashapp', 'Cash App URL'],
-            ['paypal', 'PayPal URL'],
-            ['otherUrl', 'Other tip URL'],
+            ['venmo', 'https://venmo.com/YourName'],
+            ['cashapp', 'https://cash.app/$YourTag'],
+            ['paypal', 'https://paypal.me/YourName'],
+            ['otherUrl', 'https://…'],
           ] as const
-        ).map(([key, label]) => (
+        ).map(([key, placeholder]) => (
           <input
             key={key}
-            type="url"
+            type="text"
+            inputMode="url"
+            autoComplete="url"
             value={tipJar.links[key] || ''}
             onChange={(e) => setLink(key, e.target.value)}
-            placeholder={label}
+            placeholder={placeholder}
+            aria-label={placeholder}
             style={{ width: '100%' }}
           />
         ))}

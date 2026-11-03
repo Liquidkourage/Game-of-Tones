@@ -32,9 +32,42 @@ function trimStr(s, max) {
   return t.length > max ? t.slice(0, max) : t;
 }
 
+/**
+ * Coerce host-typed tip links into a real URL before validation.
+ * Accepts bare domains (venmo.com/Name), @handles, and $cashtags.
+ */
+function normalizeTipLinkInput(s, rail) {
+  let t = trimStr(s, 500);
+  if (!t) return '';
+  // Strip accidental wrapping quotes / angle brackets from paste.
+  t = t.replace(/^['"<]+|['">]+$/g, '').trim();
+  if (!t) return '';
+
+  const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(t);
+  if (hasScheme) return t;
+
+  // Bare handle / cashtag → rail homepage deep link.
+  if (rail === 'venmo' && /^@?[A-Za-z0-9_-]{3,30}$/.test(t)) {
+    return `https://venmo.com/${t.replace(/^@/, '')}`;
+  }
+  if (rail === 'cashapp' && /^\$?[A-Za-z0-9_]{1,20}$/.test(t)) {
+    const tag = t.startsWith('$') ? t : `$${t}`;
+    return `https://cash.app/${tag}`;
+  }
+  if (rail === 'paypal' && /^@?[A-Za-z0-9._-]{3,30}$/.test(t)) {
+    return `https://paypal.me/${t.replace(/^@/, '')}`;
+  }
+
+  // Bare domain / path (e.g. venmo.com/LiquidKourage) → https
+  if (/^[a-z0-9.-]+\.[a-z]{2,}([/?#].*)?$/i.test(t) || t.startsWith('www.')) {
+    return `https://${t}`;
+  }
+  return t;
+}
+
 /** Allow https links and common payment app schemes. */
-function sanitizeTipLink(s, maxLen = 500) {
-  const t = trimStr(s, maxLen);
+function sanitizeTipLink(s, maxLen = 500, rail = null) {
+  const t = normalizeTipLinkInput(s, rail);
   if (!t) return '';
   try {
     const u = new URL(t);
@@ -74,10 +107,10 @@ function sanitizeTipJar(raw) {
   const o = raw && typeof raw === 'object' ? raw : {};
   const linksIn = o.links && typeof o.links === 'object' ? o.links : {};
   const links = {};
-  const venmo = sanitizeTipLink(linksIn.venmo);
-  const cashapp = sanitizeTipLink(linksIn.cashapp);
-  const paypal = sanitizeTipLink(linksIn.paypal);
-  const otherUrl = sanitizeTipLink(linksIn.otherUrl);
+  const venmo = sanitizeTipLink(linksIn.venmo, 500, 'venmo');
+  const cashapp = sanitizeTipLink(linksIn.cashapp, 500, 'cashapp');
+  const paypal = sanitizeTipLink(linksIn.paypal, 500, 'paypal');
+  const otherUrl = sanitizeTipLink(linksIn.otherUrl, 500, 'other');
   const otherLabel = trimStr(linksIn.otherLabel, 40);
   if (venmo) links.venmo = venmo;
   if (cashapp) links.cashapp = cashapp;
