@@ -31,7 +31,7 @@ import { youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import { patchSquaresWithAlias, patchSquaresClearAlias } from '../utils/songAliasDisplay';
 import { softHyphenateLongWords, stripSoftHyphens } from '../utils/softHyphenateLongWords';
 import { playerCardTitleCollisionPositions } from '../utils/playerCardTitleCollisions';
-import { tipRailHref } from '../utils/tipDeepLinks';
+import { extractVenmoUsername, openVenmoTip, tipRailHref } from '../utils/tipDeepLinks';
 import {
   STANDARD_BINGO_POSITIONS,
   validateBingoCardGrid,
@@ -3209,9 +3209,11 @@ const PlayerView: React.FC = () => {
                         ) : null}
                         {(() => {
                           const tipNote = tipJar.deepLinkNote || 'Tempo tip';
+                          const venmoSaved = tipJar.links.venmo;
+                          const venmoUser = venmoSaved ? extractVenmoUsername(venmoSaved) : null;
                           const venmoHref = tipRailHref(
                             'venmo',
-                            tipJar.links.venmo,
+                            venmoSaved,
                             tipAmountCents,
                             tipNote,
                           );
@@ -3230,6 +3232,7 @@ const PlayerView: React.FC = () => {
                                 style={{ marginBottom: 6 }}
                               >
                                 Opens with {amountLabel} when the app supports it.
+                                {venmoUser ? ` Venmo To: @${venmoUser}` : ''}
                               </div>
                               <div
                                 style={{
@@ -3244,6 +3247,11 @@ const PlayerView: React.FC = () => {
                                     href={venmoHref}
                                     target="_blank"
                                     rel="noopener noreferrer"
+                                    onClick={(e) => {
+                                      // Prefer native scheme so To can prefill; https is fallback.
+                                      e.preventDefault();
+                                      openVenmoTip(venmoSaved, tipAmountCents, tipNote);
+                                    }}
                                   >
                                     Venmo {amountLabel}
                                   </a>

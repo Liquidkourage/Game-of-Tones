@@ -98,6 +98,12 @@ export function extractPaypalMeUsername(saved: string): string | null {
   return null;
 }
 
+/**
+ * Venmo payment link (web → app handoff).
+ * Official shape uses recipients= on venmo.com/?txn=pay — path-only
+ * https://venmo.com/USER?txn=pay often redirects to account.venmo.com/pay
+ * and drops To while keeping amount/note.
+ */
 export function buildVenmoTipUrl(
   saved: string,
   amountCents: number,
@@ -107,14 +113,15 @@ export function buildVenmoTipUrl(
   const tipNote = String(note || 'Tempo tip').trim().slice(0, 80) || 'Tempo tip';
   const username = extractVenmoUsername(saved);
   if (username) {
-    // Path username is what usually fills Venmo's "To" field on mobile.
-    // account.venmo.com/pay?recipients=… often leaves To blank (amount/note still land).
     const params = new URLSearchParams({
       txn: 'pay',
       amount,
       note: tipNote,
+      audience: 'private',
+      // Documented payment-link param (username, email, or phone).
+      recipients: username,
     });
-    return `https://venmo.com/${encodeURIComponent(username)}?${params.toString()}`;
+    return `https://venmo.com/?${params.toString()}`;
   }
   // Fall back to saved URL with amount query if we couldn't parse a handle.
   const u = safeUrl(saved);
@@ -125,6 +132,25 @@ export function buildVenmoTipUrl(
     return u.href;
   }
   return saved;
+}
+
+/** Native app scheme — sometimes fills To when https handoff does not. */
+export function buildVenmoAppTipUrl(
+  saved: string,
+  amountCents: number,
+  note = 'Tempo tip',
+): string | null {
+  const username = extractVenmoUsername(saved);
+  if (!username) return null;
+  const amount = dollarsFromCents(amountCents);
+  const tipNote = String(note || 'Tempo tip').trim().slice(0, 80) || 'Tempo tip';
+  const params = new URLSearchParams({
+    txn: 'pay',
+    recipients: username,
+    amount,
+    note: tipNote,
+  });
+  return `venmo://paycharge?${params.toString()}`;
 }
 
 export function buildCashAppTipUrl(saved: string, amountCents: number): string {
@@ -151,4 +177,33 @@ export function tipRailHref(
   if (rail === 'cashapp') return buildCashAppTipUrl(raw, amountCents);
   if (rail === 'paypal') return buildPaypalMeTipUrl(raw, amountCents);
   return raw;
+}
+
+/** Prefer native Venmo scheme on phones; fall back to https payment link. */
+export function openVenmoTip(
+  saved: string | undefined,
+  amountCents: number,
+  note?: string,
+): void {
+  const raw = String(saved || '').trim();
+  if (!raw || typeof window === 'undefined') return;
+  const httpsUrl = buildVenmoTipUrl(raw, amountCents, note);
+  const appUrl = buildVenmoAppTipUrl(raw, amountCents, note);
+  if (!appUrl) {
+    window.open(httpsUrl, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  const started = Date.now();
+  const fallbackTimer = window.setTimeout(() => {
+    // If the app scheme did nothing useful, open the https payment link.
+    if (Date.now() - started < 1800) {
+      window.location.href = httpsUrl;
+    }
+  }, 700);
+  const onHide = () => {
+    window.clearTimeout(fallbackTimer);
+    document.removeEventListener('visibilitychange', onHide);
+  };
+  document.addEventListener('visibilitychange', onHide);
+  window.location.href = appUrl;
 }
