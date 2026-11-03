@@ -31,6 +31,7 @@ import { youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import { patchSquaresWithAlias, patchSquaresClearAlias } from '../utils/songAliasDisplay';
 import { softHyphenateLongWords, stripSoftHyphens } from '../utils/softHyphenateLongWords';
 import { playerCardTitleCollisionPositions } from '../utils/playerCardTitleCollisions';
+import { tipRailHref } from '../utils/tipDeepLinks';
 import {
   STANDARD_BINGO_POSITIONS,
   validateBingoCardGrid,
@@ -3201,55 +3202,75 @@ const PlayerView: React.FC = () => {
                             {tipStatus === 'checkout' ? 'Opening…' : 'Pay with card'}
                           </button>
                         ) : null}
-                        <div
-                          style={{
-                            display: 'flex',
-                            flexWrap: 'wrap',
-                            gap: 8,
-                            marginTop: 8,
-                          }}
-                        >
-                          {tipJar.links.venmo ? (
-                            <a
-                              className="player-v2-inline-button"
-                              href={tipJar.links.venmo}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              Venmo
-                            </a>
-                          ) : null}
-                          {tipJar.links.cashapp ? (
-                            <a
-                              className="player-v2-inline-button"
-                              href={tipJar.links.cashapp}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              Cash App
-                            </a>
-                          ) : null}
-                          {tipJar.links.paypal ? (
-                            <a
-                              className="player-v2-inline-button"
-                              href={tipJar.links.paypal}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              PayPal
-                            </a>
-                          ) : null}
-                          {tipJar.links.otherUrl ? (
-                            <a
-                              className="player-v2-inline-button"
-                              href={tipJar.links.otherUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              {tipJar.links.otherLabel || 'Tip link'}
-                            </a>
-                          ) : null}
-                        </div>
+                        {(() => {
+                          const venmoHref = tipRailHref('venmo', tipJar.links.venmo, tipAmountCents);
+                          const cashHref = tipRailHref('cashapp', tipJar.links.cashapp, tipAmountCents);
+                          const paypalHref = tipRailHref('paypal', tipJar.links.paypal, tipAmountCents);
+                          const otherHref = tipRailHref('other', tipJar.links.otherUrl, tipAmountCents);
+                          const amountLabel = `$${(tipAmountCents / 100).toFixed(
+                            tipAmountCents % 100 === 0 ? 0 : 2,
+                          )}`;
+                          const hasAppLinks = !!(venmoHref || cashHref || paypalHref || otherHref);
+                          if (!hasAppLinks) return null;
+                          return (
+                            <div style={{ marginTop: 8 }}>
+                              <div
+                                className="player-v2-sheet-note"
+                                style={{ marginBottom: 6 }}
+                              >
+                                Opens with {amountLabel} when the app supports it.
+                              </div>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  flexWrap: 'wrap',
+                                  gap: 8,
+                                }}
+                              >
+                                {venmoHref ? (
+                                  <a
+                                    className="player-v2-inline-button"
+                                    href={venmoHref}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    Venmo {amountLabel}
+                                  </a>
+                                ) : null}
+                                {cashHref ? (
+                                  <a
+                                    className="player-v2-inline-button"
+                                    href={cashHref}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    Cash App {amountLabel}
+                                  </a>
+                                ) : null}
+                                {paypalHref ? (
+                                  <a
+                                    className="player-v2-inline-button"
+                                    href={paypalHref}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    PayPal {amountLabel}
+                                  </a>
+                                ) : null}
+                                {otherHref ? (
+                                  <a
+                                    className="player-v2-inline-button"
+                                    href={otherHref}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    {tipJar.links.otherLabel || 'Tip link'}
+                                  </a>
+                                ) : null}
+                              </div>
+                            </div>
+                          );
+                        })()}
                         {tipStatus === 'error' ? (
                           <span
                             className="player-v2-feedback-status player-v2-feedback-status--error"
