@@ -104,23 +104,24 @@ export function buildVenmoTipUrl(
   note = 'Tempo tip',
 ): string {
   const amount = dollarsFromCents(amountCents);
+  const tipNote = String(note || 'Tempo tip').trim().slice(0, 80) || 'Tempo tip';
   const username = extractVenmoUsername(saved);
   if (username) {
+    // Path username is what usually fills Venmo's "To" field on mobile.
+    // account.venmo.com/pay?recipients=… often leaves To blank (amount/note still land).
     const params = new URLSearchParams({
-      audience: 'private',
-      amount,
-      note,
-      recipients: `,${username}`,
       txn: 'pay',
+      amount,
+      note: tipNote,
     });
-    return `https://account.venmo.com/pay?${params.toString()}`;
+    return `https://venmo.com/${encodeURIComponent(username)}?${params.toString()}`;
   }
   // Fall back to saved URL with amount query if we couldn't parse a handle.
   const u = safeUrl(saved);
   if (u) {
     u.searchParams.set('txn', 'pay');
     u.searchParams.set('amount', amount);
-    if (!u.searchParams.get('note')) u.searchParams.set('note', note);
+    u.searchParams.set('note', tipNote);
     return u.href;
   }
   return saved;
@@ -142,10 +143,11 @@ export function tipRailHref(
   rail: 'venmo' | 'cashapp' | 'paypal' | 'other',
   saved: string | undefined,
   amountCents: number,
+  note?: string,
 ): string | null {
   const raw = String(saved || '').trim();
   if (!raw) return null;
-  if (rail === 'venmo') return buildVenmoTipUrl(raw, amountCents);
+  if (rail === 'venmo') return buildVenmoTipUrl(raw, amountCents, note);
   if (rail === 'cashapp') return buildCashAppTipUrl(raw, amountCents);
   if (rail === 'paypal') return buildPaypalMeTipUrl(raw, amountCents);
   return raw;

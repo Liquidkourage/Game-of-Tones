@@ -109,6 +109,7 @@ interface VenueBranding {
 type PlayerTipJar = {
   enabled: boolean;
   displayName: string;
+  deepLinkNote: string;
   presetCents: number[];
   allowCustomAmount: boolean;
   cardTipsEnabled: boolean;
@@ -146,6 +147,10 @@ function normalizePlayerTipJar(raw: unknown): PlayerTipJar | null {
       typeof o.displayName === 'string' && o.displayName.trim()
         ? o.displayName.trim()
         : 'Tip the host',
+    deepLinkNote:
+      typeof o.deepLinkNote === 'string' && o.deepLinkNote.trim()
+        ? o.deepLinkNote.trim().slice(0, 80)
+        : 'Tempo tip',
     presetCents: presetCents.length ? presetCents : [300, 500, 1000],
     allowCustomAmount: o.allowCustomAmount !== false,
     cardTipsEnabled,
@@ -3203,7 +3208,13 @@ const PlayerView: React.FC = () => {
                           </button>
                         ) : null}
                         {(() => {
-                          const venmoHref = tipRailHref('venmo', tipJar.links.venmo, tipAmountCents);
+                          const tipNote = tipJar.deepLinkNote || 'Tempo tip';
+                          const venmoHref = tipRailHref(
+                            'venmo',
+                            tipJar.links.venmo,
+                            tipAmountCents,
+                            tipNote,
+                          );
                           const cashHref = tipRailHref('cashapp', tipJar.links.cashapp, tipAmountCents);
                           const paypalHref = tipRailHref('paypal', tipJar.links.paypal, tipAmountCents);
                           const otherHref = tipRailHref('other', tipJar.links.otherUrl, tipAmountCents);

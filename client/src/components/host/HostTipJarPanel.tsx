@@ -13,6 +13,8 @@ export type HostTipJarLinks = {
 export type HostTipJarConfig = {
   enabled: boolean;
   displayName?: string;
+  /** Prefills Venmo "What's this for?" (and similar notes when supported). */
+  deepLinkNote?: string;
   presetCents: number[];
   allowCustomAmount: boolean;
   links: HostTipJarLinks;
@@ -23,6 +25,7 @@ export type HostTipJarConfig = {
 const DEFAULT_TIP_JAR: HostTipJarConfig = {
   enabled: false,
   displayName: 'Tip the host',
+  deepLinkNote: 'Tempo tip',
   presetCents: [300, 500, 1000],
   allowCustomAmount: true,
   links: {},
@@ -58,6 +61,7 @@ const HostTipJarPanel: React.FC<HostTipJarPanelProps> = ({ className }) => {
       setTipJar({
         enabled: tj.enabled === true,
         displayName: tj.displayName || 'Tip the host',
+        deepLinkNote: tj.deepLinkNote || 'Tempo tip',
         presetCents: Array.isArray(tj.presetCents) ? tj.presetCents : [300, 500, 1000],
         allowCustomAmount: tj.allowCustomAmount !== false,
         links: tj.links && typeof tj.links === 'object' ? tj.links : {},
@@ -121,6 +125,7 @@ const HostTipJarPanel: React.FC<HostTipJarPanelProps> = ({ className }) => {
       setTipJar({
         enabled: tj.enabled === true,
         displayName: tj.displayName || 'Tip the host',
+        deepLinkNote: tj.deepLinkNote || body.deepLinkNote || 'Tempo tip',
         presetCents: Array.isArray(tj.presetCents) ? tj.presetCents : body.presetCents,
         allowCustomAmount: tj.allowCustomAmount !== false,
         links: savedLinks,
@@ -220,6 +225,20 @@ const HostTipJarPanel: React.FC<HostTipJarPanelProps> = ({ className }) => {
           onChange={(e) => setTipJar((p) => ({ ...p, displayName: e.target.value }))}
           placeholder="Tip the host"
           maxLength={60}
+          style={{ width: '100%', maxWidth: 360 }}
+        />
+      </label>
+
+      <label className="host-field" style={{ display: 'block', marginBottom: 10 }}>
+        <span className="host-muted" style={{ display: 'block', marginBottom: 4 }}>
+          Tip note (Venmo “What’s this for?”)
+        </span>
+        <input
+          type="text"
+          value={tipJar.deepLinkNote || ''}
+          onChange={(e) => setTipJar((p) => ({ ...p, deepLinkNote: e.target.value }))}
+          placeholder="Tempo tip"
+          maxLength={80}
           style={{ width: '100%', maxWidth: 360 }}
         />
       </label>

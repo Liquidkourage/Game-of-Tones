@@ -120,9 +120,11 @@ function sanitizeTipJar(raw) {
     if (otherLabel) links.otherLabel = otherLabel;
   }
   const accountId = trimStr(o.stripeConnectAccountId, 120);
+  const deepLinkNote = trimStr(o.deepLinkNote, 80) || undefined;
   return {
     enabled: o.enabled === true,
     displayName: trimStr(o.displayName, 60) || undefined,
+    deepLinkNote,
     presetCents: sanitizePresetCents(o.presetCents),
     allowCustomAmount: o.allowCustomAmount !== false,
     links,
@@ -143,6 +145,7 @@ function tipJarPublicPayload(tipJar) {
   return {
     enabled: true,
     displayName: t.displayName || 'Tip the host',
+    deepLinkNote: t.deepLinkNote || 'Tempo tip',
     presetCents: t.presetCents,
     allowCustomAmount: t.allowCustomAmount,
     links: t.links,
