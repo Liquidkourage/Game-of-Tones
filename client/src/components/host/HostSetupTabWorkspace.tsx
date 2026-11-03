@@ -14,6 +14,8 @@ export type HostSetupTabWorkspaceProps = {
   onGoToRounds: () => void;
   onGoToGame: () => void;
   prepRoundReadyForGoLive: boolean;
+  /** Mid-show hint when editing a future round without touching the live mix. */
+  liveSettingsHint?: string | null;
   children: React.ReactNode;
 };
 
@@ -29,6 +31,7 @@ const HostSetupTabWorkspace: React.FC<HostSetupTabWorkspaceProps> = ({
   onGoToRounds,
   onGoToGame,
   prepRoundReadyForGoLive,
+  liveSettingsHint = null,
   children,
 }) => {
   return (
@@ -62,6 +65,11 @@ const HostSetupTabWorkspace: React.FC<HostSetupTabWorkspaceProps> = ({
               <p className="host-setup-tab-workspace__lead">
                 Win pattern, clip length, playback rules, and print options for the selected round.
               </p>
+              {liveSettingsHint ? (
+                <p className="host-setup-tab-workspace__live-hint" role="status">
+                  {liveSettingsHint}
+                </p>
+              ) : null}
             </div>
             {prepRoundReadyForGoLive ? (
               <button type="button" className="btn-primary host-setup-tab-workspace__go-game" onClick={onGoToGame}>

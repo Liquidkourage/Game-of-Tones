@@ -741,11 +741,30 @@ interface RoundPlayRecap {
   spotifyPlayedPlaylistId?: string;
   spotifyPlayedPlaylistName?: string;
   spotifyPlayedPlaylistUrl?: string;
+  /** Host-requested Spotify playlist of the full #1–N call/play order (not just played). */
+  spotifyCallOrderPlaylistId?: string;
+  spotifyCallOrderPlaylistName?: string;
+  spotifyCallOrderPlaylistUrl?: string;
 }
 
 /** Spotify Web API track ids are 22 alphanumeric chars (not YouTube/Apple ids). */
 function isLikelySpotifyTrackId(id: string): boolean {
   return /^[A-Za-z0-9]{22}$/.test(String(id || '').trim());
+}
+
+/** Preserve call order; drop non-Spotify / duplicate ids. */
+function spotifyTrackIdsInPlayOrder(
+  songs: Array<{ id?: string } | null | undefined>,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const song of songs) {
+    const id = String(song?.id || '').trim();
+    if (!id || !isLikelySpotifyTrackId(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
 }
 
 function normalizePlayedSongEntry(
@@ -2087,7 +2106,16 @@ const HostView: React.FC = () => {
     error?: string;
     skippedReason?: string;
   } | null>(null);
+  /** Full call-order → Spotify (opt-in; not auto at round end). */
+  const [roundCallOrderPlaylistUi, setRoundCallOrderPlaylistUi] = useState<{
+    creating: boolean;
+    count: number;
+    playlistUrl?: string;
+    playlistName?: string;
+    error?: string;
+  } | null>(null);
   const playedPlaylistInFlightRef = useRef<Set<number>>(new Set());
+  const callOrderPlaylistInFlightRef = useRef<Set<number>>(new Set());
   const ensurePlayedPlaylistForRoundRef = useRef<(roundIndex: number) => Promise<void>>(
     async () => undefined,
   );
@@ -4652,6 +4680,7 @@ const HostView: React.FC = () => {
             creating: false,
             count: playedInOrderRef.current.length,
           });
+          setRoundCallOrderPlaylistUi(null);
           setGamePaused(true);
           setIsPlaying(false);
           setCurrentSong(null);
@@ -8706,6 +8735,160 @@ const HostView: React.FC = () => {
   );
   ensurePlayedPlaylistForRoundRef.current = ensurePlayedPlaylistForRound;
 
+  /** Resolve full #1–N call order for a round (saved playOrder preferred, else live finalized list). */
+  const resolveRoundCallOrderSongs = useCallback(
+    (round: EventRound | null | undefined): Array<{ id: string; name: string; artist: string }> => {
+      if (!round) return [];
+      const snap = round.savedMixSnapshot;
+      if (snap?.songs?.length) {
+        return playbackOrderForSnapshot(snap).map((s) => ({
+          id: String(s.id || ''),
+          name: s.name || '',
+          artist: s.artist || '',
+        }));
+      }
+      const live = finalizedOrderRef.current;
+      if (live && live.length > 0) {
+        return live.map((s) => ({
+          id: String(s.id || ''),
+          name: s.name || '',
+          artist: s.artist || '',
+        }));
+      }
+      return [];
+    },
+    [],
+  );
+
+  /**
+   * Create a Spotify playlist of the round's full call/play order (#1–N), not just songs that played.
+   * Opt-in (button) — played-only export remains the automatic round-end path.
+   */
+  const createRoundCallOrderSpotifyPlaylist = useCallback(
+    async (roundIndex: number) => {
+      if (roundIndex < 0) return;
+      const round = eventRoundsRef.current[roundIndex];
+      if (!round) {
+        showToast('No round selected.', 'warn');
+        return;
+      }
+
+      if (round.playRecap?.spotifyCallOrderPlaylistUrl || round.playRecap?.spotifyCallOrderPlaylistId) {
+        const url =
+          round.playRecap.spotifyCallOrderPlaylistUrl ||
+          `https://open.spotify.com/playlist/${round.playRecap.spotifyCallOrderPlaylistId}`;
+        setRoundCallOrderPlaylistUi({
+          creating: false,
+          count: resolveRoundCallOrderSongs(round).length,
+          playlistUrl: url,
+          playlistName: round.playRecap.spotifyCallOrderPlaylistName,
+        });
+        if (url) window.open(url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+
+      const songs = resolveRoundCallOrderSongs(round);
+      if (songs.length === 0) {
+        window.alert(
+          'No call-order songs for this round yet. Save the round (or finalize the mix) so the #1–N list is locked, then try again.',
+        );
+        return;
+      }
+
+      const spotifyIds = spotifyTrackIdsInPlayOrder(songs);
+      if (spotifyIds.length === 0) {
+        window.alert(
+          'This call order has no Spotify track ids (e.g. YouTube/Apple night). Use the call sheet PDF instead.',
+        );
+        return;
+      }
+      if (!readHostSpotifyWebEnabled() || !isSpotifyConnectedRef.current) {
+        window.alert('Connect Spotify from Connection first.');
+        return;
+      }
+      if (callOrderPlaylistInFlightRef.current.has(roundIndex)) return;
+      callOrderPlaylistInFlightRef.current.add(roundIndex);
+
+      const defaultName = `Call order — ${round.name || `Round ${roundIndex + 1}`} — ${roomId || 'room'}`;
+      const playlistName =
+        prompt('Name for the full call-order Spotify playlist:', defaultName)?.trim() || '';
+      if (!playlistName) {
+        callOrderPlaylistInFlightRef.current.delete(roundIndex);
+        return;
+      }
+
+      setRoundCallOrderPlaylistUi({ creating: true, count: spotifyIds.length });
+      try {
+        const response = await hostFetch(`${API_BASE || ''}/api/spotify/create-output-playlist`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: playlistName,
+            trackIds: spotifyIds,
+            description: `Full call order (#1–${spotifyIds.length}) — ${round.name || `Round ${roundIndex + 1}`} — Room ${roomId}`,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || data?.message || 'Failed to create call-order playlist');
+        }
+        const playlistUrl =
+          typeof data.playlistUrl === 'string' && data.playlistUrl
+            ? data.playlistUrl
+            : `https://open.spotify.com/playlist/${data.playlistId}`;
+        setEventRounds((prev) => {
+          if (roundIndex < 0 || roundIndex >= prev.length) return prev;
+          const next = [...prev];
+          const r = next[roundIndex];
+          const baseRecap = r.playRecap ?? {
+            playedSongIds: [],
+            playedSongs: [],
+            leftoverSongs: [],
+          };
+          next[roundIndex] = {
+            ...r,
+            playRecap: {
+              ...baseRecap,
+              spotifyCallOrderPlaylistId: data.playlistId,
+              spotifyCallOrderPlaylistName: data.playlistName || playlistName,
+              spotifyCallOrderPlaylistUrl: playlistUrl,
+            },
+          };
+          try {
+            if (roomId) localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
+          } catch {
+            /* ignore */
+          }
+          return next;
+        });
+        setRoundCallOrderPlaylistUi({
+          creating: false,
+          count: spotifyIds.length,
+          playlistUrl,
+          playlistName: data.playlistName || playlistName,
+        });
+        addLog(
+          `Created Spotify call-order playlist (${spotifyIds.length} songs): ${data.playlistName || playlistName}`,
+          'info',
+        );
+        showToast(`Call order → Spotify (${spotifyIds.length} tracks)`, 'success');
+        if (playlistUrl) window.open(playlistUrl, '_blank', 'noopener,noreferrer');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        setRoundCallOrderPlaylistUi({
+          creating: false,
+          count: spotifyIds.length,
+          error: message,
+        });
+        addLog(`Could not create call-order playlist: ${message}`, 'warn');
+        window.alert(`Failed to create playlist: ${message}`);
+      } finally {
+        callOrderPlaylistInFlightRef.current.delete(roundIndex);
+      }
+    },
+    [roomId, addLog, showToast, resolveRoundCallOrderSongs],
+  );
+
   /** Aggregate tonight's played tracks (completed rounds + current call log) into one Spotify playlist. */
   const createTonightPlayedPlaylist = useCallback(async () => {
     const seen = new Set<string>();
@@ -10420,6 +10603,20 @@ const HostView: React.FC = () => {
         >
       >,
     ) => {
+      const prizeOnlyPatch =
+        Object.keys(patch).length === 1 && Object.prototype.hasOwnProperty.call(patch, 'prize');
+      // Live round pattern/cards stay fixed mid-show; future rounds remain editable.
+      if (
+        gameStateRef.current === 'playing' &&
+        roundIndex === currentRoundIndexRef.current &&
+        !prizeOnlyPatch
+      ) {
+        showToast(
+          'Live round settings are locked — pick another round to edit its pattern. The live mix stays put.',
+          'info',
+        );
+        return;
+      }
       setEventRounds((prev) => {
         const r = prev[roundIndex];
         if (!r) return prev;
@@ -10468,18 +10665,26 @@ const HostView: React.FC = () => {
         } catch {
           /* ignore */
         }
-        const prizeOnlyPatch =
-          Object.keys(patch).length === 1 && Object.prototype.hasOwnProperty.call(patch, 'prize');
         if (roundIndex === currentRoundIndexRef.current && !prizeOnlyPatch) {
           applyRoundBingoToHost(updated);
         }
         return next;
       });
     },
-    [roomId, applyRoundBingoToHost],
+    [roomId, applyRoundBingoToHost, showToast],
   );
 
   const openCompositeForRound = useCallback((roundIndex: number) => {
+    if (
+      gameStateRef.current === 'playing' &&
+      roundIndex === currentRoundIndexRef.current
+    ) {
+      showToast(
+        'Live round settings are locked — pick another round to edit its pattern. The live mix stays put.',
+        'info',
+      );
+      return;
+    }
     compositeEditRoundIndexRef.current = roundIndex;
     const r = eventRoundsRef.current[roundIndex];
     const spec =
@@ -10487,13 +10692,23 @@ const HostView: React.FC = () => {
       normalizePatternComposite(DEFAULT_COMPOSITE_SPEC);
     if (spec) setPatternComposite(spec);
     setCombinedPatternModalOpen(true);
-  }, []);
+  }, [showToast]);
 
   const commitPatternComposite = useCallback(
     (next: PatternCompositeSpec) => {
       const n = normalizePatternComposite(next);
       if (!n) return;
       const idx = compositeEditRoundIndexRef.current;
+      if (
+        gameStateRef.current === 'playing' &&
+        idx === currentRoundIndexRef.current
+      ) {
+        showToast(
+          'Live round settings are locked — pick another round to edit its pattern. The live mix stays put.',
+          'info',
+        );
+        return;
+      }
       handleUpdateRoundBingoFields(idx, {
         bingoPattern: 'composite',
         patternComposite: n,
@@ -10504,7 +10719,7 @@ const HostView: React.FC = () => {
         setPattern('composite');
       }
     },
-    [handleUpdateRoundBingoFields],
+    [handleUpdateRoundBingoFields, showToast],
   );
 
   /**
@@ -10931,6 +11146,41 @@ const HostView: React.FC = () => {
       freeSpaceEnabled,
       finalizeMix,
     ],
+  );
+
+  /**
+   * Select a round for editing settings (pattern, free space, prize, …).
+   * During a live round: focus only — do not swap the mix / finalize / emit set-pattern.
+   * Between rounds / waiting: full prep select (loads mix + bingo UI).
+   */
+  const handleSelectRoundForSettings = useCallback(
+    (roundIndex: number) => {
+      const cur = currentRoundIndexRef.current;
+      const curRound = cur >= 0 ? eventRoundsRef.current[cur] : null;
+      const betweenRoundsAfterBingo = curRound?.status === 'completed';
+      const liveLocked =
+        gameStateRef.current === 'playing' && !betweenRoundsAfterBingo;
+
+      if (liveLocked) {
+        if (roundIndex < 0 || roundIndex >= eventRoundsRef.current.length) return;
+        const prevFocus = roundBuilderFocusIndexRef.current;
+        setRoundBuilderFocusIndex(roundIndex);
+        if (roundIndex === prevFocus) return;
+        const name = eventRoundsRef.current[roundIndex]?.name ?? `Round ${roundIndex + 1}`;
+        if (roundIndex === cur) {
+          showToast(`${name} — back to live round settings (mix unchanged)`, 'info');
+        } else {
+          showToast(
+            `${name} settings — live mix stays on ${curRound?.name ?? 'the current round'}`,
+            'info',
+          );
+        }
+        return;
+      }
+
+      handleSelectRoundForPrep(roundIndex);
+    },
+    [handleSelectRoundForPrep, showToast],
   );
 
   /** After reload / restore, pull the active round's playlists into the mix when the mix is still empty. */
@@ -14501,6 +14751,37 @@ const HostView: React.FC = () => {
                         <ListPlus className="w-4 h-4" aria-hidden />
                         Tonight’s played → Spotify
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const idx =
+                            roundBuilderFocusIndex >= 0 &&
+                            roundBuilderFocusIndex < eventRounds.length
+                              ? roundBuilderFocusIndex
+                              : currentRoundIndex;
+                          void createRoundCallOrderSpotifyPlaylist(idx);
+                        }}
+                        disabled={
+                          isSpotifyConnecting ||
+                          !!roundCallOrderPlaylistUi?.creating ||
+                          eventRounds.length === 0
+                        }
+                        className="btn-secondary"
+                        style={{
+                          backgroundColor: '#1d4ed8',
+                          borderColor: '#3b82f6',
+                          color: 'white',
+                          fontSize: '0.85rem',
+                          padding: '8px 14px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}
+                        title="Full #1–N call order for the focused round (saved snapshot), including songs that never played"
+                      >
+                        <ListPlus className="w-4 h-4" aria-hidden />
+                        Round call order → Spotify
+                      </button>
                     </div>
                       </div>
                     </div>
@@ -14627,10 +14908,13 @@ const HostView: React.FC = () => {
           stripTitleFlagPrefix(String(n || ''), titleFlagStripList),
         ),
         saved: Boolean(r.savedMixSnapshot?.songs?.length),
+        /** Live / next-up pointer (Start Game). */
         isCurrent: index === currentRoundIndex,
+        /** Settings/library focus — can diverge from live pointer mid-show. */
+        isSelected: index === roundBuilderFocusIndex,
         prize: typeof r.prize === 'string' && r.prize.trim() ? r.prize.trim() : undefined,
       })),
-    [eventRounds, currentRoundIndex, titleFlagStripList],
+    [eventRounds, currentRoundIndex, roundBuilderFocusIndex, titleFlagStripList],
   );
 
   const roundTimelineSummary = useMemo(() => {
@@ -15065,7 +15349,7 @@ const HostView: React.FC = () => {
                     summary={roundTimelineSummary}
                     emptyHint="Add music on the Rounds tab — your round will show up here."
                     columnLetters={bingoColumnLettersArr}
-                    onSelectRound={handleSelectRoundForPrep}
+                    onSelectRound={handleSelectRoundForSettings}
                     onMoveRound={handleMoveRound}
                     moveRoundLockedIndex={moveRoundLockedIndex}
                     onSetNextRound={handleSelectRoundForPrep}
@@ -15101,7 +15385,7 @@ const HostView: React.FC = () => {
                 rounds={roundTimelineRows}
                 roundSummary={roundTimelineSummary}
                 columnLetters={bingoColumnLettersArr}
-                onSelectRound={handleSelectRoundForPrep}
+                onSelectRound={handleSelectRoundForSettings}
                 onMoveRound={handleMoveRound}
                 moveRoundLockedIndex={moveRoundLockedIndex}
                 onSetNextRound={handleSelectRoundForPrep}
@@ -15109,6 +15393,16 @@ const HostView: React.FC = () => {
                 prepRoundReadyForGoLive={prepRoundReadyForGoLive}
                 onGoToRounds={() => onHostGlassNav('rounds')}
                 onGoToGame={() => onHostGlassNav('game')}
+                liveSettingsHint={
+                  gameState === 'playing' &&
+                  roundBuilderFocusIndex !== currentRoundIndex &&
+                  roundBuilderFocusIndex >= 0 &&
+                  currentRoundIndex >= 0
+                    ? `Editing ${eventRounds[roundBuilderFocusIndex]?.name ?? 'this round'} — live mix stays on ${eventRounds[currentRoundIndex]?.name ?? 'the current round'}.`
+                    : gameState === 'playing'
+                      ? 'Pick another round above to edit its pattern without changing the live mix.'
+                      : null
+                }
               >
                 <div className="host-rounds-panel__planner">{renderHostRoundPlanner('criteria')}</div>
               </HostSetupTabWorkspace>
@@ -15148,7 +15442,7 @@ const HostView: React.FC = () => {
                       className="host-round-timeline--game host-game-tonight__nested"
                       rounds={roundTimelineRows}
                       summary={roundTimelineSummary}
-                      onSelectRound={handleSelectRoundForPrep}
+                      onSelectRound={handleSelectRoundForSettings}
                       onMoveRound={handleMoveRound}
                       moveRoundLockedIndex={moveRoundLockedIndex}
                       onSetNextRound={handleSelectRoundForPrep}
@@ -16579,7 +16873,11 @@ const HostView: React.FC = () => {
                   ))}
                 </div>
               )}
-              {(playedInOrder.length > 0 || roundPlayedPlaylistUi) && (
+              {(playedInOrder.length > 0 ||
+                roundPlayedPlaylistUi ||
+                roundCallOrderPlaylistUi ||
+                (currentRoundIndex >= 0 &&
+                  resolveRoundCallOrderSongs(eventRounds[currentRoundIndex]).length > 0)) && (
                 <div
                   style={{
                     marginTop: 16,
@@ -16673,6 +16971,63 @@ const HostView: React.FC = () => {
                       Copy played list
                     </button>
                   ) : null}
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                    <p style={{ color: '#a8c4ff', fontSize: '0.85rem', margin: '0 0 8px', fontWeight: 700 }}>
+                      Full call order → Spotify
+                    </p>
+                    <p style={{ color: '#9aa8a0', fontSize: '0.75rem', margin: '0 0 8px', lineHeight: 1.4 }}>
+                      Entire #1–N list for this round (including songs that never played), not just the calls above.
+                    </p>
+                    {roundCallOrderPlaylistUi?.creating ? (
+                      <p style={{ color: '#c8d8d0', fontSize: '0.82rem', margin: 0 }}>
+                        Creating Spotify playlist of full call order…
+                      </p>
+                    ) : null}
+                    {roundCallOrderPlaylistUi?.playlistUrl ? (
+                      <a
+                        href={roundCallOrderPlaylistUi.playlistUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: '#93c5fd', fontSize: '0.88rem', fontWeight: 600, display: 'inline-block', marginBottom: 8 }}
+                      >
+                        Open call-order playlist
+                        {roundCallOrderPlaylistUi.playlistName
+                          ? `: ${roundCallOrderPlaylistUi.playlistName}`
+                          : ''}
+                      </a>
+                    ) : null}
+                    {roundCallOrderPlaylistUi?.error ? (
+                      <p style={{ color: '#ff9e6e', fontSize: '0.82rem', margin: '0 0 8px' }}>
+                        Call-order playlist failed: {roundCallOrderPlaylistUi.error}
+                      </p>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={
+                        !!roundCallOrderPlaylistUi?.creating ||
+                        isSpotifyConnecting ||
+                        !isSpotifyConnected
+                      }
+                      onClick={() =>
+                        void createRoundCallOrderSpotifyPlaylist(currentRoundIndexRef.current)
+                      }
+                      style={{
+                        background: 'rgba(59, 130, 246, 0.2)',
+                        border: '1px solid rgba(147, 197, 253, 0.45)',
+                        borderRadius: 8,
+                        padding: '8px 12px',
+                        color: '#dbeafe',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                      title="Create a Spotify playlist with every song in this round’s locked play order"
+                    >
+                      {roundCallOrderPlaylistUi?.playlistUrl
+                        ? 'Open call-order playlist'
+                        : 'Export full call order → Spotify'}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

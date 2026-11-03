@@ -1926,12 +1926,19 @@ code {
   border-color: #fb923c;
   box-shadow: 0 0 20px rgba(251, 146, 60, 0.68);
 }
+/* Shared by 2+ clauses (OR/AND shape union): hard diagonal split of both clause hues */
 .public-display .bingo-square.winning.composite-clause-overlap {
-  background: linear-gradient(135deg, rgba(253, 224, 71, 0.62), rgba(250, 204, 21, 0.52));
-  border-color: #fde047;
+  background: linear-gradient(
+    135deg,
+    var(--composite-overlap-a, rgba(74, 222, 128, 0.62)) 0%,
+    var(--composite-overlap-a, rgba(74, 222, 128, 0.62)) 49.5%,
+    var(--composite-overlap-b, rgba(56, 189, 248, 0.58)) 50.5%,
+    var(--composite-overlap-b, rgba(56, 189, 248, 0.58)) 100%
+  ) !important;
+  border-color: var(--composite-overlap-border-a, #22c55e);
   box-shadow:
-    0 0 22px rgba(253, 224, 71, 0.78),
-    inset 0 0 12px rgba(255, 255, 255, 0.18);
+    0 0 18px color-mix(in srgb, var(--composite-overlap-border-a, #22c55e) 55%, transparent),
+    inset -3px -3px 0 0 var(--composite-overlap-border-b, #38bdf8);
 }
 
 .square-content {

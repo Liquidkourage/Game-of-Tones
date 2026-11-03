@@ -69,7 +69,12 @@ const HostRequestsPanel: React.FC<HostRequestsPanelProps> = ({
   onClearAll,
   onGoToRounds,
 }) => {
-  const sorted = requests.slice().reverse();
+  /** Queue only shows items that still need Approve / Reject. */
+  const actionable = requests.filter((r) => r.status === 'pending').reverse();
+  const done = requests
+    .filter((r) => r.status === 'approved' || r.status === 'rejected')
+    .slice()
+    .reverse();
   const [hostTitle, setHostTitle] = useState('');
   const [hostArtist, setHostArtist] = useState('');
   const [hostAddBusy, setHostAddBusy] = useState(false);
@@ -102,8 +107,8 @@ const HostRequestsPanel: React.FC<HostRequestsPanelProps> = ({
           ) : null}
         </div>
         <p className="host-requests-workspace__blurb">
-          Audience submissions land here. Approve to add them to the virtual Requests pool, then assign
-          that pool on the Rounds tab when you want a Requests round.
+          Pending items are in the queue. Approved / rejected stay under Done (collapsed). Approve adds
+          to the virtual Requests pool — assign that pool on the Rounds tab for a Requests round.
         </p>
         <div className="host-requests-workspace__stats">
           <span>
@@ -163,14 +168,14 @@ const HostRequestsPanel: React.FC<HostRequestsPanelProps> = ({
         </div>
       </section>
 
-      <section className="host-glass-panel host-requests-workspace__queue" aria-label="Request queue">
-        {sorted.length === 0 ? (
+      <section className="host-glass-panel host-requests-workspace__queue" aria-label="Requests needing action">
+        {actionable.length === 0 ? (
           <p className="host-requests-workspace__empty">
-            No requests yet. Players submit from their card menu, or add one above.
+            Nothing waiting. Approved count is above; new player (or host) submissions appear here.
           </p>
         ) : (
           <ul className="host-requests-workspace__list">
-            {sorted.map((request) => (
+            {actionable.map((request) => (
               <li key={request.id} className="host-requests-workspace__row">
                 <div className="host-requests-workspace__meta">
                   <strong>{request.title}</strong>
@@ -185,38 +190,22 @@ const HostRequestsPanel: React.FC<HostRequestsPanelProps> = ({
                   </span>
                 </div>
                 <div className="host-requests-workspace__actions">
-                  {request.status === 'pending' ? (
-                    <>
-                      <button
-                        type="button"
-                        className="host-playlist-quick-add"
-                        disabled={busyRequestId === request.id}
-                        onClick={() => onModerate(request, 'approved')}
-                      >
-                        Find &amp; approve
-                      </button>
-                      <button
-                        type="button"
-                        className="host-playlist-quick-add"
-                        disabled={busyRequestId === request.id}
-                        onClick={() => onModerate(request, 'rejected')}
-                      >
-                        Reject
-                      </button>
-                    </>
-                  ) : (
-                    <span
-                      className={
-                        request.status === 'approved'
-                          ? 'host-requests-workspace__status host-requests-workspace__status--approved'
-                          : 'host-requests-workspace__status host-requests-workspace__status--rejected'
-                      }
-                    >
-                      {request.status === 'approved'
-                        ? `Approved${request.resolvedSong ? ` as ${request.resolvedSong.name}` : ''}`
-                        : 'Rejected'}
-                    </span>
-                  )}
+                  <button
+                    type="button"
+                    className="host-playlist-quick-add"
+                    disabled={busyRequestId === request.id}
+                    onClick={() => onModerate(request, 'approved')}
+                  >
+                    Find &amp; approve
+                  </button>
+                  <button
+                    type="button"
+                    className="host-playlist-quick-add"
+                    disabled={busyRequestId === request.id}
+                    onClick={() => onModerate(request, 'rejected')}
+                  >
+                    Reject
+                  </button>
                   <button
                     type="button"
                     className="host-requests-workspace__remove"
@@ -254,6 +243,59 @@ const HostRequestsPanel: React.FC<HostRequestsPanelProps> = ({
           </ul>
         )}
       </section>
+
+      {done.length > 0 ? (
+        <section className="host-glass-panel host-requests-workspace__done" aria-label="Handled requests">
+          <details className="host-requests-workspace__done-details">
+            <summary className="host-requests-workspace__done-summary">
+              Done ({done.length})
+              <span className="host-requests-workspace__done-hint">Approved &amp; rejected — expand to review</span>
+            </summary>
+            <ul className="host-requests-workspace__list host-requests-workspace__list--done">
+              {done.map((request) => (
+                <li key={request.id} className="host-requests-workspace__row">
+                  <div className="host-requests-workspace__meta">
+                    <strong>{request.title}</strong>
+                    {request.artist ? <span>— {request.artist}</span> : null}
+                    <span
+                      className="host-requests-workspace__from"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    >
+                      from <PlayerAvatar avatar={request.avatar} name={request.playerName} size="sm" />
+                      {request.playerName}
+                      {request.fromHost ? ' (host)' : ''}
+                    </span>
+                  </div>
+                  <div className="host-requests-workspace__actions">
+                    <span
+                      className={
+                        request.status === 'approved'
+                          ? 'host-requests-workspace__status host-requests-workspace__status--approved'
+                          : 'host-requests-workspace__status host-requests-workspace__status--rejected'
+                      }
+                    >
+                      {request.status === 'approved'
+                        ? `Approved${request.resolvedSong ? ` as ${request.resolvedSong.name}` : ''}`
+                        : 'Rejected'}
+                    </span>
+                    <button
+                      type="button"
+                      className="host-requests-workspace__remove"
+                      disabled={busyRequestId === request.id}
+                      title="Remove this request"
+                      aria-label={`Remove request ${request.title}`}
+                      onClick={() => onRemove(request)}
+                    >
+                      <Trash2 aria-hidden />
+                      Remove
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </details>
+        </section>
+      ) : null}
     </div>
   );
 };

@@ -14,7 +14,10 @@ export type RoundTimelineRow = {
   songCount?: number;
   playlistNames?: string[];
   saved: boolean;
+  /** Live / next-up pointer for Start Game. */
   isCurrent: boolean;
+  /** UI focus for settings/library (may differ from live pointer mid-show). */
+  isSelected?: boolean;
   /** Optional prize label for this round. */
   prize?: string;
 };
@@ -257,9 +260,12 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                     : undefined
               }
               className={[
-                r.isCurrent
+                r.isSelected || r.isCurrent
                   ? 'host-round-timeline__chip host-round-timeline__chip--current'
                   : 'host-round-timeline__chip',
+                r.isSelected && !r.isCurrent
+                  ? 'host-round-timeline__chip--settings-focus'
+                  : '',
                 chipDraggable ? 'host-round-timeline__chip--draggable' : '',
                 draggingRound === r.index ? 'host-round-timeline__chip--dragging' : '',
                 moveLocked && canReorder ? 'host-round-timeline__chip--move-locked' : '',

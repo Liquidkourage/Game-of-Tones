@@ -55,7 +55,6 @@ import type { PatternCompositeSpec, PatternCompositeClause } from '../patternDef
 import {
   normalizePatternComposite,
   unionCompositeHighlightPositions,
-  compositeShapeClausesUseUnionHighlight,
   normalizeLinesRequired,
   customMaskHighlightPositions,
   LINE_PATTERN_MAX_LINES,
@@ -80,6 +79,27 @@ function samePosSet(prev: Set<string>, nextList: readonly string[]): boolean {
 
 /** Public-facing domain shown on the projector splash ("Go to …"). Display copy only — the QR code still encodes this deployment's real /player/:roomId URL. */
 const PUBLIC_DISPLAY_JOIN_DOMAIN = 'TempoMusicBingo.com';
+
+/** Prefer same-origin proxy; host panel uses qrserver directly when the proxy 502s. */
+function proxiedQrImgSrc(data: string, size: number): string {
+  return `${API_BASE || ''}/api/qr?size=${size}&data=${encodeURIComponent(data)}`;
+}
+
+function directQrServerImgSrc(data: string, size: number): string {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(data)}`;
+}
+
+/** One-shot fallback when Railway → qrserver fails (Google Chart fallback on /api/qr is dead). */
+function onProxiedQrImgError(
+  ev: React.SyntheticEvent<HTMLImageElement>,
+  data: string,
+  size: number,
+): void {
+  const img = ev.currentTarget;
+  if (!data || img.dataset.qrFallback === '1') return;
+  img.dataset.qrFallback = '1';
+  img.src = directQrServerImgSrc(data, size);
+}
 
 const FULL_CARD_PULSE_DURATION_SEC = 1.28;
 
@@ -110,6 +130,24 @@ const LINE_PREDICATE_COUNT = WINNING_LINE_PREDICATES.length;
 
 /** Distinct projector hues for combined-pattern clauses (grid + chip accents). */
 const COMPOSITE_CLAUSE_COLOR_SLOTS = 6;
+
+/** Solid fills / borders for overlap cells (must match `.composite-clause-color-*` hues). */
+const COMPOSITE_CLAUSE_FILLS: readonly string[] = [
+  'rgba(74, 222, 128, 0.62)',
+  'rgba(56, 189, 248, 0.58)',
+  'rgba(250, 204, 21, 0.58)',
+  'rgba(232, 121, 249, 0.56)',
+  'rgba(165, 180, 252, 0.58)',
+  'rgba(251, 146, 60, 0.58)',
+];
+const COMPOSITE_CLAUSE_BORDERS: readonly string[] = [
+  '#22c55e',
+  '#38bdf8',
+  '#facc15',
+  '#e879f9',
+  '#a5b4fc',
+  '#fb923c',
+];
 
 const LINE_PREDICATE_DISPLAY_LABELS: readonly string[] = [
   'Top row',
@@ -1717,7 +1755,9 @@ const PublicDisplay: React.FC = () => {
   const compositeDemoCycleMs = useMemo(() => {
     const n = compositeDemoSequences.length;
     if (n < 2) return 1200;
-    return Math.min(1700, Math.max(760, 640 + n * 38));
+    // Few frames (e.g. shape OR shape): linger so each clause reads fully before flipping.
+    const floor = n <= 4 ? 1200 : 760;
+    return Math.min(1800, Math.max(floor, 640 + n * 38));
   }, [compositeDemoSequences]);
   const revealToastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [showWinnerBanner, setShowWinnerBanner] = useState<boolean>(false);
@@ -4429,10 +4469,7 @@ const PublicDisplay: React.FC = () => {
       return true;
     }
     if (pattern === 'composite' && patternComposite) {
-      if (compositeShapeClausesUseUnionHighlight(patternComposite)) {
-        return unionCompositeHighlightPositions(patternComposite).includes(`${row}-${col}`);
-      }
-      // Cycle one concrete demo frame at a time (line / multi-example clauses).
+      // Always cycle one clause/example at a time when we have 2+ frames (all of 1, then all of 2, …).
       if (compositeDemoSequences.length >= 2) {
         const frame =
           compositeDemoSequences[
@@ -4599,16 +4636,10 @@ const PublicDisplay: React.FC = () => {
         const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
 
         let compositeClauseColorClass = '';
+        let compositeOverlapStyle: React.CSSProperties | undefined;
         if (pattern === 'composite' && patternComposite && isWinningLine) {
           const posKey = `${row}-${col}`;
-          if (compositeShapeClausesUseUnionHighlight(patternComposite)) {
-            patternComposite.clauses.forEach((clause, clauseIndex) => {
-              if (compositeClauseColorClass) return;
-              if (clauseHighlightPositions(clause).includes(posKey)) {
-                compositeClauseColorClass = ` composite-clause-color-${clauseIndex % COMPOSITE_CLAUSE_COLOR_SLOTS}`;
-              }
-            });
-          } else if (compositeDemoSequences.length >= 2) {
+          if (compositeDemoSequences.length >= 2) {
             const frame =
               compositeDemoSequences[
                 compositeDemoSequences.length === 0
@@ -4619,7 +4650,29 @@ const PublicDisplay: React.FC = () => {
               compositeClauseColorClass = ` composite-clause-color-${frame.clauseIndex % COMPOSITE_CLAUSE_COLOR_SLOTS}`;
             }
           } else {
-            compositeClauseColorClass = ' composite-clause-color-0';
+            // Fallback when not cycling: color by clause(s); squares in 2+ get a diagonal split.
+            const matchingSlots: number[] = [];
+            for (let clauseIndex = 0; clauseIndex < patternComposite.clauses.length; clauseIndex++) {
+              const clause = patternComposite.clauses[clauseIndex];
+              if (clauseHighlightPositions(clause).includes(posKey)) {
+                matchingSlots.push(clauseIndex % COMPOSITE_CLAUSE_COLOR_SLOTS);
+              }
+            }
+            if (matchingSlots.length >= 2) {
+              const a = matchingSlots[0];
+              const b = matchingSlots[1];
+              compositeClauseColorClass = ' composite-clause-overlap';
+              compositeOverlapStyle = {
+                ['--composite-overlap-a' as string]: COMPOSITE_CLAUSE_FILLS[a],
+                ['--composite-overlap-b' as string]: COMPOSITE_CLAUSE_FILLS[b],
+                ['--composite-overlap-border-a' as string]: COMPOSITE_CLAUSE_BORDERS[a],
+                ['--composite-overlap-border-b' as string]: COMPOSITE_CLAUSE_BORDERS[b],
+              };
+            } else if (matchingSlots.length === 1) {
+              compositeClauseColorClass = ` composite-clause-color-${matchingSlots[0]}`;
+            } else {
+              compositeClauseColorClass = ' composite-clause-color-0';
+            }
           }
         }
 
@@ -4629,9 +4682,7 @@ const PublicDisplay: React.FC = () => {
           isWinningLine &&
           !pulseFullCardFamily &&
           (pattern === 'custom' ||
-            (pattern === 'composite' &&
-              (compositeShapeClausesUseUnionHighlight(patternComposite) ||
-                compositeDemoSequences.length < 2)));
+            (pattern === 'composite' && compositeDemoSequences.length < 2));
 
         const fullCardPulseDelay = pulseFullCardFamily ? fullCardPulseDelaySec(row, col) : 0;
 
@@ -4639,6 +4690,7 @@ const PublicDisplay: React.FC = () => {
           <motion.div
             key={`${row}-${col}`}
             className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}${linePatternDemoClass}${compositeClauseColorClass}`}
+            style={compositeOverlapStyle}
             initial={{ opacity: 0 }}
             animate={{
               opacity: 1,
@@ -5706,8 +5758,9 @@ const PublicDisplay: React.FC = () => {
                 }}
               >
                 <img
-                  src={`${API_BASE || ''}/api/qr?size=640&data=${encodeURIComponent(sponsorScreen.qrUrl.trim())}`}
+                  src={proxiedQrImgSrc(sponsorScreen.qrUrl.trim(), 640)}
                   alt="Sponsor QR code"
+                  onError={(ev) => onProxiedQrImgError(ev, sponsorScreen.qrUrl.trim(), 640)}
                   style={{
                     width: 'min(28vw, 280px)',
                     height: 'min(28vw, 280px)',
@@ -6366,7 +6419,8 @@ const PublicDisplay: React.FC = () => {
                       <div className="public-display-splash-join-card__qr-wrap">
                         <img
                           alt="Join QR"
-                          src={`${API_BASE || ''}/api/qr?size=960&data=${encodeURIComponent(playerJoinUrl)}`}
+                          src={proxiedQrImgSrc(playerJoinUrl, 960)}
+                          onError={(ev) => onProxiedQrImgError(ev, playerJoinUrl, 960)}
                         />
                       </div>
                     </div>
@@ -6767,7 +6821,8 @@ const PublicDisplay: React.FC = () => {
                         borderRadius: 8, 
                         border: '1px solid rgba(255,255,255,0.15)' 
                       }}
-                      src={`${API_BASE || ''}/api/qr?size=960&data=${encodeURIComponent(playerJoinUrl)}`}
+                      src={proxiedQrImgSrc(playerJoinUrl, 960)}
+                      onError={(ev) => onProxiedQrImgError(ev, playerJoinUrl, 960)}
                     />
                     <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#ddd', lineHeight: 1 }}>Scan to join</div>
                 </div>

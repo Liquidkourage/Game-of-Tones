@@ -394,6 +394,20 @@
   background: #00ff88;
 }
 
+/* Shared by 2+ composite clauses: hard diagonal of both clause hues */
+.host-ui .host-pattern-mini-preview__cell--overlap,
+.host-view .host-pattern-mini-preview__cell--overlap {
+  background: linear-gradient(
+    135deg,
+    var(--mini-overlap-a, rgba(74, 222, 128, 0.85)) 0%,
+    var(--mini-overlap-a, rgba(74, 222, 128, 0.85)) 49.5%,
+    var(--mini-overlap-b, rgba(56, 189, 248, 0.85)) 50.5%,
+    var(--mini-overlap-b, rgba(56, 189, 248, 0.85)) 100%
+  ) !important;
+  border-color: var(--mini-overlap-border-a, #22c55e) !important;
+  box-shadow: inset -1px -1px 0 0 var(--mini-overlap-border-b, #38bdf8);
+}
+
 /* Tiny preview inside saved-shape chips */
 .host-ui .host-pattern-mini-preview--chip,
 .host-view .host-pattern-mini-preview--chip {

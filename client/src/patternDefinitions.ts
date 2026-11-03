@@ -851,7 +851,10 @@ export function unionCompositeHighlightPositions(spec: PatternCompositeSpec | nu
   return Array.from(u).sort();
 }
 
-/** Shape-only composite (e.g. T + painted box) — projector/player highlight the union, not one clause at a time. */
+/**
+ * Shape-only composite (e.g. T + painted box).
+ * Host mini-preview can show the union (with diagonal overlaps); the projector cycles clauses instead.
+ */
 export function compositeShapeClausesUseUnionHighlight(
   spec: PatternCompositeSpec | null | undefined,
 ): boolean {
