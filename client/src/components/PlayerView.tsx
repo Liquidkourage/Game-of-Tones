@@ -405,8 +405,9 @@ const PlayerView: React.FC = () => {
   const [tipOpen, setTipOpen] = useState(false);
   const [tipAmountCents, setTipAmountCents] = useState(500);
   const [tipCustomDollars, setTipCustomDollars] = useState('');
-  const [tipStatus, setTipStatus] = useState<'idle' | 'checkout' | 'error'>('idle');
+  const [tipStatus, setTipStatus] = useState<'idle' | 'checkout' | 'error' | 'venmo-copied'>('idle');
   const [tipError, setTipError] = useState('');
+  const [tipVenmoHandle, setTipVenmoHandle] = useState('');
   const [hybridPrizeInPersonOnly, setHybridPrizeInPersonOnly] = useState(false);
   const wasReconnectingRef = useRef<boolean>(false);
   const [gameState, setGameState] = useState<GameState>({
@@ -3232,7 +3233,9 @@ const PlayerView: React.FC = () => {
                                 style={{ marginBottom: 6 }}
                               >
                                 Opens with {amountLabel} when the app supports it.
-                                {venmoUser ? ` Venmo To: @${venmoUser}` : ''}
+                                {venmoUser
+                                  ? ' Venmo leaves To blank — we copy the @handle for you to paste.'
+                                  : ''}
                               </div>
                               <div
                                 style={{
@@ -3248,9 +3251,18 @@ const PlayerView: React.FC = () => {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     onClick={(e) => {
-                                      // Prefer native scheme so To can prefill; https is fallback.
                                       e.preventDefault();
-                                      openVenmoTip(venmoSaved, tipAmountCents, tipNote);
+                                      void (async () => {
+                                        const { handle } = await openVenmoTip(
+                                          venmoSaved,
+                                          tipAmountCents,
+                                          tipNote,
+                                        );
+                                        if (handle) {
+                                          setTipVenmoHandle(handle);
+                                          setTipStatus('venmo-copied');
+                                        }
+                                      })();
                                     }}
                                   >
                                     Venmo {amountLabel}
@@ -3290,6 +3302,11 @@ const PlayerView: React.FC = () => {
                             </div>
                           );
                         })()}
+                        {tipStatus === 'venmo-copied' && tipVenmoHandle ? (
+                          <span className="player-v2-feedback-status" role="status">
+                            Copied {tipVenmoHandle} — paste into Venmo’s To field.
+                          </span>
+                        ) : null}
                         {tipStatus === 'error' ? (
                           <span
                             className="player-v2-feedback-status player-v2-feedback-status--error"
