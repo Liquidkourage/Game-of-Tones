@@ -6295,7 +6295,15 @@ const HostView: React.FC = () => {
       addLog(`Finalize blocked: ${playlists.length} playlists selected — rounds need 1 or 5.`, 'warn');
       return false;
     }
-    const freeSpaceForPayload = opts?.freeSpace ?? freeSpaceEnabled;
+    const activeRoundForFs =
+      currentRoundIndexRef.current >= 0
+        ? eventRoundsRef.current[currentRoundIndexRef.current]
+        : null;
+    const freeSpaceForPayload =
+      opts?.freeSpace ??
+      (activeRoundForFs?.freeSpaceEnabled !== undefined
+        ? activeRoundForFs.freeSpaceEnabled
+        : freeSpaceEnabled);
 
     const targetKey = selectionPlaylistKey(playlists);
     const uiKey = selectionPlaylistKey(mixPlaylistSelection);
@@ -7006,7 +7014,11 @@ const HostView: React.FC = () => {
       if (!useSavedRoundPlayback && !mixFinalized) {
         addLog('Finalizing mix before start...', 'info');
         // Pass ordered playlists explicitly — default mix concat can scramble column order.
-        const ok = await finalizeMix({ playlists: playlistsForStart });
+        // Use this round's Free center (not only the host default toggle).
+        const ok = await finalizeMix({
+          playlists: playlistsForStart,
+          freeSpace: freeSpaceForStart,
+        });
         if (!ok) {
           alert(
             'Could not finalize the mix in time. Try Show Playlists, wait for the confirmation, then Start Game.'

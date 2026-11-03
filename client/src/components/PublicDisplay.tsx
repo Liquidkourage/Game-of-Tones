@@ -872,16 +872,25 @@ function mergeRevealSequences(
   return local.length >= incoming.length ? local : [...incoming];
 }
 
-/** Never raise baselines — higher baseline blanks already-revealed letters on call cards. */
+/**
+ * Default merge: never raise baselines — a higher value blanks letters already shown on cards
+ * (dual-display races). Call-time stamps use raiseBaselineIds so a correct higher baseline can win
+ * over a stale 0 from room-state backfill.
+ */
 function mergeSongBaselinesPreferLower(
   existing: Record<string, number>,
   incoming: Record<string, number>,
+  raiseIds?: ReadonlySet<string> | null,
 ): Record<string, number> {
   const out: Record<string, number> = { ...existing };
   for (const [songId, baseline] of Object.entries(incoming)) {
     if (typeof baseline !== 'number' || !Number.isFinite(baseline)) continue;
     const floor = Math.max(0, Math.floor(baseline));
     const prev = out[songId];
+    if (raiseIds?.has(songId)) {
+      out[songId] = typeof prev === 'number' && Number.isFinite(prev) ? Math.max(prev, floor) : floor;
+      continue;
+    }
     out[songId] = typeof prev === 'number' && Number.isFinite(prev) ? Math.min(prev, floor) : floor;
   }
   return out;
@@ -1447,6 +1456,8 @@ const PublicDisplay: React.FC = () => {
     revealSeqEpochRef.current = 0;
     pendingRevealHealRef.current = false;
     lastRoomStatePlayedSyncTsRef.current = 0;
+    authoredCallBaselineRef.current = new Set();
+    pendingRaiseBaselineIdsRef.current = new Set();
   }, [roomId]);
 
   /** One-time read: migrate pre-server localStorage into room state on reconnect. */
@@ -1478,10 +1489,26 @@ const PublicDisplay: React.FC = () => {
   /** Set when 1×75 carousel snaps after a forward loop so server accepts the lower index. */
   const pendingCarouselWrapRef = useRef(false);
 
-  const syncRevealStateToServer = (opts?: { forceClear?: boolean; carouselWrap?: boolean }) => {
+  /**
+   * Song ids whose baseline was stamped by song-playing (or intentional letter reset).
+   * Prevents room-state backfill / prefer-lower echoes from locking a stale 0 over the call stamp.
+   */
+  const authoredCallBaselineRef = useRef<Set<string>>(new Set());
+  const pendingRaiseBaselineIdsRef = useRef<Set<string>>(new Set());
+
+  const syncRevealStateToServer = (opts?: {
+    forceClear?: boolean;
+    carouselWrap?: boolean;
+    raiseBaselineIds?: string[];
+  }) => {
     if (!roomId || !socketRef.current || applyingServerRevealRef.current) return;
     if (!revealStateHydratedRef.current && !opts?.forceClear) return;
     if (opts?.carouselWrap === true) pendingCarouselWrapRef.current = true;
+    if (opts && Array.isArray(opts.raiseBaselineIds)) {
+      for (const id of opts.raiseBaselineIds) {
+        if (id) pendingRaiseBaselineIdsRef.current.add(id);
+      }
+    }
     if (revealSyncTimerRef.current) clearTimeout(revealSyncTimerRef.current);
     revealSyncTimerRef.current = setTimeout(() => {
       revealSyncTimerRef.current = null;
@@ -1490,6 +1517,8 @@ const PublicDisplay: React.FC = () => {
       pendingRevealHealRef.current = false;
       const carouselWrap = pendingCarouselWrapRef.current;
       pendingCarouselWrapRef.current = false;
+      const raiseBaselineIds = Array.from(pendingRaiseBaselineIdsRef.current);
+      pendingRaiseBaselineIdsRef.current.clear();
       persistRevealStateLocally();
       socketRef.current.emit('display-reveal-state-update', {
         roomId,
@@ -1499,6 +1528,7 @@ const PublicDisplay: React.FC = () => {
         seqEpoch: revealSeqEpochRef.current,
         forceClear: opts?.forceClear === true,
         carouselWrap,
+        ...(raiseBaselineIds.length > 0 ? { raiseBaselineIds } : {}),
       });
     }, 200);
   };
@@ -1890,9 +1920,11 @@ const PublicDisplay: React.FC = () => {
           if (takeWholesale) {
             songBaselineRef.current = { ...state.songBaselines };
           } else {
+            // Keep call-time stamps above stale lower values (e.g. backfill 0) from other displays.
             songBaselineRef.current = mergeSongBaselinesPreferLower(
               songBaselineRef.current,
               state.songBaselines,
+              authoredCallBaselineRef.current,
             );
           }
         }
@@ -1987,6 +2019,8 @@ const PublicDisplay: React.FC = () => {
       resetPlayedTrackingRefs();
       revealSequenceRef.current = [];
       songBaselineRef.current = {};
+      authoredCallBaselineRef.current = new Set();
+      pendingRaiseBaselineIdsRef.current = new Set();
       try {
         localStorage.removeItem(`display_revealed_letters_${roomId}`);
         localStorage.removeItem(`display_baselines_${roomId}`);
@@ -2374,23 +2408,25 @@ const PublicDisplay: React.FC = () => {
           hydrateRevealStateFromRoom(payload, wasReconnecting);
 
           // After server reveal hydrate: backfill baselines for played songs still missing one.
-          // Use 0 (not current sequence length) — backfilling to "now" blanks all prior letters.
+          // Use current reveal-log length (fully masked for "just appeared" ids) — never 0.
+          // Backfilling to 0 applied the whole night's alphabet and caused Poppies-style full reveals.
           if (
             (wasReconnecting || hadMismatch) &&
             Array.isArray(playedIdsForBaselineSync) &&
             playedIdsForBaselineSync.length > 0
           ) {
+            const cutoff = revealSequenceRef.current.length;
             const newBaselines: Record<string, number> = {};
             playedIdsForBaselineSync.forEach((songId: string) => {
               if (songBaselineRef.current[songId] === undefined) {
-                newBaselines[songId] = 0;
+                newBaselines[songId] = cutoff;
               }
             });
             if (Object.keys(newBaselines).length > 0) {
               songBaselineRef.current = { ...songBaselineRef.current, ...newBaselines };
               setRevealLayoutNonce((n) => n + 1);
               console.log(
-                `✅ Set baselines for ${Object.keys(newBaselines).length} played songs (post-hydrate, cutoff=0)`,
+                `✅ Set baselines for ${Object.keys(newBaselines).length} played songs (post-hydrate, cutoff=${cutoff})`,
               );
               syncRevealStateToServer();
             }
@@ -2582,6 +2618,7 @@ const PublicDisplay: React.FC = () => {
             resetPlayedTrackingRefs();
             revealSequenceRef.current = [];
             songBaselineRef.current = {};
+            authoredCallBaselineRef.current = new Set();
           } else {
             console.log(
               `🔄 fiveby15-pool: keeping ${playedOrderRef.current.length} played song(s) in call-list order`,
@@ -2827,16 +2864,24 @@ const PublicDisplay: React.FC = () => {
           const col = idToColumnRef.current[song.id];
           try { console.log('[Display] song-playing', { index: currentIndexRef.current, id: song.id, col, name: song.name }); } catch {}
         }
-        // Set baseline when song starts so letters revealed before it started stay hidden on that song
-        // BUG #3 FIX: Always set baseline to current length, even if reset just happened
-        // This ensures songs starting right after reset get correct baseline (0)
+        // Set baseline when song starts so letters revealed before it started stay hidden on that song.
+        // Room-state can stamp a too-low value (historically 0) before this event; call-time stamp must win.
         const currentBaseline = revealSequenceRef.current.length;
-        if (isNewCall || songBaselineRef.current[song.id] === undefined || isResettingRef.current) {
+        const existingBaseline = songBaselineRef.current[song.id];
+        const needsCallStamp =
+          isNewCall ||
+          existingBaseline === undefined ||
+          isResettingRef.current ||
+          (!authoredCallBaselineRef.current.has(song.id) &&
+            typeof existingBaseline === 'number' &&
+            existingBaseline < currentBaseline);
+        if (needsCallStamp) {
           songBaselineRef.current[song.id] = currentBaseline;
+          authoredCallBaselineRef.current.add(song.id);
           setRevealLayoutNonce((n) => n + 1);
-          syncRevealStateToServer(); // Persist baseline change
+          syncRevealStateToServer({ raiseBaselineIds: [song.id] });
           console.log(
-            `📝 Set baseline for song ${song.id} to ${currentBaseline} (newCall=${isNewCall}, reset=${isResettingRef.current})`,
+            `📝 Set baseline for song ${song.id} to ${currentBaseline} (newCall=${isNewCall}, reset=${isResettingRef.current}, raise=true)`,
           );
         }
       }
@@ -3016,8 +3061,12 @@ const PublicDisplay: React.FC = () => {
       revealSequenceRef.current = [];
       const playedIds = playedOrderRef.current || [];
       const newBaselines: Record<string, number> = {};
+      // Intentional reset: baseline 0 for already-called songs, and lock those stamps so
+      // song-playing does not "heal" them upward and blank post-reset letters.
+      authoredCallBaselineRef.current = new Set();
       playedIds.forEach((pid: string) => {
         newBaselines[pid] = 0;
+        authoredCallBaselineRef.current.add(pid);
       });
       songBaselineRef.current = newBaselines;
       
@@ -3278,6 +3327,7 @@ const PublicDisplay: React.FC = () => {
       // Clear reveal state
       revealSequenceRef.current = [];
       songBaselineRef.current = {};
+      authoredCallBaselineRef.current = new Set();
       try {
         localStorage.removeItem(`display_revealed_letters_${roomId}`);
         localStorage.removeItem(`display_baselines_${roomId}`);
@@ -3327,6 +3377,7 @@ const PublicDisplay: React.FC = () => {
       // Clear all reveal state
       revealSequenceRef.current = [];
       songBaselineRef.current = {};
+      authoredCallBaselineRef.current = new Set();
       try {
         localStorage.removeItem(`display_revealed_letters_${roomId}`);
         localStorage.removeItem(`display_baselines_${roomId}`);
@@ -3360,6 +3411,7 @@ const PublicDisplay: React.FC = () => {
       console.log('🔁 Game reset (display)');
       revealSequenceRef.current = [];
       songBaselineRef.current = {};
+      authoredCallBaselineRef.current = new Set();
       // Clear persisted state for new round
       try {
         localStorage.removeItem(`display_revealed_letters_${roomId}`);

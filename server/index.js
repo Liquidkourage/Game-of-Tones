@@ -3587,13 +3587,24 @@ function revealSequenceExtends(existing, incoming) {
   return true;
 }
 
-function mergeSongBaselinesPreferLower(existing, incoming) {
+function mergeSongBaselinesPreferLower(existing, incoming, raiseIds) {
   const out = { ...(existing && typeof existing === 'object' ? existing : {}) };
   if (!incoming || typeof incoming !== 'object') return out;
+  const raise =
+    raiseIds instanceof Set
+      ? raiseIds
+      : Array.isArray(raiseIds)
+        ? new Set(raiseIds.filter((id) => typeof id === 'string' && id))
+        : null;
   for (const [songId, baseline] of Object.entries(incoming)) {
     if (typeof songId !== 'string' || typeof baseline !== 'number' || !Number.isFinite(baseline)) continue;
     const floor = Math.max(0, Math.floor(baseline));
     const prev = out[songId];
+    if (raise && raise.has(songId)) {
+      // Call-time stamp: allow a correct higher baseline to beat a stale lower (e.g. backfill 0).
+      out[songId] = typeof prev === 'number' && Number.isFinite(prev) ? Math.max(prev, floor) : floor;
+      continue;
+    }
     // Lower baseline = more revealed letters stay visible. Never raise (that blanks cards).
     out[songId] = typeof prev === 'number' && Number.isFinite(prev) ? Math.min(prev, floor) : floor;
   }
@@ -5891,12 +5902,32 @@ function hostFinalizeNeedsPlaylistRefinal(room, playlists, freeSpace) {
   return false;
 }
 
+/** True when any dealt player card disagrees with the free-center flag for this start. */
+function dealtCardsMismatchFreeSpace(room, wantFreeSpace) {
+  if (!room?.bingoCards || room.bingoCards.size === 0) return false;
+  const want = !!wantFreeSpace;
+  for (const [playerId, raw] of room.bingoCards.entries()) {
+    const player = room.players?.get(playerId);
+    if (!player || player.isHost || player.name === 'Display' || isDisplayConnectionPlayer(player)) {
+      continue;
+    }
+    const list = playerBingoCards.asBingoCardList(raw);
+    if (!list.length) continue;
+    for (const card of list) {
+      if (bingoCardHasFreeCenter(card) !== want) return true;
+    }
+  }
+  return false;
+}
+
 /** True when start-game should build a new deck (not when prep finalize already dealt cards). */
 function shouldRegenerateBingoCardsOnStartGame(room, playlists, freeSpace, opts = {}) {
   const { useSavedRoundPlayback = false, deckSourceIds = null, savedRoundCardKey = null } = opts;
   if (!room?.bingoCards || room.bingoCards.size === 0) return true;
   if (!room.mixFinalized) return true;
   if (hostFinalizeNeedsPlaylistRefinal(room, playlists, freeSpace)) return true;
+  // Prep may have toggled Free center after cards were dealt (or reused a snapshot without FREE).
+  if (freeSpace !== undefined && dealtCardsMismatchFreeSpace(room, freeSpace)) return true;
 
   // Saved-round Start: keep prep-dealt cards when they still match this round's song set.
   // (Previously always regenerated, which dealt new grids after Load for prep.)
@@ -9797,6 +9828,11 @@ io.on('connection', (socket) => {
         } else {
           room.activeSavedRoundCardKey = null;
         }
+        // Apply Start Game free-center before regen checks — previously only set inside
+        // forceRegenerate, so skip-regen starts could keep no-FREE cards while the round wanted FREE.
+        if (freeSpace !== undefined) {
+          room.freeSpaceEnabled = !!freeSpace;
+        }
         const forceRegenerateCards = shouldRegenerateBingoCardsOnStartGame(
           room,
           playlists,
@@ -9907,6 +9943,26 @@ io.on('connection', (socket) => {
           routineServerLog(
             '🛑 Skipping full card regeneration (mix finalized, cards already exist — same playlists/free-center as prep)',
           );
+          // Belt-and-suspenders: repair FREE centers if flag is on but a card was dealt without it.
+          if (room.freeSpaceEnabled) {
+            for (const [playerId, player] of room.players.entries()) {
+              if (
+                !player ||
+                player.isHost ||
+                player.name === 'Display' ||
+                isDisplayConnectionPlayer(player)
+              ) {
+                continue;
+              }
+              const have = resolveActivePlayerCards(room, player, playerId);
+              if (have.length && have.some((c) => !bingoCardHasFreeCenter(c))) {
+                storePlayerBingoCards(room, playerId, player, have);
+                const fixed = resolveActivePlayerCards(room, player, playerId);
+                emitBingoCardsToSocket(playerId, fixed, { isNewCard: false, room });
+                void persistPlayerDataCard(room, player, fixed);
+              }
+            }
+          }
           // Host may have changed cards-per-player after finalize — pad/trim to N.
           if (playersNeedBingoCardCountSync(room)) {
             routineServerLog(
@@ -10970,7 +11026,11 @@ io.on('connection', (socket) => {
         if (data.forceClear === true) {
           state.songBaselines = nextBaselines;
         } else if (Object.keys(nextBaselines).length > 0) {
-          state.songBaselines = mergeSongBaselinesPreferLower(state.songBaselines, nextBaselines);
+          state.songBaselines = mergeSongBaselinesPreferLower(
+            state.songBaselines,
+            nextBaselines,
+            data.raiseBaselineIds,
+          );
         }
       }
       if (typeof carouselIndex === 'number' && Number.isFinite(carouselIndex) && !staleEpoch) {
