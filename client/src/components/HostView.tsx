@@ -1805,6 +1805,12 @@ const HostView: React.FC = () => {
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
   const [spotifyJamActive, setSpotifyJamActive] = useState(false);
   const [venueSpotifyJamMode, setVenueSpotifyJamMode] = useState(false);
+  /** Opt-in: auto-push "Played — …" Spotify playlists at round end (default off). */
+  const [autoCreatePlayedSpotifyPlaylist, setAutoCreatePlayedSpotifyPlaylist] = useState(false);
+  const autoCreatePlayedSpotifyPlaylistRef = useRef(false);
+  useEffect(() => {
+    autoCreatePlayedSpotifyPlaylistRef.current = autoCreatePlayedSpotifyPlaylist;
+  }, [autoCreatePlayedSpotifyPlaylist]);
   const [activateDeviceBusy, setActivateDeviceBusy] = useState(false);
 
   const playbackDeviceNotInList = useMemo(() => {
@@ -8652,18 +8658,22 @@ const HostView: React.FC = () => {
         new Set(songs.map((s) => s.id).filter((id) => isLikelySpotifyTrackId(id))),
       );
 
+      const autoSpotify = autoCreatePlayedSpotifyPlaylistRef.current;
       setRoundPlayedPlaylistUi({
         creating: false,
         count: songs.length,
         skippedReason:
           spotifyIds.length === 0
             ? 'Played list saved. Spotify playlist skipped (no Spotify track ids — e.g. YouTube/Apple night).'
-            : !readHostSpotifyWebEnabled() || !isSpotifyConnectedRef.current
-              ? 'Played list saved. Connect Spotify to auto-create a playlist.'
-              : undefined,
+            : !autoSpotify
+              ? 'Played list saved. Auto Spotify playlist is off — turn it on in Settings, or use Round call order → Spotify.'
+              : !readHostSpotifyWebEnabled() || !isSpotifyConnectedRef.current
+                ? 'Played list saved. Connect Spotify to auto-create a playlist.'
+                : undefined,
       });
 
       if (spotifyIds.length === 0) return;
+      if (!autoSpotify) return;
       if (!readHostSpotifyWebEnabled() || !isSpotifyConnectedRef.current) return;
       if (playedPlaylistInFlightRef.current.has(roundIndex)) return;
       playedPlaylistInFlightRef.current.add(roundIndex);
@@ -12357,6 +12367,9 @@ const HostView: React.FC = () => {
       }
       if (p.freeSpaceEnabled != null) setFreeSpaceEnabled(p.freeSpaceEnabled);
       if (p.venueSpotifyJamMode != null) setVenueSpotifyJamMode(p.venueSpotifyJamMode);
+      if (p.autoCreatePlayedSpotifyPlaylist != null) {
+        setAutoCreatePlayedSpotifyPlaylist(p.autoCreatePlayedSpotifyPlaylist);
+      }
       if (p.playlistTitleFlags != null) setPlaylistTitleFlags(p.playlistTitleFlags);
       if (p.bingoColumnLetters != null) setBingoColumnLetters(p.bingoColumnLetters);
       if (p.maxPlayerBingoCards != null) setMaxPlayerBingoCards(p.maxPlayerBingoCards);
@@ -12401,6 +12414,7 @@ const HostView: React.FC = () => {
       publicDisplayLetterRevealToast,
       freeSpaceEnabled,
       venueSpotifyJamMode,
+      autoCreatePlayedSpotifyPlaylist,
       playlistTitleFlags,
       bingoColumnLetters: normalizeBingoColumnLetters(bingoColumnLetters) ?? DEFAULT_BINGO_COLUMN_LETTERS,
       maxPlayerBingoCards,
@@ -12448,6 +12462,7 @@ const HostView: React.FC = () => {
     publicDisplayLetterRevealToast,
     freeSpaceEnabled,
     venueSpotifyJamMode,
+    autoCreatePlayedSpotifyPlaylist,
     playlistTitleFlags,
     bingoColumnLetters,
     maxPlayerBingoCards,
@@ -15719,6 +15734,8 @@ const HostView: React.FC = () => {
                 maxPlayerBingoCardsLocked={gameState === 'playing' || gamePaused}
                 gameLayout={gameLayout}
                 onGameLayoutChange={(v) => setGameLayout(normalizeGameLayout(v))}
+                autoCreatePlayedSpotifyPlaylist={autoCreatePlayedSpotifyPlaylist}
+                onAutoCreatePlayedSpotifyPlaylistChange={setAutoCreatePlayedSpotifyPlaylist}
               />
               </div>
             ) : null}

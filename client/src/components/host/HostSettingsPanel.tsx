@@ -134,6 +134,9 @@ type HostSettingsPanelProps = {
   maxPlayerBingoCardsLocked?: boolean;
   gameLayout: GameLayout;
   onGameLayoutChange: (v: GameLayout) => void;
+  /** Opt-in auto Spotify "Played" playlist at round end. */
+  autoCreatePlayedSpotifyPlaylist: boolean;
+  onAutoCreatePlayedSpotifyPlaylistChange: (v: boolean) => void;
 };
 
 const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
@@ -167,6 +170,8 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
   maxPlayerBingoCardsLocked = false,
   gameLayout,
   onGameLayoutChange,
+  autoCreatePlayedSpotifyPlaylist,
+  onAutoCreatePlayedSpotifyPlaylistChange,
 }) => {
   const lettersIncomplete = bingoColumnLetters.length > 0 && bingoColumnLetters.length < 5;
   const letterRevealEnabled = publicDisplayTitleRevealMode === 'letter';
@@ -329,6 +334,22 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
             <span>Hybrid (in-person + online)</span>
           </label>
         </div>
+
+        <div className="host-settings-cockpit__row">
+          <span className="host-settings-cockpit__label">Spotify</span>
+          <label className="host-settings-cockpit__toggle">
+            <input
+              type="checkbox"
+              className="host-control-checkbox"
+              checked={autoCreatePlayedSpotifyPlaylist}
+              onChange={(e) => onAutoCreatePlayedSpotifyPlaylistChange(e.target.checked)}
+            />
+            <span>Auto-create “Played” playlist when a round ends</span>
+          </label>
+        </div>
+        <p className="host-muted" style={{ margin: '0 0 8px', fontSize: '0.78rem', lineHeight: 1.4 }}>
+          Off by default. Manual exports (call order → Spotify, tonight’s played) still work anytime.
+        </p>
       </section>
 
       <section className="host-glass-panel host-settings-cockpit" aria-label="Tip jar">

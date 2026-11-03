@@ -40,6 +40,11 @@ export type HostPreferencesV1 = {
   bingoWinPolicy: BingoWinPolicy;
   /** Host UI layout preset (Game + other tabs). Default classic = full chrome. */
   gameLayout: GameLayout;
+  /**
+   * When true, round-end auto-creates a Spotify "Played — …" playlist.
+   * Default false — host must opt in; manual export buttons still work.
+   */
+  autoCreatePlayedSpotifyPlaylist: boolean;
 };
 
 export function normalizeGameLayout(raw: unknown, fallback: GameLayout = 'classic'): GameLayout {
@@ -91,6 +96,7 @@ export function defaultHostPreferences(): HostPreferencesV1 {
     maxPlayerBingoCards: 1,
     bingoWinPolicy: 'any_round',
     gameLayout: 'classic',
+    autoCreatePlayedSpotifyPlaylist: false,
   };
 }
 
@@ -143,6 +149,10 @@ export function sanitizeHostPreferences(raw: unknown): Partial<HostPreferencesV1
           : undefined,
       gameLayout:
         parsed.gameLayout != null ? normalizeGameLayout(parsed.gameLayout, 'classic') : undefined,
+      autoCreatePlayedSpotifyPlaylist:
+        typeof parsed.autoCreatePlayedSpotifyPlaylist === 'boolean'
+          ? parsed.autoCreatePlayedSpotifyPlaylist
+          : undefined,
     };
 }
 
