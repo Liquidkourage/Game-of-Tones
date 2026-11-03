@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -491,9 +491,9 @@ interface Playlist {
   hasExplicitTracks?: boolean;
   /** Unique tracks loaded this session (may be less than Spotify list total until fetched). */
   tracksLoaded?: number;
-  /** Rows dropped while loading — deleted/null on Spotify. */
+  /** Rows dropped while loading â€” deleted/null on Spotify. */
   tracksRemoved?: number;
-  /** Rows dropped — Spotify marked not playable in host market. */
+  /** Rows dropped â€” Spotify marked not playable in host market. */
   tracksUnplayable?: number;
   unplayableSamples?: Array<{ reason: string; name?: string; artist?: string }>;
   /** Track list loaded via server catalog token (LK-owned allowlisted playlists). */
@@ -521,7 +521,7 @@ function readPlaylistLibraryPageSize(): number {
   return 25;
 }
 
-/** First letter bucket for A–Z jump (non A–Z → "#"). */
+/** First letter bucket for Aâ€“Z jump (non Aâ€“Z â†’ "#"). */
 function playlistLibraryLetterBucket(name: unknown): string {
   const c = String(name || '')
     .trim()
@@ -531,7 +531,7 @@ function playlistLibraryLetterBucket(name: unknown): string {
   return '#';
 }
 
-/** Visible title used for name-sort + A–Z (respects Short names / title-flag strip). */
+/** Visible title used for name-sort + Aâ€“Z (respects Short names / title-flag strip). */
 function playlistLibraryDisplayTitle(
   playlist: { name?: string; tracks?: number },
   stripPrefix: boolean,
@@ -577,7 +577,7 @@ function normalizeWebApiQuarantine(raw: unknown): WebApiQuarantineState {
 
 const MAX_EVENT_ROUNDS = 12;
 
-/** Host DOM toasts — stacked top-right so concurrent messages stay readable. */
+/** Host DOM toasts â€” stacked top-right so concurrent messages stay readable. */
 const HOST_DOM_TOAST_STACK: HTMLDivElement[] = [];
 const HOST_DOM_TOAST_BASE_TOP_PX = 20;
 const HOST_DOM_TOAST_GAP_PX = 10;
@@ -675,7 +675,7 @@ interface Song {
   originPlaylistName?: string;
   /**
    * Real Spotify playlist id for Connect context_uri when sourcePlaylistId is virtual
-   * (__requests__ / __leftovers__). Leftovers preserve the prior round’s playlist here.
+   * (__requests__ / __leftovers__). Leftovers preserve the prior roundâ€™s playlist here.
    */
   spotifyContextPlaylistId?: string;
   /**
@@ -708,7 +708,7 @@ interface EventRound {
   customPatternName?: string;
   /** Required when `bingoPattern === 'composite'` (AND/OR clauses). */
   patternComposite?: PatternCompositeSpec;
-  /** When `bingoPattern === 'line'`: how many distinct rows/columns/diagonals must be complete (1–6). */
+  /** When `bingoPattern === 'line'`: how many distinct rows/columns/diagonals must be complete (1â€“6). */
   linesRequired?: number;
   /** Custom pattern: allow the stored base mask and its logical inverse. */
   customMatchReverse?: boolean;
@@ -716,7 +716,7 @@ interface EventRound {
   customMatchAllowRotation?: boolean;
   /** Custom pattern: allow mirrored placements when matching (stored per round). */
   customMatchAllowMirror?: boolean;
-  /** Custom pattern: painted shape may win at any translated placement on the 5×5. */
+  /** Custom pattern: painted shape may win at any translated placement on the 5Ã—5. */
   customMatchAnywhere?: boolean;
   /** When set, overrides host-wide free-space for this round; omit to inherit the Bingo Pattern checkbox. */
   freeSpaceEnabled?: boolean;
@@ -741,7 +741,7 @@ interface RoundPlayRecap {
   spotifyPlayedPlaylistId?: string;
   spotifyPlayedPlaylistName?: string;
   spotifyPlayedPlaylistUrl?: string;
-  /** Host-requested Spotify playlist of the full #1–N call/play order (not just played). */
+  /** Host-requested Spotify playlist of the full #1â€“N call/play order (not just played). */
   spotifyCallOrderPlaylistId?: string;
   spotifyCallOrderPlaylistName?: string;
   spotifyCallOrderPlaylistUrl?: string;
@@ -786,9 +786,9 @@ function normalizePlayedSongEntry(
 /** Virtual library row built from completed rounds' unplayed tracks. Server-side `isInternalPlaylistId`
  *  (`__x__` ids) already skips Spotify fetches for it; tracks are sent embedded / via songList. */
 const LEFTOVERS_PLAYLIST_ID = '__leftovers__';
-const LEFTOVERS_PLAYLIST_NAME = 'Leftovers — unplayed tonight';
+const LEFTOVERS_PLAYLIST_NAME = 'Leftovers â€” unplayed tonight';
 const REQUESTS_PLAYLIST_ID = '__requests__';
-const REQUESTS_PLAYLIST_NAME = 'Requests — audience picks';
+const REQUESTS_PLAYLIST_NAME = 'Requests â€” audience picks';
 
 function isLeftoversPlaylistId(id: unknown): boolean {
   return String(id ?? '').trim() === LEFTOVERS_PLAYLIST_ID;
@@ -802,8 +802,8 @@ function isMetaPlaylistId(id: unknown): boolean {
   return isLeftoversPlaylistId(id) || isRequestsPlaylistId(id);
 }
 
-/** Tempo round rule: a round uses exactly 1 playlist (Round Mix — one playlist supplies the whole
- *  bingo pool) or exactly 5 (Column mode — one playlist per card column). 0, 2–4, and 6+ are
+/** Tempo round rule: a round uses exactly 1 playlist (Round Mix â€” one playlist supplies the whole
+ *  bingo pool) or exactly 5 (Column mode â€” one playlist per card column). 0, 2â€“4, and 6+ are
  *  invalid: never silently merged, trimmed, or ignored. Enforced at add (cap at 5), Next gate,
  *  Save round, Start, finalize (client + server). */
 function isValidRoundPlaylistCount(count: number): boolean {
@@ -811,23 +811,23 @@ function isValidRoundPlaylistCount(count: number): boolean {
 }
 
 const ROUND_PLAYLIST_RULE_HINT =
-  'Use 1 playlist for the whole round (Round Mix), or 5 playlists — one per card column.';
+  'Use 1 playlist for the whole round (Round Mix), or 5 playlists â€” one per card column.';
 
 function roundPlaylistCountError(count: number): string {
   return `Rounds require either 1 playlist or 5 playlists. This round currently has ${count}. ${ROUND_PLAYLIST_RULE_HINT}`;
 }
 
-/** Mode-aware status line for assignment surfaces (structure only — track readiness is reported separately). */
+/** Mode-aware status line for assignment surfaces (structure only â€” track readiness is reported separately). */
 function roundPlaylistStructureCopy(count: number): string {
   if (count === 0) return 'Add 1 playlist for a round mix, or 5 playlists for column mode.';
-  if (count === 1) return 'Round Mix · 1 playlist supplies the full bingo pool.';
-  if (count === 5) return 'Column mode · one playlist per card column.';
+  if (count === 1) return 'Round Mix Â· 1 playlist supplies the full bingo pool.';
+  if (count === 5) return 'Column mode Â· one playlist per card column.';
   if (count < 5) {
-    return `${count} playlists assigned — add ${5 - count} more for column mode, or remove ${
+    return `${count} playlists assigned â€” add ${5 - count} more for column mode, or remove ${
       count - 1 === 1 ? '1' : count - 1
     } to use a single playlist.`;
   }
-  return `${count} playlists assigned — rounds allow 1 or 5. Remove ${count - 5}.`;
+  return `${count} playlists assigned â€” rounds allow 1 or 5. Remove ${count - 5}.`;
 }
 
 /** Geometry implied by mix playlist layout when the snapshot was saved (informational + reload UX). */
@@ -835,13 +835,13 @@ type SavedMixGeometry = '5x15' | '1x75' | 'merged';
 
 interface SavedRoundMixSnapshot {
   savedAt: number;
-  /** Fisher–Yates order locked when Save round succeeds. Live playback and offline call lists use this sequence. */
+  /** Fisherâ€“Yates order locked when Save round succeeds. Live playback and offline call lists use this sequence. */
   playOrder?: Song[];
   songs: Song[];
   mixGeometry: SavedMixGeometry;
   snippetLength: number;
   randomStarts: 'none' | 'early' | 'random';
-  /** Playlist ids at save time — live pool UI ignores snapshot when this differs from the bucket. */
+  /** Playlist ids at save time â€” live pool UI ignores snapshot when this differs from the bucket. */
   playlistIdsAtSave?: string[];
 }
 
@@ -894,7 +894,7 @@ function playbackOrderForSnapshot(snapshot: SavedRoundMixSnapshot): Song[] {
 function normalizeTrackLabelForDedup(raw: string): string {
   return String(raw || '')
     .toLowerCase()
-    .replace(/^\s*got\s*[-–:]*\s*/i, '')
+    .replace(/^\s*got\s*[-â€“:]*\s*/i, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 }
@@ -983,7 +983,7 @@ function confirmTrackTitleArtistCollisions(
   songs: Song[],
   playlists: Array<{ id: string; name: string }>,
 ): boolean {
-  // 5×15 assign already prefers alternate tracks for same title+artist; only warn
+  // 5Ã—15 assign already prefers alternate tracks for same title+artist; only warn
   // about soft collisions that would still remain in the final 75.
   const poolForCheck: Song[] =
     playlists.length === 5 ? (previewFiveByFifteenPool(playlists, songs) as Song[]) : songs;
@@ -997,18 +997,18 @@ function confirmTrackTitleArtistCollisions(
     ).size;
     const scope = playlistCount > 1 ? 'across playlists' : 'within one playlist';
     const rows = collision.occurrences
-      .map((row) => `    • ${row.playlistName} — ID ${row.id}`)
+      .map((row) => `    â€¢ ${row.playlistName} â€” ID ${row.id}`)
       .join('\n');
-    return `• ${collision.title} — ${collision.artist} (${scope})\n${rows}`;
+    return `â€¢ ${collision.title} â€” ${collision.artist} (${scope})\n${rows}`;
   });
   if (collisions.length > maxShown) {
-    details.push(`• …and ${collisions.length - maxShown} more collision(s)`);
+    details.push(`â€¢ â€¦and ${collisions.length - maxShown} more collision(s)`);
   }
 
   return window.confirm(
     `Possible duplicate tracks found\n\n` +
       `These tracks have the same normalized title and artist but different IDs, ` +
-      `and there weren’t enough alternate tracks to keep only one copy in the 5×15 pool.\n\n` +
+      `and there werenâ€™t enough alternate tracks to keep only one copy in the 5Ã—15 pool.\n\n` +
       `${details.join('\n\n')}\n\n` +
       `Continue finalizing this mix?`,
   );
@@ -1100,9 +1100,9 @@ function selectionPlaylistKey(playlists: Array<{ id: string }>): string {
 }
 
 /**
- * Reorder a mix to the round's stored playlistIds (B–O / chip order).
+ * Reorder a mix to the round's stored playlistIds (Bâ€“O / chip order).
  * Selection UI keeps personal vs catalog in separate arrays and concatenating them
- * scrambles interleaved 5×15 column order vs host chips / projector.
+ * scrambles interleaved 5Ã—15 column order vs host chips / projector.
  */
 function orderPlaylistsByRoundIds<T extends { id: string }>(
   playlists: T[],
@@ -1132,7 +1132,7 @@ function orderPlaylistsByRoundIds<T extends { id: string }>(
   return ordered.length === playlists.length ? ordered : playlists;
 }
 
-/** Stagger host playlist-tracks calls — multi-playlist mixes were bursting Spotify after OAuth reconnect. */
+/** Stagger host playlist-tracks calls â€” multi-playlist mixes were bursting Spotify after OAuth reconnect. */
 function delayMsBetweenPlaylistTrackFetches(index: number, total: number): number {
   if (index <= 0) return 0;
   const base = total >= 4 ? 950 : total >= 2 ? 750 : 550;
@@ -1154,7 +1154,7 @@ function songsForRoundFromFinalizedPool(round: EventRound, pool: Song[]): Song[]
     seen.add(s.id);
     out.push(s);
   }
-  // Single-playlist (1×75): pool may lack sourcePlaylistId on every track (legacy server emit); pool is already from this finalize.
+  // Single-playlist (1Ã—75): pool may lack sourcePlaylistId on every track (legacy server emit); pool is already from this finalize.
   if (out.length === 0 && wantRaw.length === 1 && pool.length > 0) {
     const seenFb = new Set<string>();
     const fb: Song[] = [];
@@ -1182,7 +1182,7 @@ function eventRoundSnapshotMeetsSaveThreshold(round: EventRound, hostDefaultFree
   return n >= need;
 }
 
-/** Migrate stored JSON → EventRound[] (localStorage + Tempo cloud prep). */
+/** Migrate stored JSON â†’ EventRound[] (localStorage + Tempo cloud prep). */
 function migrateRawEventRounds(raw: unknown): EventRound[] {
   if (!Array.isArray(raw) || raw.length === 0) return [];
   return raw.map((round: any) => {
@@ -1257,7 +1257,7 @@ function clearPrepCloudAck(roomId: string): void {
   }
 }
 
-/** Same playlist ids in the same order as the round bucket and current mix (column order matters for 5×15). */
+/** Same playlist ids in the same order as the round bucket and current mix (column order matters for 5Ã—15). */
 function prepRoundPlaylistOrderMatchesMix(
   roundIds: string[] | undefined,
   mix: Array<{ id: string }>,
@@ -1287,14 +1287,14 @@ function roundSnapshotMatchesCurrentPlaylists(round: EventRound): boolean {
   return roundPlaylistIdsKey(atSave) === roundPlaylistIdsKey(round.playlistIds);
 }
 
-/** Playlist column order frozen at Save round — required for 5×15 printable card geometry. */
+/** Playlist column order frozen at Save round â€” required for 5Ã—15 printable card geometry. */
 function playlistIdsForRoundExport(round: EventRound): string[] {
   const atSave = round.savedMixSnapshot?.playlistIdsAtSave;
   if (atSave?.length) return [...atSave];
   return [...(round.playlistIds || [])];
 }
 
-/** Stem playlist labels for printable PDF headers (5×15 columns or 1×75 title). */
+/** Stem playlist labels for printable PDF headers (5Ã—15 columns or 1Ã—75 title). */
 function playlistStemPrintLabelsForRound(
   round: EventRound,
 ): { columnLabels?: string[]; singlePlaylistTitle?: string } {
@@ -1306,7 +1306,7 @@ function playlistStemPrintLabelsForRound(
   return printablePlaylistLabelsFromNames(names);
 }
 
-/** Saved mix is tied to a specific playlist set — clear when buckets change after Save. */
+/** Saved mix is tied to a specific playlist set â€” clear when buckets change after Save. */
 function clearSnapshotIfPlaylistsChanged(next: EventRound, prev?: EventRound): EventRound {
   if (!prev?.savedMixSnapshot?.songs?.length) return next;
   if (roundPlaylistIdsKey(next.playlistIds) === roundPlaylistIdsKey(prev.playlistIds)) return next;
@@ -1347,7 +1347,7 @@ function isBingoFreeSpaceSquare(square: { isFreeSpace?: boolean; songId?: string
   return !!(square && (square.isFreeSpace || square.songId === '__FREE_SPACE__'));
 }
 
-/** Row-major 5×5 order for host grids — must match player card CSS grid (position `row-col`). */
+/** Row-major 5Ã—5 order for host grids â€” must match player card CSS grid (position `row-col`). */
 function bingoSquaresInGridOrder<T extends { position?: string }>(
   squares: T[] | undefined | null,
 ): T[] {
@@ -1388,7 +1388,7 @@ function hostPlayerCardSnapshot(cardData: {
   return `${cardData.inPerson === false ? '0' : '1'}#${played}#${marks}`;
 }
 
-/** Remote/online join (?remote=1) — shown on host player cards and bingo verification. */
+/** Remote/online join (?remote=1) â€” shown on host player cards and bingo verification. */
 function mixRowsNeedHostSpotify(rows: Playlist[] | null): boolean {
   if (!rows || rows.length === 0) return false;
   return rows.some((p) => p.youtubeMusic !== true && p.appleMusic !== true && p.catalog !== true);
@@ -1464,12 +1464,12 @@ function playlistHasRealDescription(description: unknown): boolean {
 
 /** Match public display: trim optional "GoT" playlist prefix for column headers (case-sensitive). */
 function stripGotPlaylistPrefix(raw: string): string {
-  return raw.replace(/^\s*GoT(?=$|[\s\-–—:])\s*[-–—:]*\s*/, '').trim();
+  return raw.replace(/^\s*GoT(?=$|[\s\-â€“â€”:])\s*[-â€“â€”:]*\s*/, '').trim();
 }
 
 /**
  * "Short" names: trim a leading title flag (e.g. "GoT - ", "Tempo: ") from a playlist name.
- * Case-sensitive so "GoT" does not strip the "Got" in "Gotta…".
+ * Case-sensitive so "GoT" does not strip the "Got" in "Gottaâ€¦".
  * Require end or whitespace/separator after the flag (don't eat into the next word).
  */
 function stripTitleFlagPrefix(raw: string, flags: string[]): string {
@@ -1480,8 +1480,8 @@ function stripTitleFlagPrefix(raw: string, flags: string[]): string {
     if (!f) continue;
     if (!name.startsWith(f)) continue;
     const rest = name.slice(f.length);
-    if (rest.length > 0 && !/^[\s\-–—:]/.test(rest)) continue;
-    const stripped = rest.replace(/^\s*[-–—:]*\s*/, '').trim();
+    if (rest.length > 0 && !/^[\s\-â€“â€”:]/.test(rest)) continue;
+    const stripped = rest.replace(/^\s*[-â€“â€”:]*\s*/, '').trim();
     return stripped || name;
   }
   return name;
@@ -1535,13 +1535,13 @@ async function postSpotifyWebSessionStart(): Promise<boolean> {
   }
 }
 
-/** Spotify playlist ids are strings; rounds/API may store numbers — normalize for Set lookups. */
+/** Spotify playlist ids are strings; rounds/API may store numbers â€” normalize for Set lookups. */
 function normalizeSpotifyPlaylistId(id: unknown): string {
   if (id == null || id === '') return '';
   return String(id).trim();
 }
 
-/** Host-configured title flags ("GoT, Game of Tones") → trimmed list for matching. */
+/** Host-configured title flags ("GoT, Game of Tones") â†’ trimmed list for matching. */
 function parsePlaylistTitleFlags(raw: string): string[] {
   return (raw || '')
     .split(',')
@@ -1582,7 +1582,7 @@ function isGotLabeledPlaylist(name: string): boolean {
     return false;
   }
   return (
-    /^got\s*[-–:]*\s*/i.test(name || '') ||
+    /^got\s*[-â€“:]*\s*/i.test(name || '') ||
     nameLower.includes('game of tones') ||
     nameLower.includes('gameoftones')
   );
@@ -1682,7 +1682,7 @@ const HostView: React.FC = () => {
   const [catalogPacksFetchOk, setCatalogPacksFetchOk] = useState(false);
   /** Last /packs returned 401 (needs Google host session). */
   const [catalogPacksFetchUnauthorized, setCatalogPacksFetchUnauthorized] = useState(false);
-  /** Server skipped prefix crawl (e.g. Spotify 429) — empty packs is not always “wrong prefix”. */
+  /** Server skipped prefix crawl (e.g. Spotify 429) â€” empty packs is not always â€œwrong prefixâ€. */
   const [catalogPrefixDiscoverySkipped, setCatalogPrefixDiscoverySkipped] = useState(false);
   const [catalogPacksRefreshing, setCatalogPacksRefreshing] = useState(false);
   /** Client-side countdown mirror of server manual-refresh cooldown (ms). */
@@ -1690,11 +1690,11 @@ const HostView: React.FC = () => {
   const [catalogPacksRefreshHint, setCatalogPacksRefreshHint] = useState<string | null>(null);
   const catalogPacksRefreshInFlightRef = useRef(false);
   const [selectedCatalogPlaylists, setSelectedCatalogPlaylists] = useState<Playlist[]>([]);
-  /** Debounce catalog /packs so it doesn’t fire in the same burst as host GET /v1/me/playlists (reduces Spotify 429). */
+  /** Debounce catalog /packs so it doesnâ€™t fire in the same burst as host GET /v1/me/playlists (reduces Spotify 429). */
   const catalogPacksLoadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Personal selection first, then catalog-only ids (append). Dedupes by id.
-   *  Note: interleaved B–O order is restored at finalize/Start via orderPlaylistsByRoundIds. */
+   *  Note: interleaved Bâ€“O order is restored at finalize/Start via orderPlaylistsByRoundIds. */
   const mixPlaylistSelection = useMemo(() => {
     const out: Playlist[] = [...selectedPlaylists];
     const ids = new Set(selectedPlaylists.map((p) => p.id));
@@ -1751,7 +1751,7 @@ const HostView: React.FC = () => {
   const bingoVerificationModalRef = useRef<HTMLDivElement | null>(null);
   const [gamePaused, setGamePaused] = useState(false);
   const [mixFinalized, setMixFinalized] = useState(false);
-  /** Printable PDF export (physical daubers) — soft-warn at 200, hard max 1000. */
+  /** Printable PDF export (physical daubers) â€” soft-warn at 200, hard max 1000. */
   const [printableCardCount, setPrintableCardCount] = useState(30);
   /** How many bingo cards to tile on each Letter page (1 / 2 / 4 / 6 / 8). */
   const [printableCardsPerPage, setPrintableCardsPerPage] = useState(1);
@@ -1786,7 +1786,7 @@ const HostView: React.FC = () => {
   /** After any playlist-metadata 429, stop all note fetches for this browser session. */
   const playlistDescQuotaBlockedRef = useRef(false);
   const [playlistDescQuotaBlocked, setPlaylistDescQuotaBlocked] = useState(false);
-  /** Single-flight note queue: click-to-load only (never row hover) — max 1 in flight, pending 1. */
+  /** Single-flight note queue: click-to-load only (never row hover) â€” max 1 in flight, pending 1. */
   const playlistDescQueueRef = useRef<string[]>([]);
   const playlistDescQueuedSetRef = useRef<Set<string>>(new Set());
   const playlistDescIdByCanonRef = useRef<Map<string, string>>(new Map());
@@ -1823,7 +1823,7 @@ const HostView: React.FC = () => {
     venueSpotifyJamMode,
   ]);
 
-  /** Selected device is online (in the list) but not Spotify's active playback target — honest readiness, not a blocker. */
+  /** Selected device is online (in the list) but not Spotify's active playback target â€” honest readiness, not a blocker. */
   const selectedDeviceInactive = useMemo(() => {
     if (!mixNeedsHostSpotify || !isSpotifyConnected || isLoadingDevices) return false;
     if (!selectedDevice?.id) return false;
@@ -1832,7 +1832,7 @@ const HostView: React.FC = () => {
   }, [mixNeedsHostSpotify, isSpotifyConnected, isLoadingDevices, selectedDevice, devices]);
 
   /** Spotify Web API recently returned transient 5xx errors while tokens are valid.
-   *  Drives honest "connected, but API unavailable" status copy — never reconnect prompts. */
+   *  Drives honest "connected, but API unavailable" status copy â€” never reconnect prompts. */
   const [spotifyApiOutage, setSpotifyApiOutage] = useState(false);
   const spotifyApiOutageTimerRef = useRef<NodeJS.Timeout | null>(null);
   const noteSpotifyApiOutage = useCallback(() => {
@@ -1903,18 +1903,18 @@ const HostView: React.FC = () => {
     }
   });
   const [publicDisplayFontSize, setPublicDisplayFontSize] = useState<number>(1.0); // Multiplier for public display font sizes
-  /** Matches server / public display: 5×15 BINGO columns vs 1×75 carousel vs mix/URL default. */
+  /** Matches server / public display: 5Ã—15 BINGO columns vs 1Ã—75 carousel vs mix/URL default. */
   const [publicDisplayCallListMode, setPublicDisplayCallListMode] = useState<'auto' | 'grouped' | '5x15'>('auto');
-  /** Seconds between random letter reveals on the public display (server clamps 5–120). */
+  /** Seconds between random letter reveals on the public display (server clamps 5â€“120). */
   const [letterRevealIntervalSec, setLetterRevealIntervalSec] = useState<number>(15);
   /** Projector: masked titles fill in by timed letters vs full at clip start/end. */
   const [publicDisplayTitleRevealMode, setPublicDisplayTitleRevealMode] =
     useState<PublicDisplayTitleRevealMode>('letter');
   /** Projector banner when a letter is revealed (letters still reveal when off). */
   const [publicDisplayLetterRevealToast, setPublicDisplayLetterRevealToast] = useState<boolean>(true);
-  /** Five column letters for cards / call list headers (org-customizable: BINGO, TEMPO, TONES, …). */
+  /** Five column letters for cards / call list headers (org-customizable: BINGO, TEMPO, TONES, â€¦). */
   const [bingoColumnLetters, setBingoColumnLetters] = useState<string>(DEFAULT_BINGO_COLUMN_LETTERS);
-  /** Cards dealt per player at round start (1–3); locked while live. */
+  /** Cards dealt per player at round start (1â€“3); locked while live. */
   const [maxPlayerBingoCards, setMaxPlayerBingoCards] = useState(1);
   const [bingoWinPolicy, setBingoWinPolicy] = useState<BingoWinPolicy>('any_round');
   const [gameLayout, setGameLayout] = useState<GameLayout>('classic');
@@ -2046,7 +2046,7 @@ const HostView: React.FC = () => {
   }, [roundWinners, roomId]);
   /** Projector night winners board visibility (host toggle). */
   const [showNightBoard, setShowNightBoard] = useState(false);
-  /** Game-tab Tonight accordion — user-controlled; auto-collapses once when a round goes live. */
+  /** Game-tab Tonight accordion â€” user-controlled; auto-collapses once when a round goes live. */
   const [tonightOpen, setTonightOpen] = useState(true);
   const tonightWasPlayingRef = useRef(false);
   const [sponsorScreen, setSponsorScreen] = useState<SponsorScreenConfig>(() => {
@@ -2106,7 +2106,7 @@ const HostView: React.FC = () => {
     error?: string;
     skippedReason?: string;
   } | null>(null);
-  /** Full call-order → Spotify (opt-in; not auto at round end). */
+  /** Full call-order â†’ Spotify (opt-in; not auto at round end). */
   const [roundCallOrderPlaylistUi, setRoundCallOrderPlaylistUi] = useState<{
     creating: boolean;
     count: number;
@@ -2136,7 +2136,7 @@ const HostView: React.FC = () => {
   const [hostSetupStep, setHostSetupStep] = useState<HostSetupStep>('playlist');
   /** Round prep restored on load (refresh/cloud) skips Build rounds; set once so we never bounce the host around afterwards. */
   const hostSetupStepAutoAdvancedRef = useRef(false);
-  /** Host assigned a playlist this session — readiness came from interaction, not hydration, so stay on Build rounds. */
+  /** Host assigned a playlist this session â€” readiness came from interaction, not hydration, so stay on Build rounds. */
   const hostSetupUserAssignedRef = useRef(false);
   const [hostTutorialOpen, setHostTutorialOpen] = useState(false);
   const [hostTutorialStep, setHostTutorialStep] = useState(0);
@@ -2151,7 +2151,7 @@ const HostView: React.FC = () => {
   const [songRequests, setSongRequests] = useState<SongRequestEntry[]>([]);
   const [maxSongRequestsPerPlayer, setMaxSongRequestsPerPlayer] = useState(5);
   const [requestModerationBusyId, setRequestModerationBusyId] = useState<string | null>(null);
-  /** Spotify matches for a pending request — host picks when search returns more than one. */
+  /** Spotify matches for a pending request â€” host picks when search returns more than one. */
   const [requestTrackPicker, setRequestTrackPicker] = useState<{
     requestId: string;
     tracks: Array<{
@@ -2171,7 +2171,7 @@ const HostView: React.FC = () => {
   const roundsPanelRef = useRef<HTMLElement>(null);
   const hostShellMainRef = useRef<HTMLDivElement>(null);
   const displaySettingsRef = useRef<HTMLDivElement>(null);
-  /** 5�15 mode: playlist title per column (from `fiveby15-pool`, else five selected playlists). */
+  /** 5ï¿½15 mode: playlist title per column (from `fiveby15-pool`, else five selected playlists). */
   const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
   const [roundBuilderFocusIndex, setRoundBuilderFocusIndex] = useState(0);
   const compositeEditRoundIndexRef = useRef(0);
@@ -2192,7 +2192,7 @@ const HostView: React.FC = () => {
   }, [onHostGlassNav]);
 
   /** Fresh rooms with no playlists assigned land on the Rounds tab (where rounds are built);
-   *  the Game tab is the live/cockpit view once prep exists. One-shot at mount — never yanks
+   *  the Game tab is the live/cockpit view once prep exists. One-shot at mount â€” never yanks
    *  the host off a tab they navigated to. Reads localStorage directly so it doesn't race
    *  the async round-prep hydration effects. */
   const hostInitialTabRoutedRef = useRef(false);
@@ -2208,7 +2208,7 @@ const HostView: React.FC = () => {
         Array.isArray(rounds) &&
         rounds.some((r: any) => Array.isArray(r?.playlistIds) && r.playlistIds.length > 0);
     } catch {
-      /* unreadable prep — treat as none */
+      /* unreadable prep â€” treat as none */
     }
     if (!anyPlaylists) onHostGlassNav('rounds');
   }, [roomId, onHostGlassNav]);
@@ -2313,36 +2313,36 @@ const HostView: React.FC = () => {
       return {
         status: 'not_connected',
         label: 'Playback not connected',
-        detail: 'Connect Spotify, YouTube Music, or Apple Music under Settings → Playback & connections.',
+        detail: 'Connect Spotify, YouTube Music, or Apple Music under Settings â†’ Playback & connections.',
       };
     }
     if (spotifyApiOutage) {
       return {
         status: 'api_unavailable',
-        label: 'Spotify connected · API temporarily unavailable',
+        label: 'Spotify connected Â· API temporarily unavailable',
         detail:
-          'Your Spotify account is fine — Spotify’s API is having a moment. Cached tracks are used where possible; retry shortly. No need to reconnect.',
+          'Your Spotify account is fine â€” Spotifyâ€™s API is having a moment. Cached tracks are used where possible; retry shortly. No need to reconnect.',
       };
     }
     if (mixNeedsHostSpotify && !selectedDevice?.id) {
       return {
         status: 'no_device',
-        label: 'Spotify connected · pick a playback device',
-        detail: 'Choose a playback device under Settings → Playback & connections.',
+        label: 'Spotify connected Â· pick a playback device',
+        detail: 'Choose a playback device under Settings â†’ Playback & connections.',
       };
     }
     if (mixNeedsHostSpotify && selectedDevice?.id && playbackDeviceNotInList) {
       return {
         status: 'device_offline',
-        label: `Spotify connected · ${selectedDevice.name} offline`,
+        label: `Spotify connected Â· ${selectedDevice.name} offline`,
         detail: `Open Spotify on ${selectedDevice.name}, then refresh devices in Settings.`,
       };
     }
     if (selectedDeviceInactive && selectedDevice) {
       return {
         status: 'device_inactive',
-        label: `Spotify connected · ${selectedDevice.name} idle`,
-        detail: `${selectedDevice.name} is online but idle — Start Game activates it automatically. To activate now: Settings → Playback → Activate device.`,
+        label: `Spotify connected Â· ${selectedDevice.name} idle`,
+        detail: `${selectedDevice.name} is online but idle â€” Start Game activates it automatically. To activate now: Settings â†’ Playback â†’ Activate device.`,
       };
     }
     return { status: 'ready', label: 'Spotify connected' };
@@ -2380,7 +2380,7 @@ const HostView: React.FC = () => {
   /** Bumped after each prefs hydration (localStorage, then DB) so the room push re-runs with fresh values. */
   const [hostPrefsHydrationNonce, setHostPrefsHydrationNonce] = useState(0);
   const hostPrefsPutTimerRef = useRef<number | null>(null);
-  /** After /api/auth/me finishes (and optional hostToken → localStorage), socket can use Bearer + hostToken. */
+  /** After /api/auth/me finishes (and optional hostToken â†’ localStorage), socket can use Bearer + hostToken. */
   const [hostAuthBootstrapDone, setHostAuthBootstrapDone] = useState(false);
 
   // Pause position tracking
@@ -2446,7 +2446,7 @@ const HostView: React.FC = () => {
     setPrepCloudHydrated(false);
   }, [roomId]);
 
-  /** Dev / audit trail — console + in-app activity feed (Settings tab). */
+  /** Dev / audit trail â€” console + in-app activity feed (Settings tab). */
   const addLog = useCallback((message: string, level: 'info' | 'warn' | 'error' = 'info') => {
     const line = `[TEMPO host] ${message}`;
     if (level === 'error') console.error(line);
@@ -2501,7 +2501,7 @@ const HostView: React.FC = () => {
   youtubePlaybackVolumeRef.current = playbackState.volume;
   const [youtubePlaybackPopupOpen, setYoutubePlaybackPopupOpen] = useState(false);
   const youtubePlaybackPopupRef = useRef<Window | null>(null);
-  /** Last POPUP_ACTIVE ping from `/youtube-host-playback` — lets host hide corner player for manual tabs too. */
+  /** Last POPUP_ACTIVE ping from `/youtube-host-playback` â€” lets host hide corner player for manual tabs too. */
   const lastYtPopupPingRef = useRef(0);
   /** Corner iframe hidden while external playback window is active (popup or same-browser tab). */
   const [hideYoutubeCornerPlayer, setHideYoutubeCornerPlayer] = useState(false);
@@ -2516,7 +2516,7 @@ const HostView: React.FC = () => {
     finalizedOrderRef.current = finalizedOrder;
   }, [finalizedOrder]);
 
-  /** Sort-stable fingerprint of current Game-tab mix (same grouping rule as finalize — playlist ids sorted). */
+  /** Sort-stable fingerprint of current Game-tab mix (same grouping rule as finalize â€” playlist ids sorted). */
   const mixPlaylistSelectionKeyRef = useRef('');
   useEffect(() => {
     mixPlaylistSelectionKeyRef.current = selectionPlaylistKey(mixPlaylistSelection);
@@ -2544,7 +2544,7 @@ const HostView: React.FC = () => {
     key: 'none' | 'name' | 'tracks' | 'shuffle';
     dir: 'asc' | 'desc';
   }>({ key: 'none', dir: 'asc' });
-  /** Stable Fisher–Yates id order while sort mode is `shuffle` (reshuffle replaces this). */
+  /** Stable Fisherâ€“Yates id order while sort mode is `shuffle` (reshuffle replaces this). */
   const [playlistShuffleOrder, setPlaylistShuffleOrder] = useState<string[] | null>(null);
   /** Window start into the filtered library (letter jump pins that letter at row 1). */
   const [playlistLibraryStartIndex, setPlaylistLibraryStartIndex] = useState(0);
@@ -2677,7 +2677,7 @@ const HostView: React.FC = () => {
         'Could not open playback (often blocked popups). Allow popups for this site and try again.',
         'warn'
       );
-      addLog(`YouTube playback — open manually in a new tab: ${url}`, 'info');
+      addLog(`YouTube playback â€” open manually in a new tab: ${url}`, 'info');
       return;
     }
 
@@ -2781,7 +2781,7 @@ const HostView: React.FC = () => {
     };
   }, [hostAckNotification]);
 
-  /** Official packs — uses Google host session; safe to call whenever playlists refresh too (rail against stale bundles / bootstrap timing). */
+  /** Official packs â€” uses Google host session; safe to call whenever playlists refresh too (rail against stale bundles / bootstrap timing). */
   const loadCatalogPacks = useCallback(
     async (opts?: { forceRefresh?: boolean }) => {
       const forceRefresh = opts?.forceRefresh === true;
@@ -2935,7 +2935,7 @@ const HostView: React.FC = () => {
             message:
               packs.length > 0
                 ? `Loaded ${packs.length} official pack${packs.length === 1 ? '' : 's'} from the catalog.`
-                : 'Catalog refresh completed — no matching packs found yet.',
+                : 'Catalog refresh completed â€” no matching packs found yet.',
           });
         } else if (data.message) {
           setCatalogPacksRefreshHint(data.message);
@@ -3031,7 +3031,7 @@ const HostView: React.FC = () => {
       }
       const response = await hostFetch(`${API_BASE || ''}/api/spotify/playlists?${qs.toString()}`);
       if (response.status === 401) {
-        setSpotifyError('Spotify is not connected. Open Settings → Playback & connections to connect Spotify.');
+        setSpotifyError('Spotify is not connected. Open Settings â†’ Playback & connections to connect Spotify.');
         setSpotifyListCacheInfo(null);
         setPlaylists([]);
         setSpotifyMyPlaylistsTotal(null);
@@ -3089,7 +3089,7 @@ const HostView: React.FC = () => {
               ? updated.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
               : '';
           setSpotifyListCacheInfo(
-            formatted ? `Saved library • Last updated ${formatted}` : 'Saved library',
+            formatted ? `Saved library â€¢ Last updated ${formatted}` : 'Saved library',
           );
         } else {
           setSpotifyListCacheInfo(null);
@@ -3170,7 +3170,7 @@ const HostView: React.FC = () => {
             const bestListed = Math.max(refTracks, snap);
             const existing = byId.get(canon);
             if (existing) {
-              // Spotify library / list-cache sometimes lists other-host rows at tracks:0 —
+              // Spotify library / list-cache sometimes lists other-host rows at tracks:0 â€”
               // never let that wipe a known shelf/snapshot count.
               const prevListed = Math.max(0, Number(existing.tracks) || 0);
               let next = existing;
@@ -3207,7 +3207,7 @@ const HostView: React.FC = () => {
           }
         }
         // Fresh library fetch: load Official packs shortly after (another GET /me/playlists on catalog token).
-        // Stale/cache response: Spotify is already rate-limiting — defer catalog to avoid an immediate second burst (same app quota); Official packs still loads after cooldown.
+        // Stale/cache response: Spotify is already rate-limiting â€” defer catalog to avoid an immediate second burst (same app quota); Official packs still loads after cooldown.
         scheduleCatalogPacksLoad(data.fromSpotifyListCache === true ? 60_000 : 7500);
         // Reset to flagged picks by default when playlists are reloaded
         setShowAllPlaylists(false);
@@ -3226,7 +3226,7 @@ const HostView: React.FC = () => {
             message: `Spotify is rate-limiting this app or the server is cooling down${retryMin}. Wait and tap Refresh, or check the Developer Dashboard.`,
           });
         } else if (data && data.error === 'spotify_upstream_unavailable') {
-          // Transient Spotify outage — Spotify stays connected; do not show reconnect copy.
+          // Transient Spotify outage â€” Spotify stays connected; do not show reconnect copy.
           setSpotifyError(null);
           noteSpotifyApiOutage();
           showHostAckNotification({
@@ -3234,7 +3234,7 @@ const HostView: React.FC = () => {
             title: 'Spotify API temporarily unavailable',
             variant: 'warning',
             message:
-              'Spotify is connected, but Spotify’s API is temporarily unavailable while loading your library. Your saved library is shown — try Refresh in a moment (no need to reconnect).',
+              'Spotify is connected, but Spotifyâ€™s API is temporarily unavailable while loading your library. Your saved library is shown â€” try Refresh in a moment (no need to reconnect).',
           });
         }
       }
@@ -3276,14 +3276,14 @@ const HostView: React.FC = () => {
           const ra = typeof d.retryAfterSec === 'number' && d.retryAfterSec > 0 ? d.retryAfterSec : null;
           const wait =
             ra != null
-              ? ` Try again in about ${Math.max(1, Math.ceil(ra / 60))} min (Spotify’s Retry-After: ${ra}s).`
+              ? ` Try again in about ${Math.max(1, Math.ceil(ra / 60))} min (Spotifyâ€™s Retry-After: ${ra}s).`
               : ' Try again after cooldown.';
           setPlaylistByLinkError(null);
           showHostAckNotification({
             id: 'playlist-by-link-429',
             title: 'Spotify rate limit',
             variant: 'warning',
-            message: `Spotify is rate-limiting playlist requests for this app right now, including a single link lookup — not a bad URL.${wait} Nothing in TEMPO can override Spotify’s wait window.`,
+            message: `Spotify is rate-limiting playlist requests for this app right now, including a single link lookup â€” not a bad URL.${wait} Nothing in TEMPO can override Spotifyâ€™s wait window.`,
           });
         } else {
           setPlaylistByLinkError(
@@ -3310,8 +3310,8 @@ const HostView: React.FC = () => {
   }, [playlistByLinkInput, showHostAckNotification]);
 
   /**
-   * Plan Rounds: load Spotify setlist description — click-to-load only (never row hover).
-   * A–Z / skim used to mouseEnter every row → many getPlaylistMetadataBrief → QUOTA_EXCEEDED.
+   * Plan Rounds: load Spotify setlist description â€” click-to-load only (never row hover).
+   * Aâ€“Z / skim used to mouseEnter every row â†’ many getPlaylistMetadataBrief â†’ QUOTA_EXCEEDED.
    * Single-flight; pending capped at 1; any 429 kills note fetches for the rest of the session.
    */
   const ensurePlaylistDescriptionFromSpotify = useCallback((playlist: Playlist) => {
@@ -3371,7 +3371,7 @@ const HostView: React.FC = () => {
         );
         if (!res.ok) {
           if (res.status === 429) {
-            // Development Mode QUOTA_EXCEEDED can be multi-hour — stop all note traffic.
+            // Development Mode QUOTA_EXCEEDED can be multi-hour â€” stop all note traffic.
             playlistDescQuotaBlockedRef.current = true;
             setPlaylistDescQuotaBlocked(true);
             playlistDescQueueRef.current = [];
@@ -3379,7 +3379,7 @@ const HostView: React.FC = () => {
             playlistDescResolvedRef.current.add(nextCanon);
             showHostAckNotification({
               id: 'playlist-note-429',
-              title: 'Spotify quota — playlist notes paused',
+              title: 'Spotify quota â€” playlist notes paused',
               variant: 'warning',
               message:
                 'Spotify returned QUOTA_EXCEEDED while loading a playlist note. Tempo will not fetch more notes this session. Library list and track caches still work; wait out Retry-After before notes again.',
@@ -3418,7 +3418,7 @@ const HostView: React.FC = () => {
           }),
         );
       } catch {
-        /* ignore — notes are best-effort */
+        /* ignore â€” notes are best-effort */
       } finally {
         playlistDescActiveCanonRef.current = null;
         if (
@@ -3469,7 +3469,7 @@ const HostView: React.FC = () => {
       if (playlistSort.key === 'tracks') {
         return (a.tracks - b.tracks) * m;
       }
-      // Name sort follows visible titles (stripped GoT / flags), same as A–Z rail.
+      // Name sort follows visible titles (stripped GoT / flags), same as Aâ€“Z rail.
       return (
         playlistLibraryDisplayTitle(a, stripGoTPrefix, titleFlagStripList).localeCompare(
           playlistLibraryDisplayTitle(b, stripGoTPrefix, titleFlagStripList),
@@ -3508,9 +3508,9 @@ const HostView: React.FC = () => {
   const playlistLibrarySortModeLabel = useMemo(() => {
     switch (playlistSort.key) {
       case 'name':
-        return playlistSort.dir === 'asc' ? 'Name A→Z' : 'Name Z→A';
+        return playlistSort.dir === 'asc' ? 'Name Aâ†’Z' : 'Name Zâ†’A';
       case 'tracks':
-        return playlistSort.dir === 'asc' ? 'Tracks ↑ (fewest first)' : 'Tracks ↓ (most first)';
+        return playlistSort.dir === 'asc' ? 'Tracks â†‘ (fewest first)' : 'Tracks â†“ (most first)';
       case 'shuffle':
         return 'Shuffled';
       default:
@@ -3527,15 +3527,15 @@ const HostView: React.FC = () => {
   const playlistLibrarySortModeHint = useMemo(() => {
     switch (playlistSort.key) {
       case 'name':
-        return 'Alphabetical by the title shown in the list. A–Z rail jumps to that letter.';
+        return 'Alphabetical by the title shown in the list. Aâ€“Z rail jumps to that letter.';
       case 'tracks':
-        return 'Ordered by listed track count. A–Z rail switches to Name A→Z.';
+        return 'Ordered by listed track count. Aâ€“Z rail switches to Name Aâ†’Z.';
       case 'shuffle':
-        return 'Random order for this session. Click Shuffled again to reshuffle. A–Z rail switches to Name A→Z.';
+        return 'Random order for this session. Click Shuffled again to reshuffle. Aâ€“Z rail switches to Name Aâ†’Z.';
       default:
         return playlistLibrarySource === 'spotify'
-          ? 'Same order as your Spotify library. A–Z rail switches to Name A→Z.'
-          : 'Provider library order. A–Z rail switches to Name A→Z.';
+          ? 'Same order as your Spotify library. Aâ€“Z rail switches to Name Aâ†’Z.'
+          : 'Provider library order. Aâ€“Z rail switches to Name Aâ†’Z.';
     }
   }, [playlistSort.key, playlistLibrarySource]);
 
@@ -3592,12 +3592,12 @@ const HostView: React.FC = () => {
       libraryTablePlaylists.length,
       playlistLibraryStartClamped + playlistLibraryPageSize,
     );
-    return `${start}–${end} of ${libraryTablePlaylists.length}`;
+    return `${start}â€“${end} of ${libraryTablePlaylists.length}`;
   }, [libraryTablePlaylists.length, playlistLibraryStartClamped, playlistLibraryPageSize]);
 
   /**
-   * A–Z index over an alphabetical copy of the current library (display titles).
-   * Letter clicks force name↑ sort and pin that letter at the top row.
+   * Aâ€“Z index over an alphabetical copy of the current library (display titles).
+   * Letter clicks force nameâ†‘ sort and pin that letter at the top row.
    */
   const playlistLibraryLetterIndex = useMemo(() => {
     const alpha = [...libraryTablePlaylists].sort((a, b) =>
@@ -3621,7 +3621,7 @@ const HostView: React.FC = () => {
     (letter: string) => {
       const idx = playlistLibraryLetterIndex.get(letter);
       if (idx == null || idx < 0) return;
-      // A→Z by display title, then put the first matching letter at row 1 (not mid-page).
+      // Aâ†’Z by display title, then put the first matching letter at row 1 (not mid-page).
       setPlaylistShuffleOrder(null);
       setPlaylistSort({ key: 'name', dir: 'asc' });
       setPlaylistLibraryStartIndex(idx);
@@ -3663,7 +3663,7 @@ const HostView: React.FC = () => {
     playlistQuery,
     showAllPlaylists,
     parsedPlaylistTitleFlags,
-    // Intentionally omit playlistSort — A–Z jump sets name↑ + start index together.
+    // Intentionally omit playlistSort â€” Aâ€“Z jump sets nameâ†‘ + start index together.
     playlistLibrarySource,
     playlistLibraryPageSize,
   ]);
@@ -3743,7 +3743,7 @@ const HostView: React.FC = () => {
     setAppleMusicPlaylists(rows);
   }, []);
 
-  /** Stable — HostAppleMusicSection must not get a new function every render (status refetch loop). */
+  /** Stable â€” HostAppleMusicSection must not get a new function every render (status refetch loop). */
   const handleAppleMusicConnectionChange = useCallback((connected: boolean) => {
     setAppleMusicConnected((prev) => (prev === connected ? prev : connected));
   }, []);
@@ -4045,7 +4045,7 @@ const HostView: React.FC = () => {
         console.warn('Spotify not connected (401) while loading devices');
         setIsSpotifyConnected(false);
         setIsSpotifyConnecting(false);
-        setSpotifyError('Spotify is not connected. Open Settings → Playback & connections to connect Spotify.');
+        setSpotifyError('Spotify is not connected. Open Settings â†’ Playback & connections to connect Spotify.');
         setDevices([]);
         return;
       }
@@ -4231,7 +4231,7 @@ const HostView: React.FC = () => {
   const songListRef = useRef<Song[]>([]);
   /** Playlist ids we have already fully loaded track lists for. */
   const fullyLoadedPlaylistIdsRef = useRef<Set<string>>(new Set());
-  /** Spotify playlist ids whose library `tracks` total changed — next setlist build must refetch with refresh=1. */
+  /** Spotify playlist ids whose library `tracks` total changed â€” next setlist build must refetch with refresh=1. */
   const playlistIdsNeedingTrackRefreshRef = useRef<Set<string>>(new Set());
   /** Playlist id -> epoch ms until which auto track hydration is skipped after a Spotify 5xx (mirrors server cooldown; manual Refresh bypasses). */
   const playlistTracksUnavailableUntilRef = useRef<Map<string, number>>(new Map());
@@ -4239,7 +4239,7 @@ const HostView: React.FC = () => {
   const setlistDebounceExtraAfterSpotifyConnectMsRef = useRef(0);
   const webApiQuarantineRef = useRef(webApiQuarantine);
   webApiQuarantineRef.current = webApiQuarantine;
-  /** Bumped to cancel in-flight generateSongList from selection/debounce — does not invalidate Finalize Mix (see finalizeSetlistGenerationRef). */
+  /** Bumped to cancel in-flight generateSongList from selection/debounce â€” does not invalidate Finalize Mix (see finalizeSetlistGenerationRef). */
   const setlistBuildGenerationRef = useRef(0);
   /** Finalize Mix builds use this alone so the 750ms debounced `generateSongList` cannot bump generation mid-fetch and yield an empty list + false rate-limit alert. */
   const finalizeSetlistGenerationRef = useRef(0);
@@ -4253,7 +4253,7 @@ const HostView: React.FC = () => {
     playlistIdsNeedingTrackRefreshRef.current.clear();
   }, []);
 
-  /** Room-level finalize applies to one playlist mix — clear when switching to another round's prep. */
+  /** Room-level finalize applies to one playlist mix â€” clear when switching to another round's prep. */
   const [finalizedMixPlaylistKey, setFinalizedMixPlaylistKey] = useState<string | null>(null);
 
   const clearPrepMixPlaybackState = useCallback(() => {
@@ -4267,7 +4267,7 @@ const HostView: React.FC = () => {
     lastFinalizeMixSongListRef.current = null;
   }, []);
 
-  /** Call log + now-playing UI for the prior round — reset when picking another round in prep. */
+  /** Call log + now-playing UI for the prior round â€” reset when picking another round in prep. */
   const clearPrepRoundCallLogUi = useCallback(() => {
     setPlayedInOrder([]);
     setCurrentSong(null);
@@ -4383,7 +4383,7 @@ const HostView: React.FC = () => {
       return;
     }
     if (isSpotifyJamDevice(selectedDevice) && !venueSpotifyJamMode) {
-      alert('Enable “Venue uses Spotify Jam” in Connection before selecting a Jam session as the playback device.');
+      alert('Enable â€œVenue uses Spotify Jamâ€ in Connection before selecting a Jam session as the playback device.');
       return;
     }
     if (!readHostSpotifyWebEnabled()) {
@@ -4416,7 +4416,7 @@ const HostView: React.FC = () => {
     }
   }, [selectedDevice, syncSelectedPlaybackDeviceToRoom, venueSpotifyJamMode]);
 
-  /** Room socket handlers — refs so io() is not recreated when loadPlaylists / mix selection changes. */
+  /** Room socket handlers â€” refs so io() is not recreated when loadPlaylists / mix selection changes. */
   const loadPlaylistsSocketRef = useRef(loadPlaylists);
   loadPlaylistsSocketRef.current = loadPlaylists;
   const loadDevicesSocketRef = useRef(loadDevices);
@@ -4462,13 +4462,13 @@ const HostView: React.FC = () => {
     /**
      * Only one join-room as host per socket lifecycle until disconnect/reconnect.
      * Without this, `connect` + `if (already connected)` (and Strict Mode remount overlap) can emit twice;
-     * the second join hits room_has_host and kicks the user home — feels like a loop and skips the reuse modal.
+     * the second join hits room_has_host and kicks the user home â€” feels like a loop and skips the reuse modal.
      */
     let hostJoinEmitted = false;
     /** Set below; reconnect calls this after reset so host re-enters the room socket. */
     let emitHostJoinImpl: () => void = () => {};
 
-    // Auto-refresh host player-card *snapshot* only (debounced). Never sends recover:true —
+    // Auto-refresh host player-card *snapshot* only (debounced). Never sends recover:true â€”
     // recovery deals / playlist API must not ride join/song UI refreshes.
     let playerCardsRefreshTimer: ReturnType<typeof setTimeout> | null = null;
     const schedulePlayerCardsRefresh = (delayMs = 500) => {
@@ -4528,10 +4528,10 @@ const HostView: React.FC = () => {
       const feedback = normalizePlayerFeedbackEntry(data);
       if (!feedback) return;
       setPlayerFeedback((prev) => mergePlayerFeedback(prev, feedback));
-      addLog(`Player feedback — ${feedback.playerName}: ${feedback.message}`, 'info');
+      addLog(`Player feedback â€” ${feedback.playerName}: ${feedback.message}`, 'info');
       const toastMessage =
         feedback.message.length > 140
-          ? `${feedback.message.slice(0, 137)}…`
+          ? `${feedback.message.slice(0, 137)}â€¦`
           : feedback.message;
       showToast(`Feedback from ${feedback.playerName}: ${toastMessage}`, 'info');
     });
@@ -4541,7 +4541,7 @@ const HostView: React.FC = () => {
       setSongRequests((prev) => mergeSongRequests(prev, request));
       if (request.status === 'pending') {
         showToast(
-          `Song request from ${request.playerName}: ${request.title}${request.artist ? ` — ${request.artist}` : ''}`,
+          `Song request from ${request.playerName}: ${request.title}${request.artist ? ` â€” ${request.artist}` : ''}`,
           'info',
         );
       }
@@ -4577,7 +4577,7 @@ const HostView: React.FC = () => {
     newSocket.on('bingo-verification-queued', (data: any) => {
       const n = Math.max(0, Number(data?.waitingAhead) || 0);
       setBingoVerificationBehindCount(n);
-      addLog(`${data?.playerName || 'Player'} bingo queued — ${n} waiting behind current verification`, 'warn');
+      addLog(`${data?.playerName || 'Player'} bingo queued â€” ${n} waiting behind current verification`, 'warn');
     });
 
     newSocket.on('display-presence', (data: any) => {
@@ -4590,7 +4590,7 @@ const HostView: React.FC = () => {
 
     newSocket.on('replay-snippet-result', (data: any) => {
       if (data?.ok) {
-        addLog('New cut — same song, new snippet window', 'info');
+        addLog('New cut â€” same song, new snippet window', 'info');
         showToast('New cut', 'info');
         setGamePaused(false);
         setIsPlaying(true);
@@ -4602,9 +4602,9 @@ const HostView: React.FC = () => {
             : why === 'no_device'
               ? 'No Spotify device locked'
               : why === 'spotify_quarantined'
-                ? 'Spotify rate-limited — wait a moment'
+                ? 'Spotify rate-limited â€” wait a moment'
                 : why === 'not_host'
-                  ? 'Host session mismatch — refresh host'
+                  ? 'Host session mismatch â€” refresh host'
                   : why === 'jam_not_found'
                     ? 'Venue Jam not found'
                     : 'Could not bump clip';
@@ -4730,7 +4730,7 @@ const HostView: React.FC = () => {
           setGamePaused(false);
         } else if (data.continued) {
           addLog(
-            `Bingo awarded to ${data.playerName} — round continues (winning card disqualified)`,
+            `Bingo awarded to ${data.playerName} â€” round continues (winning card disqualified)`,
             'info',
           );
           setGamePaused(false);
@@ -4892,13 +4892,13 @@ const HostView: React.FC = () => {
       
       console.log('Song playing:', data);
       addLog(
-        `Now playing: ${displayTitleForUi}${ytf.artist ? ` — ${ytf.artist}` : ''}`,
+        `Now playing: ${displayTitleForUi}${ytf.artist ? ` â€” ${ytf.artist}` : ''}`,
         'info',
       );
       
-      // Do not PUT /v1/me/player/volume on every song — ~75 calls/round burned shared
+      // Do not PUT /v1/me/player/volume on every song â€” ~75 calls/round burned shared
       // Spotify quota. Volume is set at Start / host slider / resume; Spotify keeps it.
-      // Host card marks arrive via server `player-cards-update` on each call — do not
+      // Host card marks arrive via server `player-cards-update` on each call â€” do not
       // re-request (that used to run recovery deals and burn playlist API quota).
     });
 
@@ -5171,7 +5171,7 @@ const HostView: React.FC = () => {
       }
       if (merged === 'playing') {
         setHostAwaitingLiveSync(false);
-        // Jump to Game only when entering a live game (load/reconnect) — mid-playback syncs
+        // Jump to Game only when entering a live game (load/reconnect) â€” mid-playback syncs
         // (e.g. each new track) must not yank the host off the tab they're working on.
         if (!wasAlreadyPlaying) setHostGlassNav('game');
       } else if (shouldClearHostAwaitingLiveSync(roomId, merged, data)) {
@@ -5281,7 +5281,7 @@ const HostView: React.FC = () => {
       }
       if (merged === 'playing') {
         setHostAwaitingLiveSync(false);
-        // Server broadcasts room-state after every song start — only snap to the Game tab when
+        // Server broadcasts room-state after every song start â€” only snap to the Game tab when
         // first entering a live game, never while the host is browsing another tab mid-playback.
         if (!wasAlreadyPlaying) setHostGlassNav('game');
       } else if (shouldClearHostAwaitingLiveSync(roomId, merged, payload)) {
@@ -5419,7 +5419,7 @@ const HostView: React.FC = () => {
         setPlaylists((prev) => {
           const merged = new Map(prev.map((playlist) => [normalizeSpotifyPlaylistId(playlist.id), playlist]));
           syncedPlaylists.forEach((playlist: Playlist) => {
-            // Virtual meta-round rows render via their own pinned library row — never the Spotify list.
+            // Virtual meta-round rows render via their own pinned library row â€” never the Spotify list.
             if (isMetaPlaylistId(playlist.id)) return;
             const id = normalizeSpotifyPlaylistId(playlist.id);
             const existing = merged.get(id);
@@ -5617,7 +5617,7 @@ const HostView: React.FC = () => {
       if (lostHost) {
         addLog(`Server error: ${msg}`, 'error');
         showToast(
-          'Host session out of sync — re-joining the room. Try finalize again in a moment.',
+          'Host session out of sync â€” re-joining the room. Try finalize again in a moment.',
           'warn',
         );
         hostJoinEmitted = false;
@@ -5654,7 +5654,7 @@ const HostView: React.FC = () => {
         if (now - lastResumePingAtRef.current > 10000) {
           lastResumePingAtRef.current = now;
           setTimeout(() => {
-            // auto: true — the server ignores this nudge while the host has playback
+            // auto: true â€” the server ignores this nudge while the host has playback
             // deliberately paused, so a socket reconnect never un-pauses the room.
             try { newSocket.emit('resume-song', { roomId, auto: true }); } catch {}
           }, 500);
@@ -5681,7 +5681,7 @@ const HostView: React.FC = () => {
               await new Promise((r) => setTimeout(r, 1200));
               await loadDevicesSocketRef.current();
             }
-            // No fetchPlaybackState here — lobby poll / live monitors already cover /me/player;
+            // No fetchPlaybackState here â€” lobby poll / live monitors already cover /me/player;
             // reconnect used to always hit it even though shuffle/repeat sync was removed.
           } else {
             setIsSpotifyConnected(false);
@@ -5723,7 +5723,7 @@ const HostView: React.FC = () => {
       setSpotifyError(msg);
       addLog(`Playback error: ${msg}`, 'error');
 
-      // Confirm flakiness / fail-open — non-blocking toast (not HostAck modal / alert).
+      // Confirm flakiness / fail-open â€” non-blocking toast (not HostAck modal / alert).
       const softToastTypes = new Set([
         'spotify_not_playing',
         'spotify_not_playing_autoskip',
@@ -5779,13 +5779,13 @@ const HostView: React.FC = () => {
           : '';
       const msg =
         (typeof data?.message === 'string' && data.message) ||
-        'Spotify rate-limited this host. Auto-advance paused — DJ from the Spotify app until the cooldown ends.';
+        'Spotify rate-limited this host. Auto-advance paused â€” DJ from the Spotify app until the cooldown ends.';
       console.warn('Spotify API quarantined (server):', data);
       setSpotifyError(msg);
       addLog(`Spotify host quarantine${waitHint}: ${msg}`, 'error');
       showHostAckNotificationSocketRef.current({
         id: 'server-spotify-api-quarantined',
-        title: `Spotify rate limit — auto-advance paused${waitHint}`,
+        title: `Spotify rate limit â€” auto-advance paused${waitHint}`,
         variant: 'error',
         message: `${msg}\n\nDo not spam Skip/Resume. Play from Spotify on the locked speaker. Bingo/cards still work.`,
       });
@@ -5799,7 +5799,7 @@ const HostView: React.FC = () => {
       console.warn('Playback warning:', msg);
       addLog(`Playback warning: ${msg}`, 'warn');
 
-      // Mid-show confirm flakiness — toast only (do not block host with HostAck modal).
+      // Mid-show confirm flakiness â€” toast only (do not block host with HostAck modal).
       const softToastTypes = new Set([
         'spotify_not_playing',
         'spotify_not_playing_autoskip',
@@ -5834,15 +5834,15 @@ const HostView: React.FC = () => {
       } catch {}
     });
 
-    // 5×15 insufficient columns after cross-playlist dedup — must not be silent (server falls back to non-column pool).
+    // 5Ã—15 insufficient columns after cross-playlist dedup â€” must not be silent (server falls back to non-column pool).
     newSocket.on('mode-warning', (data: any) => {
       const type = data?.type;
       const msg = data?.message || 'Mode warning occurred';
       const details = Array.isArray(data?.details) ? (data.details as string[]) : [];
 
       if (type === 'insufficient-unique-songs-5x15') {
-        console.warn('5×15 mode-warning:', msg, details);
-        addLog(`5×15 unavailable (fallback pool): ${msg}`, 'warn');
+        console.warn('5Ã—15 mode-warning:', msg, details);
+        addLog(`5Ã—15 unavailable (fallback pool): ${msg}`, 'warn');
         details.forEach((detail: string) => addLog(`  ${detail}`, 'warn'));
         setFiveByFifteenInsufficientModal({
           variant: 'fallback',
@@ -5885,7 +5885,7 @@ const HostView: React.FC = () => {
 
     // Acknowledge reveal events
     newSocket.on('call-revealed', (data: any) => {
-      addLog(`Call revealed: ${data.hint || 'full'} ${data.songName ? '— ' + data.songName : ''} ${data.artistName ? '— ' + data.artistName : ''}`, 'info');
+      addLog(`Call revealed: ${data.hint || 'full'} ${data.songName ? 'â€” ' + data.songName : ''} ${data.artistName ? 'â€” ' + data.artistName : ''}`, 'info');
     });
 
     newSocket.on('host-join-denied', (data: any) => {
@@ -5932,7 +5932,7 @@ const HostView: React.FC = () => {
         navigateSocketRef.current(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
         return;
       }
-      /** Room already has an active host socket (other tab, other device, or race). Never send the host UI to /player — that was confusing and looked like a random redirect. */
+      /** Room already has an active host socket (other tab, other device, or race). Never send the host UI to /player â€” that was confusing and looked like a random redirect. */
       if (data.reason === 'room_has_host') {
         try {
           sessionStorage.setItem('skip_prefill_host_nav', '1');
@@ -6178,7 +6178,7 @@ const HostView: React.FC = () => {
           /* ignore */
         }
 
-        // Do not append &state= here — the server already set state to a signed JWT (room is inside it).
+        // Do not append &state= here â€” the server already set state to a signed JWT (room is inside it).
         window.location.href = data.authUrl;
       } else {
         console.error('Failed to get Spotify authorization URL', response.status, data);
@@ -6226,11 +6226,11 @@ const HostView: React.FC = () => {
     mixNeedsHostSpotify,
   ]);
 
-  /** True while finalizeMix is loading tracks or waiting on socket — blocks overlapping finalize (shared finalize generation ref) and debounced setlist rebuilds. */
+  /** True while finalizeMix is loading tracks or waiting on socket â€” blocks overlapping finalize (shared finalize generation ref) and debounced setlist rebuilds. */
   const finalizeMixInFlightRef = useRef(false);
   /** Shared promise so Save round + printable PDF await the same finalize instead of failing the second caller. */
   const finalizeMixPromiseRef = useRef<Promise<boolean> | null>(null);
-  /** Playlist-id key last confirmed by server `mix-finalized` for this tab — avoids skipping refinalize after prep changes selection while `mixFinalized` stayed true. */
+  /** Playlist-id key last confirmed by server `mix-finalized` for this tab â€” avoids skipping refinalize after prep changes selection while `mixFinalized` stayed true. */
   const lastFinalizePlaylistKeyRef = useRef<string | null>(null);
 
   /**
@@ -6278,7 +6278,7 @@ const HostView: React.FC = () => {
       pendingFinalizePlaylistKeyRef.current =
         expectedPlaylistKey ?? mixPlaylistSelectionKeyRef.current ?? null;
       socket.emit('request-finalized-order', { roomId });
-      addLog('Requested finalized playback order from server…', 'info');
+      addLog('Requested finalized playback order from serverâ€¦', 'info');
       const deadline = Date.now() + 16000;
       while (Date.now() < deadline) {
         if (
@@ -6300,18 +6300,18 @@ const HostView: React.FC = () => {
   /** Returns true when server confirms mix-finalized (or already finalized on client). */
   const finalizeMix = async (opts?: {
     playlists?: Playlist[];
-    /** Skip playlist fetch — use frozen Save-round order (must match `playlists` column assignment). */
+    /** Skip playlist fetch â€” use frozen Save-round order (must match `playlists` column assignment). */
     songListOverride?: Song[];
     /** Server free-center flag for this finalize (defaults to host free-center toggle). */
     freeSpace?: boolean;
-    /** When loading a saved round — commit card identity so Start Game keeps dealt cards. */
+    /** When loading a saved round â€” commit card identity so Start Game keeps dealt cards. */
     savedRoundId?: string;
     lockedPlayOrder?: Song[];
   }): Promise<boolean> => {
     let playlists = opts?.playlists ?? mixPlaylistSelection;
     /** Column alignment: when finalizing the prep round's selection, send playlists in the
-     *  round's stored order (host-set / B–O order). Selection state keeps personal and catalog
-     *  rows in separate arrays, which can scramble interleaved orders — and in 5-playlist
+     *  round's stored order (host-set / Bâ€“O order). Selection state keeps personal and catalog
+     *  rows in separate arrays, which can scramble interleaved orders â€” and in 5-playlist
      *  column mode the order sent here maps to card columns. */
     if (!opts?.playlists) {
       const ridx = currentRoundIndexRef.current;
@@ -6321,7 +6321,7 @@ const HostView: React.FC = () => {
     if (!socket || playlists.length === 0) return false;
     if (!isValidRoundPlaylistCount(playlists.length)) {
       window.alert(roundPlaylistCountError(playlists.length));
-      addLog(`Finalize blocked: ${playlists.length} playlists selected — rounds need 1 or 5.`, 'warn');
+      addLog(`Finalize blocked: ${playlists.length} playlists selected â€” rounds need 1 or 5.`, 'warn');
       return false;
     }
     const activeRoundForFs =
@@ -6340,7 +6340,7 @@ const HostView: React.FC = () => {
     const inFlight = finalizeMixPromiseRef.current;
     if (inFlight) {
       setFinalizeMixBusy(true);
-      addLog('Waiting for finalize already in progress…', 'info');
+      addLog('Waiting for finalize already in progressâ€¦', 'info');
       return inFlight;
     }
 
@@ -6353,7 +6353,7 @@ const HostView: React.FC = () => {
 
         if (opts?.songListOverride && opts.songListOverride.length > 0) {
           addLog(
-            'Applying saved round snapshot to the room (display + cards; reuse dealt grids when possible)…',
+            'Applying saved round snapshot to the room (display + cards; reuse dealt grids when possible)â€¦',
             'info',
           );
           listToSend = opts.songListOverride.map(cloneSongForSnapshot);
@@ -6364,10 +6364,10 @@ const HostView: React.FC = () => {
           finalizedOrderRef.current.length > 0 &&
           finalizedOrderPlaylistKeyRef.current === targetKey
         ) {
-          addLog('Reshuffling finalized mix for a new pool order…', 'info');
+          addLog('Reshuffling finalized mix for a new pool orderâ€¦', 'info');
           listToSend = finalizedOrderRef.current.map((s) => ({ ...s }));
         } else {
-          addLog('Loading tracks from playlists before finalizing…', 'info');
+          addLog('Loading tracks from playlists before finalizingâ€¦', 'info');
           listToSend = await generateSongList({
             force: true,
             reason: 'finalize',
@@ -6457,7 +6457,7 @@ const HostView: React.FC = () => {
               'Finalize failed. Check playlist loading (YouTube Music / Spotify), connection, or wait if the service is rate-limiting.';
             if (payload?.code === 'not_host') {
               showToast(
-                'Host session out of sync — re-joining. Try again in a moment.',
+                'Host session out of sync â€” re-joining. Try again in a moment.',
                 'warn',
               );
             }
@@ -6497,7 +6497,7 @@ const HostView: React.FC = () => {
           lastFinalizeMixSongListRef.current = listToSend;
           socket.on('mix-finalized', onFinalized);
           socket.on('finalize-mix-failed', onFailed);
-          // Internal (virtual) playlists carry their tracks embedded — the server skips Spotify
+          // Internal (virtual) playlists carry their tracks embedded â€” the server skips Spotify
           // for `__x__` ids and reads `songs` instead (see isInternalPlaylistId paths).
           const playlistsForServer = playlists.map((p) =>
             isMetaPlaylistId(p.id)
@@ -6609,7 +6609,7 @@ const HostView: React.FC = () => {
           freeSpace,
           logoUrl,
           previewWatermark: true,
-          subtitle: 'Preview — watermarked sample',
+          subtitle: 'Preview â€” watermarked sample',
           columnLetters: normalizeBingoColumnLetters(bingoColumnLetters) ?? undefined,
           cardsPerPage: normalizeCardsPerPage(printableCardsPerPage),
         });
@@ -6733,7 +6733,7 @@ const HostView: React.FC = () => {
     [roomId],
   );
 
-  /** Printable PDF from saved round snapshot (pre-show) — not the live room pool. */
+  /** Printable PDF from saved round snapshot (pre-show) â€” not the live room pool. */
   const handleDownloadRoundPrintablePdf = useCallback(
     (round: EventRound | undefined) => {
       if (!round) return;
@@ -6942,8 +6942,8 @@ const HostView: React.FC = () => {
     const roundForStart =
       opts?.roundOverride ??
       (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length ? eventRounds[currentRoundIndex] : null);
-    // Always prefer round playlistIds order for Start Game — mix UI personal/catalog split
-    // otherwise scrambles 5×15 projector columns vs host chips.
+    // Always prefer round playlistIds order for Start Game â€” mix UI personal/catalog split
+    // otherwise scrambles 5Ã—15 projector columns vs host chips.
     const playlistsForStart = orderPlaylistsByRoundIds(
       opts?.playlistsOverride && opts.playlistsOverride.length > 0
         ? opts.playlistsOverride
@@ -6955,7 +6955,7 @@ const HostView: React.FC = () => {
     );
 
     if (needsHostSpotifyForStart && !isSpotifyConnected) {
-      alert('Spotify is not connected. Open Settings → Playback & connections and connect Spotify first.');
+      alert('Spotify is not connected. Open Settings â†’ Playback & connections and connect Spotify first.');
       return false;
     }
 
@@ -6969,7 +6969,7 @@ const HostView: React.FC = () => {
       return false;
     }
     if (appleOnlyStart && !appleMusicConnected) {
-      alert('Apple Music is not connected. Open Settings → Playback & connections and connect Apple Music first.');
+      alert('Apple Music is not connected. Open Settings â†’ Playback & connections and connect Apple Music first.');
       return false;
     }
 
@@ -6992,7 +6992,7 @@ const HostView: React.FC = () => {
       return false;
     }
 
-    // Tempo round rule: 1 playlist (Round Mix) or 5 (Column mode) — no other count may start.
+    // Tempo round rule: 1 playlist (Round Mix) or 5 (Column mode) â€” no other count may start.
     const startPlaylistCount = roundForStart
       ? roundForStart.playlistIds?.length ?? 0
       : playlistsForStart.length;
@@ -7042,7 +7042,7 @@ const HostView: React.FC = () => {
     try {
       if (!useSavedRoundPlayback && !mixFinalized) {
         addLog('Finalizing mix before start...', 'info');
-        // Pass ordered playlists explicitly — default mix concat can scramble column order.
+        // Pass ordered playlists explicitly â€” default mix concat can scramble column order.
         // Use this round's Free center (not only the host default toggle).
         const ok = await finalizeMix({
           playlists: playlistsForStart,
@@ -7136,12 +7136,12 @@ const HostView: React.FC = () => {
       if (useSavedRoundPlayback) {
         addLog(
           lockedPlayOrder
-            ? 'Starting game from saved round — using the play order locked at Save round'
-            : 'Starting legacy saved round — server shuffles playback order once, then plays 1→N',
+            ? 'Starting game from saved round â€” using the play order locked at Save round'
+            : 'Starting legacy saved round â€” server shuffles playback order once, then plays 1â†’N',
           'info',
         );
       } else if (mixFinalized) {
-        addLog('Starting game — server shuffles playback order from your bingo pool, then plays 1→N', 'info');
+        addLog('Starting game â€” server shuffles playback order from your bingo pool, then plays 1â†’N', 'info');
       }
 
       // Prime MusicKit under the Start Game click so call #1 isn't blocked / raced on empty queue.
@@ -7201,10 +7201,10 @@ const HostView: React.FC = () => {
     }
     console.log('?? Requesting player cards for room:', roomId);
     // Snapshot by default. Explicit announce (= host-initiated refresh) may recover missing deals
-    // from the locked room pool — still no playlist API after finalize.
+    // from the locked room pool â€” still no playlist API after finalize.
     socket.emit('request-player-cards', { roomId, recover: opts?.announce === true });
     if (opts?.announce) {
-      showToast('Refreshing player cards…', 'info');
+      showToast('Refreshing player cardsâ€¦', 'info');
       addLog('Requested player cards', 'info');
     }
   };
@@ -7621,7 +7621,7 @@ const HostView: React.FC = () => {
                         catalogDisplayVerified: square.catalogDisplayVerified === true,
                         isFreeSpace: isFree,
                       });
-                      const cellTitle = `${cellVis.title}${cellVis.artist ? ` — ${cellVis.artist}` : ''}`;
+                      const cellTitle = `${cellVis.title}${cellVis.artist ? ` â€” ${cellVis.artist}` : ''}`;
 
                       return (
                         <div
@@ -7943,13 +7943,13 @@ const HostView: React.FC = () => {
     if (
       window.confirm(
         'Reset entire event?\n\n' +
-          '• Ends the game if playing\n' +
-          '• Clears mix selection & finalized pool in this tab\n' +
-          '• Clears Leftovers (night-wide unplayed recap)\n' +
-          '• Clears audience song requests\n' +
-          '• Rounds with a valid Save round snapshot keep playlists + snapshot\n' +
-          '• All other rounds: buckets emptied (draft prep discarded)\n' +
-          '• Every round returns to unplanned\n\n' +
+          'â€¢ Ends the game if playing\n' +
+          'â€¢ Clears mix selection & finalized pool in this tab\n' +
+          'â€¢ Clears Leftovers (night-wide unplayed recap)\n' +
+          'â€¢ Clears audience song requests\n' +
+          'â€¢ Rounds with a valid Save round snapshot keep playlists + snapshot\n' +
+          'â€¢ All other rounds: buckets emptied (draft prep discarded)\n' +
+          'â€¢ Every round returns to unplanned\n\n' +
           'This cannot be undone. Continue?',
       )
     ) {
@@ -8014,7 +8014,7 @@ const HostView: React.FC = () => {
       invalidateSetlistBuildCache();
       setGameState('waiting');
 
-      addLog('Event reset — leftovers and requests cleared; saved-round snapshots kept; unsaved buckets cleared', 'info');
+      addLog('Event reset â€” leftovers and requests cleared; saved-round snapshots kept; unsaved buckets cleared', 'info');
     }
   };
 
@@ -8024,11 +8024,11 @@ const HostView: React.FC = () => {
     if (
       !window.confirm(
         'Clear ALL saved round prep for THIS ROOM on THIS browser?\n\n' +
-          '• Deletes localStorage event-rounds (round buckets + Save-round snapshots)\n' +
-          '• Clears cloud-sync marker so the next load can restore from your Tempo account if you’re signed in\n' +
-          '• Leaves one empty Round 1\n' +
-          '• Clears mix selection & finalized pool in this tab\n' +
-          '• Ends the live game if playing\n\n' +
+          'â€¢ Deletes localStorage event-rounds (round buckets + Save-round snapshots)\n' +
+          'â€¢ Clears cloud-sync marker so the next load can restore from your Tempo account if youâ€™re signed in\n' +
+          'â€¢ Leaves one empty Round 1\n' +
+          'â€¢ Clears mix selection & finalized pool in this tab\n' +
+          'â€¢ Ends the live game if playing\n\n' +
           'Does not remove playlists from Spotify/YouTube. Cannot be undone.',
       )
     ) {
@@ -8069,7 +8069,7 @@ const HostView: React.FC = () => {
     setWinners([]);
     setRoundComplete(null);
     setRoundWinners([]);
-    showToast('Prep cache cleared — fresh Round 1 (this browser)', 'success');
+    showToast('Prep cache cleared â€” fresh Round 1 (this browser)', 'success');
     addLog('Cleared room round prep storage (localStorage + UI)', 'info');
   };
 
@@ -8551,10 +8551,10 @@ const HostView: React.FC = () => {
     const confirmed = window.confirm(
       'Start next round with fresh setup?\n\n' +
       'This will:\n' +
-      '• Keep all players connected\n' +
-      '• Keep Spotify connection\n' +
-      '• Reset to setup screen for new playlists/pattern\n' +
-      '• Clear all bingo cards\n\n' +
+      'â€¢ Keep all players connected\n' +
+      'â€¢ Keep Spotify connection\n' +
+      'â€¢ Reset to setup screen for new playlists/pattern\n' +
+      'â€¢ Clear all bingo cards\n\n' +
       'Click OK to proceed.'
     );
     
@@ -8596,7 +8596,7 @@ const HostView: React.FC = () => {
 
   /**
    * After a round is stamped with playRecap: show the played list and, when Spotify is
-   * connected, auto-create a permanent "GOT — Played …" playlist in call order.
+   * connected, auto-create a permanent "GOT â€” Played â€¦" playlist in call order.
    */
   const ensurePlayedPlaylistForRound = useCallback(
     async (roundIndex: number) => {
@@ -8649,7 +8649,7 @@ const HostView: React.FC = () => {
         count: songs.length,
         skippedReason:
           spotifyIds.length === 0
-            ? 'Played list saved. Spotify playlist skipped (no Spotify track ids — e.g. YouTube/Apple night).'
+            ? 'Played list saved. Spotify playlist skipped (no Spotify track ids â€” e.g. YouTube/Apple night).'
             : !readHostSpotifyWebEnabled() || !isSpotifyConnectedRef.current
               ? 'Played list saved. Connect Spotify to auto-create a playlist.'
               : undefined,
@@ -8665,7 +8665,7 @@ const HostView: React.FC = () => {
         count: songs.length,
       });
 
-      const playlistName = `Played — ${round.name || `Round ${roundIndex + 1}`} — ${roomId || 'room'}`;
+      const playlistName = `Played â€” ${round.name || `Round ${roundIndex + 1}`} â€” ${roomId || 'room'}`;
       try {
         const response = await hostFetch(`${API_BASE || ''}/api/spotify/create-output-playlist`, {
           method: 'POST',
@@ -8673,7 +8673,7 @@ const HostView: React.FC = () => {
           body: JSON.stringify({
             name: playlistName,
             trackIds: spotifyIds,
-            description: `Songs played in call order — ${round.name || `Round ${roundIndex + 1}`} — Room ${roomId}`,
+            description: `Songs played in call order â€” ${round.name || `Round ${roundIndex + 1}`} â€” Room ${roomId}`,
           }),
         });
         const data = await response.json();
@@ -8735,7 +8735,7 @@ const HostView: React.FC = () => {
   );
   ensurePlayedPlaylistForRoundRef.current = ensurePlayedPlaylistForRound;
 
-  /** Resolve full #1–N call order for a round (saved playOrder preferred, else live finalized list). */
+  /** Resolve full #1â€“N call order for a round (saved playOrder preferred, else live finalized list). */
   const resolveRoundCallOrderSongs = useCallback(
     (round: EventRound | null | undefined): Array<{ id: string; name: string; artist: string }> => {
       if (!round) return [];
@@ -8761,8 +8761,8 @@ const HostView: React.FC = () => {
   );
 
   /**
-   * Create a Spotify playlist of the round's full call/play order (#1–N), not just songs that played.
-   * Opt-in (button) — played-only export remains the automatic round-end path.
+   * Create a Spotify playlist of the round's full call/play order (#1â€“N), not just songs that played.
+   * Opt-in (button) â€” played-only export remains the automatic round-end path.
    */
   const createRoundCallOrderSpotifyPlaylist = useCallback(
     async (roundIndex: number) => {
@@ -8790,7 +8790,7 @@ const HostView: React.FC = () => {
       const songs = resolveRoundCallOrderSongs(round);
       if (songs.length === 0) {
         window.alert(
-          'No call-order songs for this round yet. Save the round (or finalize the mix) so the #1–N list is locked, then try again.',
+          'No call-order songs for this round yet. Save the round (or finalize the mix) so the #1â€“N list is locked, then try again.',
         );
         return;
       }
@@ -8809,7 +8809,7 @@ const HostView: React.FC = () => {
       if (callOrderPlaylistInFlightRef.current.has(roundIndex)) return;
       callOrderPlaylistInFlightRef.current.add(roundIndex);
 
-      const defaultName = `Call order — ${round.name || `Round ${roundIndex + 1}`} — ${roomId || 'room'}`;
+      const defaultName = `Call order â€” ${round.name || `Round ${roundIndex + 1}`} â€” ${roomId || 'room'}`;
       const playlistName =
         prompt('Name for the full call-order Spotify playlist:', defaultName)?.trim() || '';
       if (!playlistName) {
@@ -8825,7 +8825,7 @@ const HostView: React.FC = () => {
           body: JSON.stringify({
             name: playlistName,
             trackIds: spotifyIds,
-            description: `Full call order (#1–${spotifyIds.length}) — ${round.name || `Round ${roundIndex + 1}`} — Room ${roomId}`,
+            description: `Full call order (#1â€“${spotifyIds.length}) â€” ${round.name || `Round ${roundIndex + 1}`} â€” Room ${roomId}`,
           }),
         });
         const data = await response.json();
@@ -8871,7 +8871,7 @@ const HostView: React.FC = () => {
           `Created Spotify call-order playlist (${spotifyIds.length} songs): ${data.playlistName || playlistName}`,
           'info',
         );
-        showToast(`Call order → Spotify (${spotifyIds.length} tracks)`, 'success');
+        showToast(`Call order â†’ Spotify (${spotifyIds.length} tracks)`, 'success');
         if (playlistUrl) window.open(playlistUrl, '_blank', 'noopener,noreferrer');
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
@@ -8924,7 +8924,7 @@ const HostView: React.FC = () => {
     );
     if (spotifyIds.length === 0) {
       const lines = songs
-        .map((s, i) => `${i + 1}. ${s.name || s.id}${s.artist ? ` — ${s.artist}` : ''}`)
+        .map((s, i) => `${i + 1}. ${s.name || s.id}${s.artist ? ` â€” ${s.artist}` : ''}`)
         .join('\n');
       try {
         await navigator.clipboard.writeText(lines);
@@ -8944,8 +8944,8 @@ const HostView: React.FC = () => {
 
     const playlistName =
       prompt(
-        'Name for tonight’s played playlist:',
-        `Played tonight — ${roomId || 'room'} — ${new Date().toLocaleDateString()}`,
+        'Name for tonightâ€™s played playlist:',
+        `Played tonight â€” ${roomId || 'room'} â€” ${new Date().toLocaleDateString()}`,
       ) || '';
     if (!playlistName.trim()) return;
 
@@ -8956,7 +8956,7 @@ const HostView: React.FC = () => {
         body: JSON.stringify({
           name: playlistName.trim(),
           trackIds: spotifyIds,
-          description: `All songs played tonight — Room ${roomId} — ${songs.length} unique calls`,
+          description: `All songs played tonight â€” Room ${roomId} â€” ${songs.length} unique calls`,
         }),
       });
       const data = await response.json();
@@ -8968,7 +8968,7 @@ const HostView: React.FC = () => {
           ? data.playlistUrl
           : `https://open.spotify.com/playlist/${data.playlistId}`;
       addLog(
-        `Created tonight’s played playlist: ${data.playlistName} (${spotifyIds.length} songs)`,
+        `Created tonightâ€™s played playlist: ${data.playlistName} (${spotifyIds.length} songs)`,
         'info',
       );
       alert(
@@ -8979,7 +8979,7 @@ const HostView: React.FC = () => {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      addLog(`Failed to create tonight’s played playlist: ${message}`, 'error');
+      addLog(`Failed to create tonightâ€™s played playlist: ${message}`, 'error');
       alert(`Failed to create playlist: ${message}`);
     }
   }, [roomId, addLog]);
@@ -9008,8 +9008,8 @@ const HostView: React.FC = () => {
     setGamePaused(true);
     gameStateRef.current = 'waiting';
     setGameState('waiting');
-    showToast('Round marked complete — winners list is on the projector until you set the next round.', 'info');
-    addLog('Round complete modal dismissed — winners board revealed', 'info');
+    showToast('Round marked complete â€” winners list is on the projector until you set the next round.', 'info');
+    addLog('Round complete modal dismissed â€” winners board revealed', 'info');
   }, [revealWinnersBoardAfterRound, showToast, addLog, roomId, ensurePlayedPlaylistForRound]);
 
 
@@ -9070,14 +9070,14 @@ const HostView: React.FC = () => {
   const leftoverPoolSongsRef = useRef(leftoverPoolSongs);
   leftoverPoolSongsRef.current = leftoverPoolSongs;
 
-  /** Virtual library row for the leftovers pool — always present (like Requests), even at 0 tracks. */
+  /** Virtual library row for the leftovers pool â€” always present (like Requests), even at 0 tracks. */
   const leftoversVirtualPlaylist = useMemo<Playlist>(
     () => ({
       id: LEFTOVERS_PLAYLIST_ID,
       name: LEFTOVERS_PLAYLIST_NAME,
       tracks: leftoverPoolSongs.length,
       description:
-        'Virtual playlist — tracks from earlier rounds tonight that were never played. Updates live until you finalize a round with it.',
+        'Virtual playlist â€” tracks from earlier rounds tonight that were never played. Updates live until you finalize a round with it.',
     }),
     [leftoverPoolSongs.length],
   );
@@ -9107,7 +9107,7 @@ const HostView: React.FC = () => {
       name: REQUESTS_PLAYLIST_NAME,
       tracks: requestPoolSongs.length,
       description:
-        'Virtual playlist — audience requests approved by the host and matched to Spotify tracks.',
+        'Virtual playlist â€” audience requests approved by the host and matched to Spotify tracks.',
     }),
     [requestPoolSongs.length],
   );
@@ -9176,8 +9176,8 @@ const HostView: React.FC = () => {
     });
   }, [leftoverPoolSongs.length, roomId]);
 
-  /** Approve/reject anytime — grows the Requests pool for later; never rebuilds the live deck
-   *  (see requestPoolSongs → generateSongList effect, which no-ops while playing). */
+  /** Approve/reject anytime â€” grows the Requests pool for later; never rebuilds the live deck
+   *  (see requestPoolSongs â†’ generateSongList effect, which no-ops while playing). */
   const emitModerateSongRequest = useCallback(
     async (
       request: SongRequestEntry,
@@ -9244,7 +9244,7 @@ const HostView: React.FC = () => {
       try {
         if (status === 'rejected') {
           await emitModerateSongRequest(request, 'rejected');
-          showToast(`Rejected “${request.title}”.`, 'info');
+          showToast(`Rejected â€œ${request.title}â€.`, 'info');
           return;
         }
 
@@ -9276,7 +9276,7 @@ const HostView: React.FC = () => {
           : [];
         if (tracks.length === 0) {
           showToast(
-            `No Spotify match found for “${request.title}”. Try editing the title/artist on the player side, or reject.`,
+            `No Spotify match found for â€œ${request.title}â€. Try editing the title/artist on the player side, or reject.`,
             'warn',
           );
           return;
@@ -9284,13 +9284,13 @@ const HostView: React.FC = () => {
 
         if (tracks.length > 1) {
           setRequestTrackPicker({ requestId: request.id, tracks });
-          showToast(`Pick the Spotify track for “${request.title}”.`, 'info');
+          showToast(`Pick the Spotify track for â€œ${request.title}â€.`, 'info');
           return;
         }
 
         const resolvedSong = songFromSearchHit(tracks[0]);
         await emitModerateSongRequest(request, 'approved', resolvedSong);
-        showToast(`Approved “${resolvedSong.name}” for Requests.`, 'success');
+        showToast(`Approved â€œ${resolvedSong.name}â€ for Requests.`, 'success');
       } catch (error) {
         console.error('Song request moderation failed:', error);
         showToast('Could not update that request. Try again.', 'error');
@@ -9325,7 +9325,7 @@ const HostView: React.FC = () => {
         const resolvedSong = songFromSearchHit(match);
         await emitModerateSongRequest(request, 'approved', resolvedSong);
         setRequestTrackPicker(null);
-        showToast(`Approved “${resolvedSong.name}” for Requests.`, 'success');
+        showToast(`Approved â€œ${resolvedSong.name}â€ for Requests.`, 'success');
       } catch (error) {
         console.error('Song request track confirm failed:', error);
         showToast('Could not update that request. Try again.', 'error');
@@ -9351,7 +9351,7 @@ const HostView: React.FC = () => {
           );
         });
         setSongRequests((prev) => prev.filter((entry) => entry.id !== request.id));
-        showToast(`Removed “${request.title}”.`, 'info');
+        showToast(`Removed â€œ${request.title}â€.`, 'info');
       } catch (error) {
         console.error('Song request remove failed:', error);
         showToast('Could not remove that request. Try again.', 'error');
@@ -9455,7 +9455,7 @@ const HostView: React.FC = () => {
         }
       });
 
-      // Leftovers virtual rows are never "kept" — they are rebuilt fresh from the recap pool
+      // Leftovers virtual rows are never "kept" â€” they are rebuilt fresh from the recap pool
       // each build (live-updating), and never marked fully loaded.
       const kept: Song[] = opts?.force
         ? []
@@ -9484,13 +9484,13 @@ const HostView: React.FC = () => {
       let toFetch = rows.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
 
       // Ref says every selected playlist was fetched, but we have no tracks in memory (reconnect, room
-      // lifecycle, etc.). Refetch instead of returning [] with no network calls — avoids Finalize Mix alert.
+      // lifecycle, etc.). Refetch instead of returning [] with no network calls â€” avoids Finalize Mix alert.
       if (toFetch.length === 0 && kept.length === 0 && rows.length > 0) {
         fullyLoadedPlaylistIdsRef.current.clear();
         toFetch = rows.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
       }
 
-      /** Multi-playlist mixes (5×15): same track may appear once per column playlist — do not collapse by id only. */
+      /** Multi-playlist mixes (5Ã—15): same track may appear once per column playlist â€” do not collapse by id only. */
       const allowSameTrackAcrossPlaylists = rows.length > 1;
 
       const dedupeAndShuffle = (songs: Song[]) => {
@@ -9566,7 +9566,7 @@ const HostView: React.FC = () => {
             return [];
           }
           const playlist = toFetch[i];
-          // Leftovers virtual playlist: tracks come from completed-round recaps in memory — no API call.
+          // Leftovers virtual playlist: tracks come from completed-round recaps in memory â€” no API call.
           if (isLeftoversPlaylistId(playlist.id)) {
             allSongs.push(...leftoverPoolSongsRef.current.map((s) => ({ ...s })));
             continue;
@@ -9636,7 +9636,7 @@ const HostView: React.FC = () => {
             const privateNoSnap = data.error === 'org_playlist_private_no_snapshot';
             addLog(
               privateNoSnap
-                ? `${playlist.name || playlist.id}: private on another Spotify account — Tempo has no saved snapshot/cache yet. Ask that host to open or save the round once.`
+                ? `${playlist.name || playlist.id}: private on another Spotify account â€” Tempo has no saved snapshot/cache yet. Ask that host to open or save the round once.`
                 : `Failed to load tracks for ${playlist.name || playlist.id}: ${data.message || data.error || response.status}${catalog ? ' (Tempo Library)' : ''}.`,
               'warn',
             );
@@ -9654,12 +9654,12 @@ const HostView: React.FC = () => {
               title: 'Spotify rate limit',
               variant: 'warning',
               message:
-                'Stopped importing playlist tracks — Spotify is rate-limiting. Loaded tracks are kept; wait and retry.',
+                'Stopped importing playlist tracks â€” Spotify is rate-limiting. Loaded tracks are kept; wait and retry.',
             });
             break;
           }
           if (response.status === 503 && data.error === 'spotify_upstream_unavailable') {
-            // Transient Spotify outage, not an auth problem — Spotify stays connected, no reconnect prompt.
+            // Transient Spotify outage, not an auth problem â€” Spotify stays connected, no reconnect prompt.
             // Remember the cooldown so this playlist is not auto-refetched in a loop.
             const waitSec =
               typeof data.retryAfterSec === 'number' && data.retryAfterSec > 0 ? data.retryAfterSec : 45;
@@ -9670,7 +9670,7 @@ const HostView: React.FC = () => {
               title: 'Spotify API temporarily unavailable',
               variant: 'warning',
               message:
-                'Spotify is connected, but Spotify’s API is temporarily unavailable while loading playlist tracks. Cached tracks are used where possible — try again in a moment (no need to reconnect).',
+                'Spotify is connected, but Spotifyâ€™s API is temporarily unavailable while loading playlist tracks. Cached tracks are used where possible â€” try again in a moment (no need to reconnect).',
             });
             continue;
           }
@@ -9734,9 +9734,9 @@ const HostView: React.FC = () => {
             id: 'setlist-playlist-tracks-503',
             title: 'Spotify API temporarily unavailable',
             variant: 'warning',
-            message: `Spotify is connected, but Spotify’s API is temporarily unavailable for ${skippedForUpstreamCooldown} playlist${
+            message: `Spotify is connected, but Spotifyâ€™s API is temporarily unavailable for ${skippedForUpstreamCooldown} playlist${
               skippedForUpstreamCooldown !== 1 ? 's' : ''
-            }. TEMPO will retry automatically on the next build — or tap Refresh to retry now.`,
+            }. TEMPO will retry automatically on the next build â€” or tap Refresh to retry now.`,
           });
         }
 
@@ -9756,7 +9756,7 @@ const HostView: React.FC = () => {
     [mixPlaylistSelection, isSpotifyConnected, setPlaylists, setSelectedPlaylists, applyLoadedTrackCountsFromSongs, applyPlaylistLoadStats]
   );
 
-  /** Always latest generateSongList — debounced effect must not depend on this callback (identity churn retriggers → duplicate playlist-tracks waves). */
+  /** Always latest generateSongList â€” debounced effect must not depend on this callback (identity churn retriggers â†’ duplicate playlist-tracks waves). */
   const generateSongListRef = useRef(generateSongList);
   generateSongListRef.current = generateSongList;
 
@@ -9883,7 +9883,7 @@ const HostView: React.FC = () => {
         return;
       }
       if (!readHostSpotifyWebEnabled()) return;
-      // Regain control — transfer(play=true) keeps Windows Now Playing bound.
+      // Regain control â€” transfer(play=true) keeps Windows Now Playing bound.
       await hostFetch(`${API_BASE || ''}/api/spotify/transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -10099,12 +10099,12 @@ const HostView: React.FC = () => {
     roundBuilderFocusIndexRef.current = roundBuilderFocusIndex;
   }, [roundBuilderFocusIndex]);
 
-  /** Keep projector Round · prize in sync whenever the call list can show (not only Start Game). */
+  /** Keep projector Round Â· prize in sync whenever the call list can show (not only Start Game). */
   const syncRoundDisplayMeta = useCallback(() => {
     if (!socket || !roomId) return;
     const rounds = eventRoundsRef.current;
     if (!rounds.length) return;
-    // currentRoundIndex is often -1 during prep — fall back to focused / first round.
+    // currentRoundIndex is often -1 during prep â€” fall back to focused / first round.
     // Never emit blanks in that case or we wipe Round + prize off the projector.
     let idx = currentRoundIndexRef.current;
     if (idx < 0 || idx >= rounds.length) {
@@ -10181,7 +10181,7 @@ const HostView: React.FC = () => {
 
   const setSponsorScreenVisible = useCallback(
     (visible: boolean) => {
-      // Host maps live + verify-pause → 'playing'; waiting/ended (incl. after bingo) can show.
+      // Host maps live + verify-pause â†’ 'playing'; waiting/ended (incl. after bingo) can show.
       if (visible && gameState === 'playing') {
         addLog('Sponsor screen can only be shown between rounds.', 'warn');
         return;
@@ -10205,7 +10205,7 @@ const HostView: React.FC = () => {
       qrUrl: sponsorScreen.qrUrl,
       mediaKind: sponsorScreen.mediaKind,
     });
-    // Only on socket/room ready — not on every keystroke.
+    // Only on socket/room ready â€” not on every keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, roomId]);
 
@@ -10225,7 +10225,7 @@ const HostView: React.FC = () => {
     });
     verificationTimeoutRef.current = setTimeout(() => {
       verificationTimeoutRef.current = null;
-      addLog('Approve timed out — clearing verification modal', 'warn');
+      addLog('Approve timed out â€” clearing verification modal', 'warn');
       setPendingVerification(null);
       setGamePaused(false);
       setIsProcessingVerification(false);
@@ -10248,7 +10248,7 @@ const HostView: React.FC = () => {
     });
     verificationTimeoutRef.current = setTimeout(() => {
       verificationTimeoutRef.current = null;
-      addLog('Reject timed out — clearing verification modal', 'warn');
+      addLog('Reject timed out â€” clearing verification modal', 'warn');
       setPendingVerification(null);
       setGamePaused(false);
       setIsProcessingVerification(false);
@@ -10272,7 +10272,7 @@ const HostView: React.FC = () => {
     });
     verificationTimeoutRef.current = setTimeout(() => {
       verificationTimeoutRef.current = null;
-      addLog('Award & continue timed out — clearing verification modal', 'warn');
+      addLog('Award & continue timed out â€” clearing verification modal', 'warn');
       setPendingVerification(null);
       setGamePaused(false);
       setIsProcessingVerification(false);
@@ -10304,7 +10304,7 @@ const HostView: React.FC = () => {
         body: JSON.stringify({
           name: playlistName,
           trackIds: trackIds,
-          description: `TEMPO output — Room ${roomId} — ${mixPlaylistSelection.map(p => p.name).join(', ')}`
+          description: `TEMPO output â€” Room ${roomId} â€” ${mixPlaylistSelection.map(p => p.name).join(', ')}`
         }),
       });
 
@@ -10356,7 +10356,7 @@ const HostView: React.FC = () => {
   //   return () => clearInterval(volumeSyncInterval);
   // }, [isPlaying, currentSong, fetchCurrentVolume]);
 
-  // Periodic playback state synchronization (lobby / between rounds only — never mid-show)
+  // Periodic playback state synchronization (lobby / between rounds only â€” never mid-show)
   useEffect(() => {
     if (!currentSong) return;
     if (gameState === 'playing') return;
@@ -10415,8 +10415,8 @@ const HostView: React.FC = () => {
   }, [currentSong, gameState, isPlaying, isPausedByInterface]);
 
   // Build master setlist when selection changes. Debounced: ticking several playlists in a row = one import wave.
-  // Depends on playlistSelectionKey + Spotify connectivity gates + mixNeedsHostSpotify — NOT generateSongList — so callback identity churn does not reschedule this effect (was causing 3× identical playlist-tracks bursts).
-  // Live round: never rebuild — Spotify reconnect / selection identity churn must not hit playlist-tracks mid-show.
+  // Depends on playlistSelectionKey + Spotify connectivity gates + mixNeedsHostSpotify â€” NOT generateSongList â€” so callback identity churn does not reschedule this effect (was causing 3Ã— identical playlist-tracks bursts).
+  // Live round: never rebuild â€” Spotify reconnect / selection identity churn must not hit playlist-tracks mid-show.
   useEffect(() => {
     if (gameStateRef.current === 'playing') return;
     const extra = setlistDebounceExtraAfterSpotifyConnectMsRef.current;
@@ -10479,7 +10479,7 @@ const HostView: React.FC = () => {
         socket.emit('sync-state', { roomId });
         socket.emit('request-finalized-order', { roomId });
         socket.emit('request-player-cards', { roomId });
-        // Do not resume-song here — server transfer+resume causes ~0.5s Spotify blips when the
+        // Do not resume-song here â€” server transfer+resume causes ~0.5s Spotify blips when the
         // host tab regains focus even though Connect playback never paused. Use play if truly paused.
       } catch {
         /* ignore */
@@ -10612,7 +10612,7 @@ const HostView: React.FC = () => {
         !prizeOnlyPatch
       ) {
         showToast(
-          'Live round settings are locked — pick another round to edit its pattern. The live mix stays put.',
+          'Live round settings are locked â€” pick another round to edit its pattern. The live mix stays put.',
           'info',
         );
         return;
@@ -10622,7 +10622,7 @@ const HostView: React.FC = () => {
         if (!r) return prev;
         let updated: EventRound = { ...r, ...patch };
         if (Object.prototype.hasOwnProperty.call(patch, 'prize')) {
-          // Don't trim while typing — trailing spaces are needed to enter the next word.
+          // Don't trim while typing â€” trailing spaces are needed to enter the next word.
           const nextPrize =
             typeof patch.prize === 'string' ? patch.prize.slice(0, 120) : '';
           updated = { ...updated, prize: nextPrize || undefined };
@@ -10680,7 +10680,7 @@ const HostView: React.FC = () => {
       roundIndex === currentRoundIndexRef.current
     ) {
       showToast(
-        'Live round settings are locked — pick another round to edit its pattern. The live mix stays put.',
+        'Live round settings are locked â€” pick another round to edit its pattern. The live mix stays put.',
         'info',
       );
       return;
@@ -10704,7 +10704,7 @@ const HostView: React.FC = () => {
         idx === currentRoundIndexRef.current
       ) {
         showToast(
-          'Live round settings are locked — pick another round to edit its pattern. The live mix stays put.',
+          'Live round settings are locked â€” pick another round to edit its pattern. The live mix stays put.',
           'info',
         );
         return;
@@ -10723,9 +10723,9 @@ const HostView: React.FC = () => {
   );
 
   /**
-   * Resolve round playlistIds → mix rows in stored order (B–O column order for 5×15).
+   * Resolve round playlistIds â†’ mix rows in stored order (Bâ€“O column order for 5Ã—15).
    * Prefer Tempo Library (catalog) when the same Spotify id appears in both libraries so
-   * tracks load via the catalog endpoint — personal+catalog mixes were losing catalog packs
+   * tracks load via the catalog endpoint â€” personal+catalog mixes were losing catalog packs
    * (or fetching them as personal) when ids overlapped or URI forms differed.
    */
   const resolveMixPlaylistRowsForRound = useCallback(
@@ -10793,7 +10793,7 @@ const HostView: React.FC = () => {
     [resolveMixPlaylistRowsForRound],
   );
 
-  /** Sync mix + fetch tracks for this round. Pass roundOverride right after add/remove — ref lags one commit. */
+  /** Sync mix + fetch tracks for this round. Pass roundOverride right after add/remove â€” ref lags one commit. */
   const syncMixFromRound = useCallback(
     (roundIndex: number, roundOverride?: EventRound) => {
       const round = roundOverride ?? eventRoundsRef.current[roundIndex];
@@ -10830,7 +10830,7 @@ const HostView: React.FC = () => {
     [playlistsForRoundPlanner, catalogPackOptions, leftoversVirtualPlaylist, requestsVirtualPlaylist],
   );
 
-  /** During live play, only the round currently being played is locked — all other rounds stay fully editable. */
+  /** During live play, only the round currently being played is locked â€” all other rounds stay fully editable. */
   const roundLockedForLivePlay = useCallback((roundIndex: number) => {
     return gameStateRef.current === 'playing' && roundIndex === currentRoundIndexRef.current;
   }, []);
@@ -10839,7 +10839,7 @@ const HostView: React.FC = () => {
   const addPlaylistToRoundBucket = useCallback(
     (roundIndex: number, playlistId: string) => {
       if (roundLockedForLivePlay(roundIndex)) {
-        showToast('That round is live — end the round before changing its playlists. Other rounds stay editable.', 'info');
+        showToast('That round is live â€” end the round before changing its playlists. Other rounds stay editable.', 'info');
         return;
       }
       const playlist = resolvePlaylistForRoundAssign(playlistId);
@@ -10932,7 +10932,7 @@ const HostView: React.FC = () => {
   const removePlaylistFromRoundBucket = useCallback(
     (roundIndex: number, playlistId: string) => {
       if (roundLockedForLivePlay(roundIndex)) {
-        showToast('That round is live — end the round before changing its playlists. Other rounds stay editable.', 'info');
+        showToast('That round is live â€” end the round before changing its playlists. Other rounds stay editable.', 'info');
         return;
       }
       const prev = eventRoundsRef.current;
@@ -10980,7 +10980,7 @@ const HostView: React.FC = () => {
   const reorderPlaylistsInRoundBucket = useCallback(
     (roundIndex: number, fromIndex: number, toIndex: number) => {
       if (roundLockedForLivePlay(roundIndex)) {
-        showToast('That round is live — end the round before changing its playlists. Other rounds stay editable.', 'info');
+        showToast('That round is live â€” end the round before changing its playlists. Other rounds stay editable.', 'info');
         return;
       }
       const prev = eventRoundsRef.current;
@@ -11011,7 +11011,7 @@ const HostView: React.FC = () => {
   );
 
   const handleFocusRoundForLibrary = useCallback((roundIndex: number) => {
-    // During live play, currentRoundIndex is the live round pointer — browsing rounds for
+    // During live play, currentRoundIndex is the live round pointer â€” browsing rounds for
     // prep must not move it (it drives round-complete bookkeeping and the live dashboard).
     if (gameStateRef.current !== 'playing') setCurrentRoundIndex(roundIndex);
     setRoundBuilderFocusIndex(roundIndex);
@@ -11061,7 +11061,7 @@ const HostView: React.FC = () => {
       const cur = currentRoundIndexRef.current;
       const curRound = cur >= 0 ? eventRoundsRef.current[cur] : null;
       // After bingo approve / Back to host, the finished round is completed while the room may
-      // still briefly look "playing" — allow switching prep when that round is already done.
+      // still briefly look "playing" â€” allow switching prep when that round is already done.
       const betweenRoundsAfterBingo = curRound?.status === 'completed';
       if (gameState === 'playing' && !betweenRoundsAfterBingo) {
         window.alert('End or pause the live game before switching which round you are prepping.');
@@ -11095,7 +11095,7 @@ const HostView: React.FC = () => {
         setCurrentRoundIndex(roundIndex);
         setRoundBuilderFocusIndex(roundIndex);
         const playlistNames = round.playlistNames.join(', ');
-        showToast(`${round.name} — mix loaded for prep (${playlistNames})`, 'success');
+        showToast(`${round.name} â€” mix loaded for prep (${playlistNames})`, 'success');
         addLog(`Prep select ${round.name}: ${playlistNames}`, 'info');
       } else {
         setCurrentRoundIndex(roundIndex);
@@ -11149,8 +11149,8 @@ const HostView: React.FC = () => {
   );
 
   /**
-   * Select a round for editing settings (pattern, free space, prize, …).
-   * During a live round: focus only — do not swap the mix / finalize / emit set-pattern.
+   * Select a round for editing settings (pattern, free space, prize, â€¦).
+   * During a live round: focus only â€” do not swap the mix / finalize / emit set-pattern.
    * Between rounds / waiting: full prep select (loads mix + bingo UI).
    */
   const handleSelectRoundForSettings = useCallback(
@@ -11168,10 +11168,10 @@ const HostView: React.FC = () => {
         if (roundIndex === prevFocus) return;
         const name = eventRoundsRef.current[roundIndex]?.name ?? `Round ${roundIndex + 1}`;
         if (roundIndex === cur) {
-          showToast(`${name} — back to live round settings (mix unchanged)`, 'info');
+          showToast(`${name} â€” back to live round settings (mix unchanged)`, 'info');
         } else {
           showToast(
-            `${name} settings — live mix stays on ${curRound?.name ?? 'the current round'}`,
+            `${name} settings â€” live mix stays on ${curRound?.name ?? 'the current round'}`,
             'info',
           );
         }
@@ -11218,7 +11218,7 @@ const HostView: React.FC = () => {
     const mixRows = resolveMixPlaylistRowsForRound(round0);
     if (!mixRows || mixRows.length !== (round0.playlistIds || []).length) {
       window.alert(
-        `Could not resolve all playlists for ${round0.name} (${mixRows?.length ?? 0} of ${(round0.playlistIds || []).length}). Open Rounds → Tempo Library (refresh if needed), confirm each pack is still listed, then re-add any missing playlist to this round and Save again.`,
+        `Could not resolve all playlists for ${round0.name} (${mixRows?.length ?? 0} of ${(round0.playlistIds || []).length}). Open Rounds â†’ Tempo Library (refresh if needed), confirm each pack is still listed, then re-add any missing playlist to this round and Save again.`,
       );
       addLog(
         `Save round blocked: unresolved playlists for ${round0.name} (resolved ${mixRows?.length ?? 0}/${(round0.playlistIds || []).length}).`,
@@ -11227,7 +11227,7 @@ const HostView: React.FC = () => {
       return false;
     }
 
-    /** Live show: snapshot to local prep only — never finalize-mix (would replace cards + projector mid-round). */
+    /** Live show: snapshot to local prep only â€” never finalize-mix (would replace cards + projector mid-round). */
     const isLiveRound = gameState === 'playing';
     const liveRoundIndex = currentRoundIndexRef.current;
 
@@ -11282,7 +11282,7 @@ const HostView: React.FC = () => {
 
       if (isLiveRound) {
         addLog(
-          `Saving ${round0.name} locally only — live round in progress (room, player cards, and projector unchanged).`,
+          `Saving ${round0.name} locally only â€” live round in progress (room, player cards, and projector unchanged).`,
           'info',
         );
         /**
@@ -11309,7 +11309,7 @@ const HostView: React.FC = () => {
         if (fromLivePool.length > 0 && livePoolHasColumns) {
           listToSend = fromLivePool.map(cloneSongForSnapshot);
           addLog(
-            `Save round: using live finalized pool (${listToSend.length} tracks) — skipped playlist re-fetch.`,
+            `Save round: using live finalized pool (${listToSend.length} tracks) â€” skipped playlist re-fetch.`,
             'info',
           );
         } else {
@@ -11347,7 +11347,7 @@ const HostView: React.FC = () => {
         const fo = finalizedOrderRef.current;
         if (!orderReady || !fo || fo.length === 0) {
           window.alert(
-            'The server did not send the finalized playback order in time. Wait until you see “Finalized order received” in the activity log, or tap Finalize mix again, then Save round. Saved rounds must match projector/host playback order, not the longer prep list.',
+            'The server did not send the finalized playback order in time. Wait until you see â€œFinalized order receivedâ€ in the activity log, or tap Finalize mix again, then Save round. Saved rounds must match projector/host playback order, not the longer prep list.',
           );
           addLog('Save round: no finalized playback order after replay request.', 'warn');
           return false;
@@ -11373,11 +11373,11 @@ const HostView: React.FC = () => {
       if (filteredSongs.length < need) {
         const stalePoolHint =
           !isLiveRound && pool.length > 0 && filteredSongs.length === 0
-            ? ' The finalized playback pool still looked like a different mix — tap Show Playlists once on the host screen, then Save round again.'
+            ? ' The finalized playback pool still looked like a different mix â€” tap Show Playlists once on the host screen, then Save round again.'
             : '';
         const transientHint =
           filteredSongs.length === 0
-            ? ' If Spotify is temporarily unavailable, cached tracks are used when possible — wait a moment and try Save again (no need to reconnect Spotify).'
+            ? ' If Spotify is temporarily unavailable, cached tracks are used when possible â€” wait a moment and try Save again (no need to reconnect Spotify).'
             : '';
         window.alert(
           `Only ${filteredSongs.length} of ${need} card-ready tracks loaded for this round. Spotify-listed playlist totals only count once tracks are loaded and deduped.${stalePoolHint}${transientHint} Add playlists or save again after tracks finish loading.`,
@@ -11415,8 +11415,8 @@ const HostView: React.FC = () => {
       if (!isLiveRound || roundIndex === liveRoundIndex) {
         setCurrentRoundIndex(roundIndex);
       }
-      const liveNote = isLiveRound ? ' — local prep; live round unchanged' : '';
-      showToast(`Saved ${r.name} — ${filteredSongs.length} tracks (${snap.mixGeometry})${liveNote}`, 'success');
+      const liveNote = isLiveRound ? ' â€” local prep; live round unchanged' : '';
+      showToast(`Saved ${r.name} â€” ${filteredSongs.length} tracks (${snap.mixGeometry})${liveNote}`, 'success');
       addLog(
         `Round snapshot saved: ${r.name}, ${filteredSongs.length} tracks${isLiveRound ? ' (local only, live room untouched)' : ''}`,
         'info',
@@ -11447,7 +11447,7 @@ const HostView: React.FC = () => {
     const eligible: number[] = [];
     const needsFix: string[] = [];
     rounds.forEach((r, i) => {
-      // Leftovers / Requests are live meta buckets — not Save-round snapshots. Skip quietly.
+      // Leftovers / Requests are live meta buckets â€” not Save-round snapshots. Skip quietly.
       if (
         r.kind === 'leftovers' ||
         r.kind === 'requests' ||
@@ -11482,7 +11482,7 @@ const HostView: React.FC = () => {
     try {
       for (const idx of eligible) {
         const name = eventRoundsRef.current[idx]?.name || `Round ${idx + 1}`;
-        setSaveAllRoundsProgress(`Saving ${name}…`);
+        setSaveAllRoundsProgress(`Saving ${name}â€¦`);
         const saved = await handleSaveRoundAtIndex(idx);
         if (!saved) failed.push(name);
       }
@@ -11509,14 +11509,14 @@ const HostView: React.FC = () => {
     const savedCount = eligible.length - failed.length;
     if (failed.length > 0) {
       showToast(
-        `Saved ${savedCount} of ${eligible.length} rounds — could not save ${failed.join(', ')}.`,
+        `Saved ${savedCount} of ${eligible.length} rounds â€” could not save ${failed.join(', ')}.`,
         'warn',
       );
       return;
     }
     if (needsFix.length > 0) {
       showToast(
-        `Saved ${savedCount} round${savedCount === 1 ? '' : 's'} — skipped ${needsFix.join(', ')} (need 1 or 5 playlists).`,
+        `Saved ${savedCount} round${savedCount === 1 ? '' : 's'} â€” skipped ${needsFix.join(', ')} (need 1 or 5 playlists).`,
         'warn',
       );
     } else {
@@ -11542,7 +11542,7 @@ const HostView: React.FC = () => {
         connectionModalOpenedByUserRef.current = false;
         setShowConnectionModal(true);
         showToast('Connect Spotify in Connection before starting this round.', 'warn');
-        addLog(`${round.name}: blocked — Spotify not connected`, 'warn');
+        addLog(`${round.name}: blocked â€” Spotify not connected`, 'warn');
         return;
       }
       if (webApiQuarantine.active) {
@@ -11557,7 +11557,7 @@ const HostView: React.FC = () => {
       }
     }
 
-    // Mark current round as completed if it exists (recap only on the transition — an
+    // Mark current round as completed if it exists (recap only on the transition â€” an
     // already-completed round keeps the played/leftover recap stamped when it finished).
     const updatedRounds = [...eventRounds];
     const prevRoundIndexForPlaylist =
@@ -11640,7 +11640,7 @@ const HostView: React.FC = () => {
         }
       })();
     } else if (loaded && cardsAlreadyDealtForRound) {
-      addLog(`${round.name}: Start round — keeping player cards from prep load`, 'info');
+      addLog(`${round.name}: Start round â€” keeping player cards from prep load`, 'info');
     }
 
     // Store updated rounds
@@ -11722,13 +11722,13 @@ const HostView: React.FC = () => {
   const handleRestartRound = useCallback(() => {
     if (
       !window.confirm(
-        'Restart this round?\n\nStops playback and clears card progress. The same saved round and player card assignments stay active — use Start Game when ready.',
+        'Restart this round?\n\nStops playback and clears card progress. The same saved round and player card assignments stay active â€” use Start Game when ready.',
       )
     ) {
       return;
     }
     if (!emitRoundRestartKeepCards()) {
-      showToast('Not connected — cannot restart round', 'error');
+      showToast('Not connected â€” cannot restart round', 'error');
       return;
     }
     setRoundComplete(null);
@@ -11745,7 +11745,7 @@ const HostView: React.FC = () => {
       return;
     }
     if (!emitRoundPlaybackReset()) {
-      showToast('Not connected — cannot end round', 'error');
+      showToast('Not connected â€” cannot end round', 'error');
       return;
     }
     completeCurrentRound();
@@ -11827,7 +11827,7 @@ const HostView: React.FC = () => {
     }
     const round = eventRoundsRef.current[nextIndex];
     if (!emitRoundPlaybackReset()) {
-      showToast('Not connected — cannot advance rounds', 'error');
+      showToast('Not connected â€” cannot advance rounds', 'error');
       return;
     }
     revealWinnersBoardAfterRound();
@@ -11840,7 +11840,7 @@ const HostView: React.FC = () => {
     setGameState('waiting');
     setHostGlassNav('game');
     showToast(
-      `${round?.name || 'Next round'} ready — winners list stays up until you Set round / Start Game.`,
+      `${round?.name || 'Next round'} ready â€” winners list stays up until you Set round / Start Game.`,
       'success',
     );
     addLog(`Advanced to ${round?.name || 'next round'} for prep (no auto-start)`, 'info');
@@ -11885,7 +11885,7 @@ const HostView: React.FC = () => {
       jumpToRound(nextIndex);
       setRoundComplete(null);
       showToast('Loaded the next planned round for prep. Save the round to enable one-click auto start.', 'info');
-      addLog(`Loaded ${round.name} for prep — save the round snapshot to auto-start it next time`, 'warn');
+      addLog(`Loaded ${round.name} for prep â€” save the round snapshot to auto-start it next time`, 'warn');
       return;
     }
 
@@ -11904,11 +11904,11 @@ const HostView: React.FC = () => {
       return;
     }
     if (appleOnlyRound && !appleMusicConnected) {
-      window.alert('Apple Music is not connected. Open Settings → Playback & connections and connect Apple Music first.');
+      window.alert('Apple Music is not connected. Open Settings â†’ Playback & connections and connect Apple Music first.');
       return;
     }
     if (needsHostSpotifyForRound && !isSpotifyConnected) {
-      window.alert('Spotify is not connected. Open Settings → Playback & connections and connect Spotify first.');
+      window.alert('Spotify is not connected. Open Settings â†’ Playback & connections and connect Spotify first.');
       return;
     }
     if (needsHostSpotifyForRound && !selectedDevice) {
@@ -12053,7 +12053,7 @@ const HostView: React.FC = () => {
         );
       }
       if (pickIdx < 0) {
-        // Planned-but-unsaved rounds still count as prep — without this, a refresh
+        // Planned-but-unsaved rounds still count as prep â€” without this, a refresh
         // resets the pointer and Step 1 pretends nothing was assigned.
         pickIdx = withPromotedStatus.findIndex(
           (r: EventRound) => (r.playlistIds || []).length > 0,
@@ -12209,7 +12209,7 @@ const HostView: React.FC = () => {
         );
       } else if (pulled.reason === 'no_org') {
         addLog(
-          'Org pattern/playlist sharing needs a Tempo organization — create or join one under Admin, then hard-refresh.',
+          'Org pattern/playlist sharing needs a Tempo organization â€” create or join one under Admin, then hard-refresh.',
           'warn',
         );
       } else if (pulled.reason === 'unauthorized') {
@@ -12219,7 +12219,7 @@ const HostView: React.FC = () => {
       // Publish this device's localStorage library so teammates pick it up (merge; no deletes).
       const pushed = await pushOrgSharedHostAssets({ mode: 'merge' });
       if (!cancelled && pulled.ok && !pushed) {
-        addLog('Could not upload this browser’s patterns to the org shelf (will retry on next save).', 'warn');
+        addLog('Could not upload this browserâ€™s patterns to the org shelf (will retry on next save).', 'warn');
       }
       if (!cancelled) {
         orgSharedAssetsHydratedRef.current = true;
@@ -12372,7 +12372,7 @@ const HostView: React.FC = () => {
           saveHostPreferences(hostId, serverPrefs);
           setHostPrefsHydrationNonce((n) => n + 1);
         } catch {
-          /* offline or server without DB — localStorage copy stands */
+          /* offline or server without DB â€” localStorage copy stands */
         }
       })();
     }
@@ -12419,7 +12419,7 @@ const HostView: React.FC = () => {
               body: JSON.stringify({ preferences: { v: 1, ...prefs } }),
             });
           } catch {
-            /* offline — localStorage copy stands, retried on next change */
+            /* offline â€” localStorage copy stands, retried on next change */
           }
         })();
       }, 1200);
@@ -12532,7 +12532,7 @@ const HostView: React.FC = () => {
     };
   }, [eventRounds, currentRoundIndex, roomId, hostAccount?.id, prepCloudHydrated]);
 
-  /** Tracks shown in the host bingo pool list (finalized server order, or pre-finalize 1×75/5×15 preview). */
+  /** Tracks shown in the host bingo pool list (finalized server order, or pre-finalize 1Ã—75/5Ã—15 preview). */
   const bingoPoolPreview = useMemo(
     () => computeEffectiveBingoPoolPreview(mixPlaylistSelection, songList),
     [mixPlaylistSelection, songList],
@@ -12608,7 +12608,7 @@ const HostView: React.FC = () => {
   const prepRoundPlaylistsMatchMix =
     currentPrepRoundForFinalizeUi == null ||
     prepRoundPlaylistOrderMatchesMix(currentPrepRoundForFinalizeUi.playlistIds, mixPlaylistSelection);
-  /** Active round has a usable snapshot and the mix still matches that round's playlist bucket — hide manual Finalize. */
+  /** Active round has a usable snapshot and the mix still matches that round's playlist bucket â€” hide manual Finalize. */
   const savedRoundSnapshotMakesFinalizeRedundant =
     currentPrepRoundForFinalizeUi != null &&
     eventRoundSnapshotMeetsSaveThreshold(currentPrepRoundForFinalizeUi, freeSpaceEnabled) &&
@@ -12641,7 +12641,7 @@ const HostView: React.FC = () => {
         case 'unplanned':
           return 'Draft';
         default:
-          return gameState === 'playing' ? 'Live' : gameState === 'ended' ? 'Ended' : '—';
+          return gameState === 'playing' ? 'Live' : gameState === 'ended' ? 'Ended' : 'â€”';
       }
     })();
     const titleRevealLabel =
@@ -12702,7 +12702,7 @@ const HostView: React.FC = () => {
 
   const showPrimaryFinalizeMixButton =
     !mixFinalized && !savedRoundSnapshotMakesFinalizeRedundant && mixPlaylistSelection.length > 0;
-  /** Round builder saved this round — host screen is go-live only (no mix/finalize/PDF chrome). */
+  /** Round builder saved this round â€” host screen is go-live only (no mix/finalize/PDF chrome). */
   const gameTabRoundBuilderReady = savedRoundSnapshotMakesFinalizeRedundant;
 
   const mixFinalizedForCurrentPrep = useMemo(() => {
@@ -12712,11 +12712,11 @@ const HostView: React.FC = () => {
     return finalizedMixPlaylistKey === prepKey;
   }, [mixFinalized, gameTabRoundBuilderReady, mixPlaylistSelection, finalizedMixPlaylistKey]);
 
-  /** Saved round or finalized mix for this round's playlists — one host-facing "ready" state. */
+  /** Saved round or finalized mix for this round's playlists â€” one host-facing "ready" state. */
   const prepRoundReadyForGoLive = gameTabRoundBuilderReady || mixFinalizedForCurrentPrep;
 
   /** Step 3 "Set round": make sure the room has this round's cards (saved rounds may not have
-   *  been applied to the room yet), then swap the projector from splash to the call list —
+   *  been applied to the room yet), then swap the projector from splash to the call list â€”
    *  column headers show this round's playlists. Start Game / playback are untouched. */
   const handleSetRoundOnDisplay = async () => {
     if (!socket || !roomId) return;
@@ -12751,7 +12751,7 @@ const HostView: React.FC = () => {
             : undefined,
         });
         if (!ok) {
-          showToast('Could not push cards to the room — try again or use Build song pool.', 'warn');
+          showToast('Could not push cards to the room â€” try again or use Build song pool.', 'warn');
           return;
         }
       } finally {
@@ -12763,7 +12763,7 @@ const HostView: React.FC = () => {
     }
 
     socket.emit('display-set-round', { roomId });
-    showToast('Round set — cards are out and the projector shows the call list.', 'success');
+    showToast('Round set â€” cards are out and the projector shows the call list.', 'success');
   };
 
   const setupRoundPlaylistCount =
@@ -12776,14 +12776,14 @@ const HostView: React.FC = () => {
     currentRoundIndex >= 0 &&
     isValidRoundPlaylistCount(setupRoundPlaylistCount);
 
-  /** Round building lives on the Rounds tab — the cockpit's Step 1 only manages music for
+  /** Round building lives on the Rounds tab â€” the cockpit's Step 1 only manages music for
    *  rounds that already exist; with zero prep it points to Rounds instead. */
   const anyRoundHasPlaylists = eventRounds.some((r) => (r.playlistIds?.length ?? 0) > 0);
 
-  /** Why Next is blocked on Build rounds — mode-aware (0 vs 2–4 vs 6+ playlists). */
+  /** Why Next is blocked on Build rounds â€” mode-aware (0 vs 2â€“4 vs 6+ playlists). */
   /** Round prep already exists when the cockpit loads (refresh / cloud restore): skip the
    *  "build your first round" step and land on the next actionable one. Runs once, and never
-   *  when readiness came from this session's own assignments — no yanking the library away. */
+   *  when readiness came from this session's own assignments â€” no yanking the library away. */
   useEffect(() => {
     if (hostSetupStepAutoAdvancedRef.current || hostSetupUserAssignedRef.current) return;
     if (gameState !== 'waiting') return;
@@ -12815,7 +12815,7 @@ const HostView: React.FC = () => {
     gameState === 'playing' ? 'live' : gameState === 'ended' ? 'ended' : 'prep';
   const gameModeBannerHint = (() => {
     if (gameState === 'playing') {
-      if (bingoVerificationCount > 0) return 'Bingo waiting — verify below.';
+      if (bingoVerificationCount > 0) return 'Bingo waiting â€” verify below.';
       return '';
     }
     if (gameState === 'ended') {
@@ -12865,8 +12865,8 @@ const HostView: React.FC = () => {
           : `${rem}s`;
     const cap = q.inProcessMaxCooldownSec ?? 480;
     const parts: string[] = [
-      `Spotify is rate limiting the Web API (HTTP 429). You are not expected to “come back in 12 hours”—TEMPO only spaces out requests on this server (at most ~${Math.ceil(cap / 60)} min between back-off windows), and full playlist data is cached briefly after the first load so finalizing a mix does not re-download the same tracks from Spotify.`,
-      `You can often still run a show using the library you already loaded, “Add by link” for a playlist, and device playback while Spotify cools off.`,
+      `Spotify is rate limiting the Web API (HTTP 429). You are not expected to â€œcome back in 12 hoursâ€â€”TEMPO only spaces out requests on this server (at most ~${Math.ceil(cap / 60)} min between back-off windows), and full playlist data is cached briefly after the first load so finalizing a mix does not re-download the same tracks from Spotify.`,
+      `You can often still run a show using the library you already loaded, â€œAdd by linkâ€ for a playlist, and device playback while Spotify cools off.`,
       `This burst: ${q.sourceDescription || q.source || 'Spotify Web API'}. Current spacing: ~${remPart}.`,
     ];
     if (q.spotifyRetryAfterSec != null && q.spotifyRetryAfterSec > 0) {
@@ -12874,16 +12874,16 @@ const HostView: React.FC = () => {
       const hours = s / 3600;
       const human =
         hours >= 1
-          ? `~${hours.toFixed(1)} h (Spotify’s Retry-After — ${s.toLocaleString()}s)`
+          ? `~${hours.toFixed(1)} h (Spotifyâ€™s Retry-After â€” ${s.toLocaleString()}s)`
           : s >= 60
             ? `~${Math.ceil(s / 60)} min (${s}s)`
             : `${s}s`;
       parts.push(
-        `Spotify’s Retry-After can look extreme (${human}). TEMPO does not sleep for that long; the host is not “frozen” for 12+ hours. If API calls still fail, check your app in the Spotify Developer Dashboard and avoid hammering Refresh on the library.`
+        `Spotifyâ€™s Retry-After can look extreme (${human}). TEMPO does not sleep for that long; the host is not â€œfrozenâ€ for 12+ hours. If API calls still fail, check your app in the Spotify Developer Dashboard and avoid hammering Refresh on the library.`
       );
     } else if (q.spotifyRetryCapped) {
       parts.push(
-        `Spotify’s suggested wait was longer than TEMPO’s spacing cap; you may still get 429s from Spotify until their throttling eases.`
+        `Spotifyâ€™s suggested wait was longer than TEMPOâ€™s spacing cap; you may still get 429s from Spotify until their throttling eases.`
       );
     }
     return parts.join(' ');
@@ -12952,7 +12952,7 @@ const HostView: React.FC = () => {
       )}
       {spotifyJamActive && venueSpotifyJamMode && (
         <p style={{ marginBottom: 12, fontSize: '0.82rem', color: '#8fd9a8', lineHeight: 1.45 }}>
-          Jam session detected — Tempo will route playback through it and will not fight the venue speaker.
+          Jam session detected â€” Tempo will route playback through it and will not fight the venue speaker.
         </p>
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
@@ -12992,7 +12992,7 @@ const HostView: React.FC = () => {
           onClick={() => void loadDevices({ force: true })}
           disabled={isLoadingDevices}
         >
-          {isLoadingDevices ? 'Refreshing…' : 'Refresh devices'}
+          {isLoadingDevices ? 'Refreshingâ€¦' : 'Refresh devices'}
         </button>
         <button
           type="button"
@@ -13013,7 +13013,7 @@ const HostView: React.FC = () => {
       )}
       {playbackDeviceNotInList && selectedDevice && (
         <p style={{ marginTop: 10, fontSize: '0.8rem', color: '#ff8a8a', fontWeight: 600 }}>
-          Selected device “{selectedDevice.name}” is not online. Refresh devices, open Spotify on that device,
+          Selected device â€œ{selectedDevice.name}â€ is not online. Refresh devices, open Spotify on that device,
           then select it again before Start Game.
         </p>
       )}
@@ -13028,8 +13028,8 @@ const HostView: React.FC = () => {
           }}
         >
           <p style={{ margin: 0, flex: '1 1 260px', fontSize: '0.8rem', color: '#ffb347', fontWeight: 600 }}>
-            “{selectedDevice.name}” is online but not Spotify&apos;s active device. Start Game
-            transfers playback to it automatically — or activate it now to be sure.
+            â€œ{selectedDevice.name}â€ is online but not Spotify&apos;s active device. Start Game
+            transfers playback to it automatically â€” or activate it now to be sure.
           </p>
           <button
             type="button"
@@ -13037,14 +13037,14 @@ const HostView: React.FC = () => {
             onClick={() => void activateSelectedDevice()}
             disabled={activateDeviceBusy}
           >
-            {activateDeviceBusy ? 'Activating…' : 'Activate device'}
+            {activateDeviceBusy ? 'Activatingâ€¦' : 'Activate device'}
           </button>
         </div>
       )}
     </>
   ) : null;
 
-  /** Spotify connect + LED + playback / Disconnect � shown in connection modal. */
+  /** Spotify connect + LED + playback / Disconnect ï¿½ shown in connection modal. */
   const hostConnectionPanel = (
     <motion.div
       className="host-spotify-playback-unified"
@@ -13118,7 +13118,7 @@ const HostView: React.FC = () => {
         >
           Spotify Web API
         </a>
-        . Spotify® is a trademark of Spotify AB. See the{' '}
+        . SpotifyÂ® is a trademark of Spotify AB. See the{' '}
         <a
           href="https://developer.spotify.com/terms"
           target="_blank"
@@ -13176,6 +13176,8 @@ const HostView: React.FC = () => {
           eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled),
         ).length}
         onCallSheet={(idx) => handleDownloadRoundCallSheetPdf(eventRoundsRef.current[idx])}
+        onExportCallOrderSpotify={(idx) => void createRoundCallOrderSpotifyPlaylist(idx)}
+        exportCallOrderSpotifyBusy={!!roundCallOrderPlaylistUi?.creating}
         onOpenComposite={openCompositeForRound}
         onNewCustomPattern={handleNewCustomPattern}
         onEditCustomPattern={handleEditCustomPattern}
@@ -13224,6 +13226,8 @@ const HostView: React.FC = () => {
       handleSaveOfflineShowPack,
       handlePreviewPrintPdf,
       handleDownloadRoundCallSheetPdf,
+      createRoundCallOrderSpotifyPlaylist,
+      roundCallOrderPlaylistUi?.creating,
       openCompositeForRound,
       handleNewCustomPattern,
       handleEditCustomPattern,
@@ -13248,7 +13252,7 @@ const HostView: React.FC = () => {
   const hostRoundPlanner = renderHostRoundPlanner('full');
 
   /** One-click "Add to <round>" target for library rows: the round being prepped (Game tab Step 1)
-   *  or the round focused in the Rounds tab. Keeps the obvious action obvious — no dropdown needed. */
+   *  or the round focused in the Rounds tab. Keeps the obvious action obvious â€” no dropdown needed. */
   const libraryQuickAssignRound = useMemo(() => {
     if (eventRounds.length === 0) return null;
     const idx =
@@ -13359,13 +13363,13 @@ const HostView: React.FC = () => {
       >
         {!catalogPacksProbeDone ? (
           <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
-            Contacting server…
+            Contacting serverâ€¦
           </p>
         ) : !catalogPacksFetchOk ? (
           <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
             {catalogPacksFetchUnauthorized ? (
               <>
-                Host session required — sign in with <strong style={{ color: '#c8dcff' }}>Google</strong> as
+                Host session required â€” sign in with <strong style={{ color: '#c8dcff' }}>Google</strong> as
                 host, then retry <strong style={{ color: '#c8dcff' }}>Refresh</strong> on your library (or reload).
               </>
             ) : (
@@ -13383,7 +13387,7 @@ const HostView: React.FC = () => {
             <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> /{' '}
             <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code> on the API host (e.g.
             Railway), then redeploy. <strong style={{ color: '#c8dcff' }}>My Spotify</strong> is only your
-            personal library — it is not the shared Tempo Library.
+            personal library â€” it is not the shared Tempo Library.
           </p>
         ) : (
           <>
@@ -13538,7 +13542,7 @@ const HostView: React.FC = () => {
                 titles on the <strong style={{ color: '#c8dcff' }}>catalog</strong> Spotify account must{' '}
                 <strong style={{ color: '#c8dcff' }}>start with that exact prefix</strong> (e.g.{' '}
                 <code style={{ fontSize: '0.72rem' }}>GoT Friday Hits</code>, not{' '}
-                <code style={{ fontSize: '0.72rem' }}>TEMPO — …</code>
+                <code style={{ fontSize: '0.72rem' }}>TEMPO â€” â€¦</code>
                 ). Or set{' '}
                 <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> /{' '}
                 <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code>. New matches can take
@@ -13616,7 +13620,7 @@ const HostView: React.FC = () => {
                             className={!showAllPlaylists ? 'is-active' : ''}
                             title={`Only playlists whose titles match your flags (${
                               parsedPlaylistTitleFlags.join(', ') || 'none set'
-                            }) — edit flags under Saved host preferences`}
+                            }) â€” edit flags under Saved host preferences`}
                             onClick={() => {
                               setShowAllPlaylists(false);
                               setPlaylistQuery('');
@@ -13650,7 +13654,7 @@ const HostView: React.FC = () => {
                       <input
                         type="search"
                         className="host-playlist-library-toolbar__search"
-                        placeholder="Search…"
+                        placeholder="Searchâ€¦"
                         value={playlistQuery}
                         onChange={(e) => setPlaylistQuery(e.target.value)}
                       />
@@ -13746,7 +13750,7 @@ const HostView: React.FC = () => {
                     <div className="host-playlist-library-table-zone">
                     <h3 className="host-playlist-library-table-zone__title">
                       {playlistLibrarySource === 'tempo'
-                        ? 'Tempo Library — shared playlists for all hosts'
+                        ? 'Tempo Library â€” shared playlists for all hosts'
                         : playlistLibrarySource === 'youtube'
                           ? 'YouTube playlists'
                           : playlistLibrarySource === 'apple'
@@ -13800,8 +13804,8 @@ const HostView: React.FC = () => {
                             Name
                             {playlistSort.key === 'name'
                               ? playlistSort.dir === 'asc'
-                                ? ' A→Z'
-                                : ' Z→A'
+                                ? ' Aâ†’Z'
+                                : ' Zâ†’A'
                               : ''}
                           </button>
                           <button
@@ -13818,8 +13822,8 @@ const HostView: React.FC = () => {
                             Tracks
                             {playlistSort.key === 'tracks'
                               ? playlistSort.dir === 'asc'
-                                ? ' ↑'
-                                : ' ↓'
+                                ? ' â†‘'
+                                : ' â†“'
                               : ''}
                           </button>
                           <button
@@ -13837,7 +13841,7 @@ const HostView: React.FC = () => {
                             }
                             onClick={applyPlaylistLibraryShuffle}
                           >
-                            {playlistSort.key === 'shuffle' ? 'Shuffled · again' : 'Shuffled'}
+                            {playlistSort.key === 'shuffle' ? 'Shuffled Â· again' : 'Shuffled'}
                           </button>
                         </div>
                         <p className="host-playlist-library-sort-bar__hint" aria-live="polite">
@@ -13878,12 +13882,12 @@ const HostView: React.FC = () => {
                           Playlist
                           {playlistSort.key === 'name' && (
                             <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
-                              {playlistSort.dir === 'asc' ? '↑' : '↓'}
+                              {playlistSort.dir === 'asc' ? 'â†‘' : 'â†“'}
                             </span>
                           )}
                           {playlistSort.key === 'shuffle' && (
                             <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
-                              ⇄
+                              â‡„
                             </span>
                           )}
                         </button>
@@ -13919,7 +13923,7 @@ const HostView: React.FC = () => {
                           Tracks
                           {playlistSort.key === 'tracks' && (
                             <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
-                              {playlistSort.dir === 'asc' ? '↑' : '↓'}
+                              {playlistSort.dir === 'asc' ? 'â†‘' : 'â†“'}
                             </span>
                           )}
                         </button>
@@ -13983,7 +13987,7 @@ const HostView: React.FC = () => {
                             aria-label="First page"
                             onClick={() => setPlaylistLibraryStartIndex(0)}
                           >
-                            «
+                            Â«
                           </button>
                           <button
                             type="button"
@@ -13996,7 +14000,7 @@ const HostView: React.FC = () => {
                               )
                             }
                           >
-                            ‹
+                            â€¹
                           </button>
                           <label className="host-playlist-library-table-head__pager-goto">
                             <span className="sr-only">Page</span>
@@ -14038,7 +14042,7 @@ const HostView: React.FC = () => {
                               })
                             }
                           >
-                            ›
+                            â€º
                           </button>
                           <button
                             type="button"
@@ -14051,7 +14055,7 @@ const HostView: React.FC = () => {
                               )
                             }
                           >
-                            »
+                            Â»
                           </button>
                         </nav>
                       ) : null}
@@ -14128,7 +14132,7 @@ const HostView: React.FC = () => {
                           </span>
                         </span>
                         <span style={{ fontSize: '0.8rem', color: '#c9a6ff', paddingTop: 3 }}>
-                          {requestPoolSongs.length} approved ·{' '}
+                          {requestPoolSongs.length} approved Â·{' '}
                           {songRequests.filter((request) => request.status === 'pending').length} pending
                         </span>
                         <button
@@ -14218,17 +14222,17 @@ const HostView: React.FC = () => {
                                 {LEFTOVERS_PLAYLIST_NAME}
                                 <span
                                   className="host-playlist-virtual-badge"
-                                  title="Built from completed rounds — not a Spotify playlist"
+                                  title="Built from completed rounds â€” not a Spotify playlist"
                                 >
                                   Virtual
                                 </span>
                               </span>
                               <span
                                 className="host-playlist-desc"
-                                title="Every track from earlier rounds' pools that was never played tonight. Refreshes live as rounds finish — the mix locks in when you finalize/save a round with it."
+                                title="Every track from earlier rounds' pools that was never played tonight. Refreshes live as rounds finish â€” the mix locks in when you finalize/save a round with it."
                               >
                                 {count === 0
-                                  ? 'Fills as rounds finish with unplayed tracks. Dedicated meta-round — add to an empty bucket.'
+                                  ? 'Fills as rounds finish with unplayed tracks. Dedicated meta-round â€” add to an empty bucket.'
                                   : 'Unplayed tracks from tonight\u2019s finished rounds. Updates live until you finalize.'}
                               </span>
                             </span>
@@ -14319,7 +14323,7 @@ const HostView: React.FC = () => {
                                   flexShrink: 0,
                                   paddingTop: 6,
                                 }}
-                                title="Need at least 15 unplayed tracks for a standard round — finish more rounds first"
+                                title="Need at least 15 unplayed tracks for a standard round â€” finish more rounds first"
                               >
                                 Need 15+
                               </span>
@@ -14330,9 +14334,9 @@ const HostView: React.FC = () => {
                       {libraryTablePlaylists.length === 0 ? (
                           <div className="host-playlist-library-table__empty">
                             {playlistLibrarySource === 'youtube'
-                              ? 'No YouTube playlists loaded — connect under Connection, then refresh in More options.'
+                              ? 'No YouTube playlists loaded â€” connect under Connection, then refresh in More options.'
                               : playlistLibrarySource === 'apple'
-                                ? 'No Apple Music playlists loaded — connect under Connection, then refresh in More options.'
+                                ? 'No Apple Music playlists loaded â€” connect under Connection, then refresh in More options.'
                               : playlistLibraryEmptyMessage}
                         </div>
                         ) : (
@@ -14414,7 +14418,7 @@ const HostView: React.FC = () => {
                                     <Check aria-hidden />
                                     {assignedRoundCount > 1 ? (
                                       <span className="host-playlist-assigned-chip__count">
-                                        ×{assignedRoundCount}
+                                        Ã—{assignedRoundCount}
                                       </span>
                                     ) : null}
                                   </>
@@ -14533,14 +14537,14 @@ const HostView: React.FC = () => {
                                   )}
                                   <span title={
                                     loadedCount != null && loadedCount !== listedCount
-                                      ? `${loadedCount} unique tracks loaded this session · ${listedCount} listed on Spotify`
+                                      ? `${loadedCount} unique tracks loaded this session Â· ${listedCount} listed on Spotify`
                                       : undefined
                                   }>
                                     {loadedCount != null && loadedCount !== listedCount ? (
                                       <>
                                         {loadedCount} loaded
                                         <span style={{ opacity: 0.65, marginLeft: 4 }}>
-                                          · {listedCount} listed
+                                          Â· {listedCount} listed
                                         </span>
                                       </>
                                     ) : (
@@ -14553,7 +14557,7 @@ const HostView: React.FC = () => {
                                 {availGap > 0 && !p.youtubeMusic && !p.catalog ? (
                                   <span className="host-playlist-library-row__avail-warn" title="Excluded from Tempo pool">
                                     {p.tracksUnplayable ? `${p.tracksUnplayable} unavailable` : null}
-                                    {p.tracksUnplayable && p.tracksRemoved ? ' · ' : null}
+                                    {p.tracksUnplayable && p.tracksRemoved ? ' Â· ' : null}
                                     {p.tracksRemoved ? `${p.tracksRemoved} removed` : null}
                                   </span>
                                 ) : null}
@@ -14686,7 +14690,7 @@ const HostView: React.FC = () => {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') void addPlaylistByLink();
                         }}
-                        placeholder="https://open.spotify.com/playlist/… or id"
+                        placeholder="https://open.spotify.com/playlist/â€¦ or id"
                         disabled={!isSpotifyConnected || playlistByLinkLoading}
                         style={{
                           flex: '1 1 220px',
@@ -14705,7 +14709,7 @@ const HostView: React.FC = () => {
                         disabled={!isSpotifyConnected || playlistByLinkLoading}
                         onClick={() => void addPlaylistByLink()}
                       >
-                        {playlistByLinkLoading ? 'Adding…' : 'Add playlist'}
+                        {playlistByLinkLoading ? 'Addingâ€¦' : 'Add playlist'}
                       </button>
                     </div>
                     {playlistByLinkError ? (
@@ -14746,10 +14750,10 @@ const HostView: React.FC = () => {
                           alignItems: 'center',
                           gap: '8px',
                         }}
-                        title="Songs called tonight, in order — creates a Spotify playlist when connected"
+                        title="Songs called tonight, in order â€” creates a Spotify playlist when connected"
                       >
                         <ListPlus className="w-4 h-4" aria-hidden />
-                        Tonight’s played → Spotify
+                        Tonightâ€™s played â†’ Spotify
                       </button>
                       <button
                         type="button"
@@ -14777,10 +14781,10 @@ const HostView: React.FC = () => {
                           alignItems: 'center',
                           gap: '8px',
                         }}
-                        title="Full #1–N call order for the focused round (saved snapshot), including songs that never played"
+                        title="Full #1â€“N call order for the focused round (saved snapshot), including songs that never played"
                       >
                         <ListPlus className="w-4 h-4" aria-hidden />
-                        Round call order → Spotify
+                        Round call order â†’ Spotify
                       </button>
                     </div>
                       </div>
@@ -14832,7 +14836,7 @@ const HostView: React.FC = () => {
         label: 'Playback connected (Spotify and/or YouTube)',
         ok: hostPlaybackSystemsReady,
         warn: !hostPlaybackSystemsReady,
-        detail: hostPlaybackSystemsReady ? undefined : 'Open Settings → Playback & connections',
+        detail: hostPlaybackSystemsReady ? undefined : 'Open Settings â†’ Playback & connections',
       },
       ...(mixNeedsHostSpotify && isSpotifyConnected
         ? [
@@ -14846,9 +14850,9 @@ const HostView: React.FC = () => {
               detail: !selectedDevice?.id
                 ? 'Pick a device in Connection'
                 : playbackDeviceNotInList
-                  ? `${selectedDevice.name} is offline — refresh devices`
+                  ? `${selectedDevice.name} is offline â€” refresh devices`
                   : selectedDeviceInactive
-                    ? `${selectedDevice.name} (idle — activates at Start Game)`
+                    ? `${selectedDevice.name} (idle â€” activates at Start Game)`
                     : selectedDevice.name,
             } satisfies PreShowCheckItem,
           ]
@@ -14910,7 +14914,7 @@ const HostView: React.FC = () => {
         saved: Boolean(r.savedMixSnapshot?.songs?.length),
         /** Live / next-up pointer (Start Game). */
         isCurrent: index === currentRoundIndex,
-        /** Settings/library focus — can diverge from live pointer mid-show. */
+        /** Settings/library focus â€” can diverge from live pointer mid-show. */
         isSelected: index === roundBuilderFocusIndex,
         prize: typeof r.prize === 'string' && r.prize.trim() ? r.prize.trim() : undefined,
       })),
@@ -14933,7 +14937,7 @@ const HostView: React.FC = () => {
     if (completed > 0) parts.push(`${completed} done`);
     if (draft > 0) parts.push(`${draft} draft`);
     if (parts.length === 0) return `${total} round${total === 1 ? '' : 's'}`;
-    return `${parts.join(' · ')} · ${total} total`;
+    return `${parts.join(' Â· ')} Â· ${total} total`;
   }, [eventRounds]);
 
   const callLogRows = useMemo(
@@ -14961,7 +14965,7 @@ const HostView: React.FC = () => {
     const updated = ensureEventRoundNames([...eventRounds, newRound]);
     handleUpdateRounds(updated);
     const newIndex = updated.length - 1;
-    // Mid-game, currentRoundIndex is the live round pointer — only move the prep focus.
+    // Mid-game, currentRoundIndex is the live round pointer â€” only move the prep focus.
     if (gameState !== 'playing') setCurrentRoundIndex(newIndex);
     setRoundBuilderFocusIndex(newIndex);
     addLog(`Added ${newRound.name}`, 'info');
@@ -15020,7 +15024,7 @@ const HostView: React.FC = () => {
       if (toIndex < 0 || toIndex >= rounds.length) return;
       if (fromIndex === toIndex) return;
       if (gameState === 'playing' && fromIndex === currentRoundIndexRef.current) {
-        showToast('That round is live — end the round before moving it. Other rounds can be reordered.', 'info');
+        showToast('That round is live â€” end the round before moving it. Other rounds can be reordered.', 'info');
         return;
       }
       const next = [...rounds];
@@ -15036,7 +15040,7 @@ const HostView: React.FC = () => {
   const handleRemoveRound = useCallback(
     (roundIndex: number) => {
       if (gameState === 'playing' && roundIndex === currentRoundIndex) {
-        showToast('That round is live — end the round before deleting it. Other rounds can be deleted.', 'info');
+        showToast('That round is live â€” end the round before deleting it. Other rounds can be deleted.', 'info');
         return;
       }
       if (eventRounds.length <= 1) return;
@@ -15158,13 +15162,13 @@ const HostView: React.FC = () => {
         open={fiveByFifteenInsufficientModal != null}
         title={
           fiveByFifteenInsufficientModal?.variant === 'blocked'
-            ? 'Cannot finalize as 5×15'
-            : '5×15 mode unavailable'
+            ? 'Cannot finalize as 5Ã—15'
+            : '5Ã—15 mode unavailable'
         }
         message={
           fiveByFifteenInsufficientModal?.variant === 'blocked'
             ? 'Each of the five playlists must contribute 15 unique tracks after removing duplicate songs across all five columns (same rule as the live game). Adjust your playlists and try Finalize mix again.'
-            : 'The mix was finalized, but this room could not enter true 5×15 column mode. Cards and playback are using a fallback layout instead of five fixed B–O columns. Fix the issues below and finalize again before starting if you need strict 5×15.'
+            : 'The mix was finalized, but this room could not enter true 5Ã—15 column mode. Cards and playback are using a fallback layout instead of five fixed Bâ€“O columns. Fix the issues below and finalize again before starting if you need strict 5Ã—15.'
         }
         variant={fiveByFifteenInsufficientModal?.variant === 'blocked' ? 'error' : 'warning'}
         detailBullets={fiveByFifteenInsufficientModal?.warnings}
@@ -15231,10 +15235,10 @@ const HostView: React.FC = () => {
               Room <strong>{roomId}</strong>
               <span className="host-header__state">
                 {gameState === 'playing'
-                  ? ' · Live'
+                  ? ' Â· Live'
                   : gameState === 'ended'
-                    ? ' · Ended'
-                    : ' · Setup'}
+                    ? ' Â· Ended'
+                    : ' Â· Setup'}
               </span>
             </p>
           </div>
@@ -15253,7 +15257,7 @@ const HostView: React.FC = () => {
               <span
                 className="host-account-chip"
                 title={
-                  [hostAccount.displayName, hostAccount.email].filter(Boolean).join(' · ') ||
+                  [hostAccount.displayName, hostAccount.email].filter(Boolean).join(' Â· ') ||
                   `Host account #${hostAccount.id}`
                 }
               >
@@ -15347,7 +15351,7 @@ const HostView: React.FC = () => {
                     className="host-round-timeline--cockpit"
                     rounds={roundTimelineRows}
                     summary={roundTimelineSummary}
-                    emptyHint="Add music on the Rounds tab — your round will show up here."
+                    emptyHint="Add music on the Rounds tab â€” your round will show up here."
                     columnLetters={bingoColumnLettersArr}
                     onSelectRound={handleSelectRoundForSettings}
                     onMoveRound={handleMoveRound}
@@ -15398,7 +15402,7 @@ const HostView: React.FC = () => {
                   roundBuilderFocusIndex !== currentRoundIndex &&
                   roundBuilderFocusIndex >= 0 &&
                   currentRoundIndex >= 0
-                    ? `Editing ${eventRounds[roundBuilderFocusIndex]?.name ?? 'this round'} — live mix stays on ${eventRounds[currentRoundIndex]?.name ?? 'the current round'}.`
+                    ? `Editing ${eventRounds[roundBuilderFocusIndex]?.name ?? 'this round'} â€” live mix stays on ${eventRounds[currentRoundIndex]?.name ?? 'the current round'}.`
                     : gameState === 'playing'
                       ? 'Pick another round above to edit its pattern without changing the live mix.'
                       : null
@@ -15429,10 +15433,10 @@ const HostView: React.FC = () => {
                     Tonight
                     {hostActiveRoundSummary.roundName ? (
                       <span className="host-game-tonight__summary-meta">
-                        · {hostActiveRoundSummary.roundName}
+                        Â· {hostActiveRoundSummary.roundName}
                         {hostActiveRoundSummary.playedCount != null &&
                         hostActiveRoundSummary.poolCount != null
-                          ? ` · ${hostActiveRoundSummary.playedCount}/${hostActiveRoundSummary.poolCount}`
+                          ? ` Â· ${hostActiveRoundSummary.playedCount}/${hostActiveRoundSummary.poolCount}`
                           : ''}
                       </span>
                     ) : null}
@@ -15603,9 +15607,9 @@ const HostView: React.FC = () => {
                 mixGameActionsBlocked={mixGameActionsBlocked}
                 startGameLabel={
                   savedRoundRoomSyncBusy
-                    ? 'Syncing…'
+                    ? 'Syncingâ€¦'
                     : isSpotifyConnecting && mixNeedsHostSpotify
-                      ? 'Connecting Spotify…'
+                      ? 'Connecting Spotifyâ€¦'
                       : 'Start game'
                 }
                 onSetRound={() => void handleSetRoundOnDisplay()}
@@ -15800,7 +15804,7 @@ const HostView: React.FC = () => {
                         </>
                       ) : (
                         <>
-                          Prep changes here save locally — the live round is untouched until you
+                          Prep changes here save locally â€” the live round is untouched until you
                           start it.
                         </>
                       )}
@@ -15811,7 +15815,7 @@ const HostView: React.FC = () => {
                       onClick={() => void handleSaveAllAndReturnToGame()}
                       disabled={saveAllRoundsBusy || saveRoundBusy}
                     >
-                      {saveAllRoundsBusy ? 'Saving rounds…' : 'Save all & go to Game'}
+                      {saveAllRoundsBusy ? 'Saving roundsâ€¦' : 'Save all & go to Game'}
                     </button>
                   </div>
                 }
@@ -15859,14 +15863,14 @@ const HostView: React.FC = () => {
                     >
                       {displayPresence.connected
                         ? displayPresence.stale
-                          ? `Stale · ${displaySyncLabel}`
-                          : `Live · ${displaySyncLabel}`
+                          ? `Stale Â· ${displaySyncLabel}`
+                          : `Live Â· ${displaySyncLabel}`
                         : 'Not connected'}
                     </span>
                   </div>
 
                   <div className="host-display-cockpit__link-row">
-                    <code className="host-display-cockpit__url">{publicDisplayUrl || '—'}</code>
+                    <code className="host-display-cockpit__url">{publicDisplayUrl || 'â€”'}</code>
                     <div className="host-display-cockpit__actions">
                       <button type="button" className="btn-secondary" onClick={handleCopyDisplayLink}>
                         <Copy className="w-4 h-4" aria-hidden />
@@ -15928,7 +15932,7 @@ const HostView: React.FC = () => {
                         disabled={publicDisplayFontSize <= 0.5}
                         aria-label="Decrease title size"
                       >
-                        −
+                        âˆ’
                       </button>
                       <div className="host-display-cockpit__font-value" aria-live="polite">
                         {(publicDisplayFontSize * 100).toFixed(0)}%
@@ -16090,7 +16094,7 @@ const HostView: React.FC = () => {
                 <p className="host-bingo-pool-modal__subset-warn">
                   {songList.length - finalizedPoolSongs.length} more song
                   {songList.length - finalizedPoolSongs.length === 1 ? '' : 's'} loaded from
-                  playlists won&apos;t appear on cards with this layout—they&apos;re hidden here so the list
+                  playlists won&apos;t appear on cards with this layoutâ€”they&apos;re hidden here so the list
                   matches what bingo uses.
                 </p>
               )}
@@ -16145,7 +16149,7 @@ const HostView: React.FC = () => {
               </div>
               <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
                 Pattern: <strong style={{ color: '#c5d4e0' }}>{hostActivePatternLabel()}</strong>
-                {' · '}
+                {' Â· '}
                 <span>Press Escape to close</span>
               </div>
             </div>
@@ -16207,7 +16211,7 @@ const HostView: React.FC = () => {
               </h2>
               <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
                 Pattern: <strong style={{ color: '#c5d4e0' }}>{hostActivePatternLabel()}</strong>
-                {' · '}
+                {' Â· '}
                 <span>Click outside or press Escape to close</span>
               </div>
             </div>
@@ -16352,7 +16356,7 @@ const HostView: React.FC = () => {
                 Pattern: <strong>{pendingVerification.winningPatternType || pendingVerification.requiredPattern}</strong>
                 {Number(pendingVerification.cardCount) > 1 ? (
                   <>
-                    {' · '}
+                    {' Â· '}
                     Card{' '}
                     <strong>
                       {pendingVerification.cardIndex || 1}/{pendingVerification.cardCount}
@@ -16374,7 +16378,7 @@ const HostView: React.FC = () => {
                   }}
                 >
                   + {bingoVerificationBehindCount} more bingo call
-                  {bingoVerificationBehindCount === 1 ? '' : 's'} queued — resolve this one first (first-in, first-out).
+                  {bingoVerificationBehindCount === 1 ? '' : 's'} queued â€” resolve this one first (first-in, first-out).
                 </p>
               ) : null}
             </div>
@@ -16460,7 +16464,7 @@ const HostView: React.FC = () => {
                       catalogDisplayVerified: square.catalogDisplayVerified === true,
                       isFreeSpace: isBingoFreeSpaceSquare(square),
                     });
-                    const verCellTitle = `${verCellVis.title}${verCellVis.artist ? ` — ${verCellVis.artist}` : ''}`;
+                    const verCellTitle = `${verCellVis.title}${verCellVis.artist ? ` â€” ${verCellVis.artist}` : ''}`;
                     
                     let bgColor = 'rgba(255,255,255,0.1)';
                     let borderColor = 'rgba(255,255,255,0.3)';
@@ -16525,7 +16529,7 @@ const HostView: React.FC = () => {
                       >
                         {icon === 'bad' && <X size={12} aria-hidden style={{ marginBottom: 2 }} />}
                         {icon === 'good' && <Check size={12} aria-hidden style={{ marginBottom: 2, color: '#00ff88' }} />}
-                        {icon === 'pending' && <span style={{ fontSize: '0.75rem', marginBottom: 2 }} aria-hidden>○</span>}
+                        {icon === 'pending' && <span style={{ fontSize: '0.75rem', marginBottom: 2 }} aria-hidden>â—‹</span>}
                         {icon === 'warn' && <span style={{ fontSize: '0.75rem', marginBottom: 2 }} aria-hidden>!</span>}
                         <span style={{ fontSize: '0.6rem', lineHeight: 1.1 }}>
                           {verCellVis.title.substring(0, 8)}
@@ -16702,7 +16706,7 @@ const HostView: React.FC = () => {
                   opacity: isProcessingVerification ? 0.6 : 1,
                 }}
               >
-                {isProcessingVerification ? 'Processing…' : 'Approve & end round'}
+                {isProcessingVerification ? 'Processingâ€¦' : 'Approve & end round'}
               </button>
 
               <button
@@ -16722,7 +16726,7 @@ const HostView: React.FC = () => {
                   opacity: isProcessingVerification ? 0.6 : 1,
                 }}
               >
-                {isProcessingVerification ? 'Processing…' : 'Award & keep playing'}
+                {isProcessingVerification ? 'Processingâ€¦' : 'Award & keep playing'}
               </button>
 
               <button
@@ -16741,7 +16745,7 @@ const HostView: React.FC = () => {
                   opacity: isProcessingVerification ? 0.6 : 1,
                 }}
               >
-                {isProcessingVerification ? 'Processing…' : 'Reject'}
+                {isProcessingVerification ? 'Processingâ€¦' : 'Reject'}
               </button>
             </div>
             <p
@@ -16867,7 +16871,7 @@ const HostView: React.FC = () => {
                       <PlayerAvatar avatar={winner.avatar} name={winner.playerName} size="sm" />
                       <span>
                         Round {winner.roundNumber}: {winner.playerName}
-                        {winner.prize ? ` — ${winner.prize}` : ''}
+                        {winner.prize ? ` â€” ${winner.prize}` : ''}
                       </span>
                     </div>
                   ))}
@@ -16908,7 +16912,7 @@ const HostView: React.FC = () => {
                           <span style={{ color: '#88a899', marginRight: 6 }}>{idx + 1}.</span>
                           {song.name || song.id}
                           {song.artist ? (
-                            <span style={{ color: '#9aa8a0' }}>{` — ${song.artist}`}</span>
+                            <span style={{ color: '#9aa8a0' }}>{` â€” ${song.artist}`}</span>
                           ) : null}
                         </div>
                       ))}
@@ -16916,7 +16920,7 @@ const HostView: React.FC = () => {
                   ) : null}
                   {roundPlayedPlaylistUi?.creating ? (
                     <p style={{ color: '#c8d8d0', fontSize: '0.82rem', margin: 0 }}>
-                      Creating Spotify playlist of played songs…
+                      Creating Spotify playlist of played songsâ€¦
                     </p>
                   ) : null}
                   {roundPlayedPlaylistUi?.playlistUrl ? (
@@ -16949,7 +16953,7 @@ const HostView: React.FC = () => {
                         const lines = playedInOrder
                           .map(
                             (s, i) =>
-                              `${i + 1}. ${s.name || s.id}${s.artist ? ` — ${s.artist}` : ''}`,
+                              `${i + 1}. ${s.name || s.id}${s.artist ? ` â€” ${s.artist}` : ''}`,
                           )
                           .join('\n');
                         void navigator.clipboard.writeText(lines).then(
@@ -16973,14 +16977,14 @@ const HostView: React.FC = () => {
                   ) : null}
                   <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                     <p style={{ color: '#a8c4ff', fontSize: '0.85rem', margin: '0 0 8px', fontWeight: 700 }}>
-                      Full call order → Spotify
+                      Full call order â†’ Spotify
                     </p>
                     <p style={{ color: '#9aa8a0', fontSize: '0.75rem', margin: '0 0 8px', lineHeight: 1.4 }}>
-                      Entire #1–N list for this round (including songs that never played), not just the calls above.
+                      Entire #1â€“N list for this round (including songs that never played), not just the calls above.
                     </p>
                     {roundCallOrderPlaylistUi?.creating ? (
                       <p style={{ color: '#c8d8d0', fontSize: '0.82rem', margin: 0 }}>
-                        Creating Spotify playlist of full call order…
+                        Creating Spotify playlist of full call orderâ€¦
                       </p>
                     ) : null}
                     {roundCallOrderPlaylistUi?.playlistUrl ? (
@@ -17021,11 +17025,11 @@ const HostView: React.FC = () => {
                         fontWeight: 600,
                         cursor: 'pointer',
                       }}
-                      title="Create a Spotify playlist with every song in this round’s locked play order"
+                      title="Create a Spotify playlist with every song in this roundâ€™s locked play order"
                     >
                       {roundCallOrderPlaylistUi?.playlistUrl
                         ? 'Open call-order playlist'
-                        : 'Export full call order → Spotify'}
+                        : 'Export full call order â†’ Spotify'}
                     </button>
                   </div>
                 </div>
@@ -17146,7 +17150,7 @@ const HostView: React.FC = () => {
               {getNextPlannedRound() >= 0 ? (
                 <>
                   <strong style={{ color: '#ccc', fontStyle: 'normal' }}>Next round</strong> ends this
-                  round and loads the next planned mix — it does not start playback. Tap{' '}
+                  round and loads the next planned mix â€” it does not start playback. Tap{' '}
                   <strong style={{ color: '#ccc', fontStyle: 'normal' }}>Start Game</strong> when ready.
                 </>
               ) : (

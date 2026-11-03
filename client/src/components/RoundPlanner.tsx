@@ -112,6 +112,9 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   onPreviewPrint?: () => void;
   savedRoundCount?: number;
   onCallSheet?: (roundIndex: number) => void;
+  /** Full call order → Spotify for the focused round. */
+  onExportCallOrderSpotify?: (roundIndex: number) => void;
+  exportCallOrderSpotifyBusy?: boolean;
   onOpenComposite?: (roundIndex: number) => void;
   onNewCustomPattern?: (roundIndex: number) => void;
   onEditCustomPattern?: (roundIndex: number, pattern: SavedCustomPattern) => void;
@@ -186,6 +189,8 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   onPreviewPrint,
   savedRoundCount = 0,
   onCallSheet,
+  onExportCallOrderSpotify,
+  exportCallOrderSpotifyBusy = false,
   onOpenComposite,
   onNewCustomPattern,
   onEditCustomPattern,
@@ -755,6 +760,10 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           callSheetReady={snapshotMeetsSave(focused)}
           onPrintPdf={onPrintPdf ? () => onPrintPdf(index) : undefined}
           onCallSheet={onCallSheet ? () => onCallSheet(index) : undefined}
+          onExportCallOrderSpotify={
+            onExportCallOrderSpotify ? () => onExportCallOrderSpotify(index) : undefined
+          }
+          exportCallOrderSpotifyBusy={exportCallOrderSpotifyBusy}
           onOpenComposite={onOpenComposite ? () => onOpenComposite(index) : undefined}
           onNewCustomPattern={onNewCustomPattern}
           onEditCustomPattern={onEditCustomPattern}

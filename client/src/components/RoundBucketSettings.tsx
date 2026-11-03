@@ -1,5 +1,5 @@
 import React from 'react';
-import { ListMusic, Pencil, Printer, Save, Trash2 } from 'lucide-react';
+import { ListMusic, ListPlus, Pencil, Printer, Save, Trash2 } from 'lucide-react';
 import {
   BINGO_PATTERNS,
   DEFAULT_SHAPE_PATTERN,
@@ -65,6 +65,9 @@ interface RoundBucketSettingsProps {
   callSheetReady?: boolean;
   onPrintPdf?: () => void;
   onCallSheet?: () => void;
+  /** Full locked play order → Spotify playlist (includes unplayed). */
+  onExportCallOrderSpotify?: () => void;
+  exportCallOrderSpotifyBusy?: boolean;
   onOpenComposite?: () => void;
   /** Open draw-custom modal (create). Wired from top-level New only. */
   onNewCustomPattern?: (roundIndex: number) => void;
@@ -104,6 +107,8 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
   callSheetReady,
   onPrintPdf,
   onCallSheet,
+  onExportCallOrderSpotify,
+  exportCallOrderSpotifyBusy = false,
   onOpenComposite,
   onNewCustomPattern,
   onEditCustomPattern,
@@ -529,6 +534,22 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
             >
               <ListMusic className="w-3 h-3" aria-hidden />
               Call sheet
+            </button>
+          ) : null}
+          {hasPlaylists && onExportCallOrderSpotify ? (
+            <button
+              type="button"
+              className="round-bucket-settings__action"
+              disabled={exportCallOrderSpotifyBusy || !callSheetReady}
+              title={
+                !callSheetReady
+                  ? 'Save round first so the #1–N call order is locked'
+                  : 'Create a Spotify playlist of this round’s full call order (including songs that never played)'
+              }
+              onClick={onExportCallOrderSpotify}
+            >
+              <ListPlus className="w-3 h-3" aria-hidden />
+              {exportCallOrderSpotifyBusy ? 'Exporting…' : '→ Spotify'}
             </button>
           ) : null}
         </div>
