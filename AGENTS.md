@@ -68,3 +68,12 @@ Do not claim display/order work is done after typecheck alone if the change touc
 
 - Large files (`HostView.tsx`): prefer small targeted edits over full-file churn.
 - Remove or gate noisy `console.log` / debug UI before calling work "done" if it was added for a single investigation.
+
+## Cursor Cloud specific instructions
+
+- **Node 18.** `.node-version` and `engines` (`>=18 <20`) pin Node 18. Agent shells often resolve `/exec-daemon/node` (22) first. Prefix PATH with nvm’s Node 18 before install or dev commands: `export PATH="$HOME/.nvm/versions/node/v18.20.8/bin:$PATH"`.
+- **Install.** From the repo root: `npm ci --no-audit --no-fund`, then `npm install --prefix client --no-audit --no-fund --no-optional`. Postgres packages are `postgresql` and `postgresql-contrib` (cluster 16).
+- **Postgres.** `sudo pg_ctlcluster 16 main start`, then `pg_isready -q`. Local dev role `tempo` / password `tempo` / database `tempo`. `DATABASE_URL=postgres://tempo:tempo@127.0.0.1:5432/tempo`. The server creates its tables on startup. Host accounts and cloud prep need this URL.
+- **Dev servers (tmux `tempo-api` and `tempo-client`).** API listens on **7093** (`PORT`). Client dev server listens on **7094** so it matches the server’s default CORS list. Start the client from `client/` with `PORT=7094`, `HOST=0.0.0.0`, `BROWSER=none`, `REACT_APP_API_BASE=http://127.0.0.1:7093`, and `REACT_APP_SOCKET_URL=http://127.0.0.1:7093`. Health: `curl -sf http://127.0.0.1:7093/api/health`. UI: `http://127.0.0.1:7094/`.
+- **Spotify.** The process exits unless `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, and `SPOTIFY_REDIRECT_URI` are non-empty. Cloud start uses placeholders when those secrets are unset, which is enough for rooms, join, and the public display. Playlist import and Connect playback need real Spotify app credentials (redirect `http://127.0.0.1:7094/callback`).
+- **Checks.** `npm run client:typecheck` and `npm run test:spotify-efficiency`. Skip `cd client && npm run build` unless packaging.
