@@ -697,6 +697,22 @@ function emitBingoCardsToSocket(socketId, cardsOrCard, opts = {}) {
   }
 }
 
+/** Push each seated player's current dealt cards (Start Game skip-regen path). */
+function reemitAllPlayerBingoCards(room, { isNewCard = false } = {}) {
+  if (!room?.players) return 0;
+  let n = 0;
+  for (const [playerId, player] of room.players.entries()) {
+    if (!player || player.isHost || player.name === 'Display' || isDisplayConnectionPlayer(player)) {
+      continue;
+    }
+    const have = resolveActivePlayerCards(room, player, playerId);
+    if (!have.length) continue;
+    emitBingoCardsToSocket(playerId, have, { isNewCard: !!isNewCard, room });
+    n += 1;
+  }
+  return n;
+}
+
 function maxPlayerBingoCardsForRoom(room) {
   return playerBingoCards.normalizeMaxPlayerBingoCards(room?.maxPlayerBingoCards, 1);
 }
@@ -5956,6 +5972,16 @@ function shouldRegenerateBingoCardsOnStartGame(room, playlists, freeSpace, opts 
       room.activeSavedRoundCardKey &&
       room.activeSavedRoundCardKey !== savedRoundCardKey
     ) {
+      routineServerLog(
+        '🃏 Start Game: saved-round card key mismatch vs prep — regenerating cards',
+      );
+      return true;
+    }
+    // Prep UI round vs last finalize identity can diverge after bounce races.
+    if (savedRoundCardKey && !room.activeSavedRoundCardKey) {
+      routineServerLog(
+        '🃏 Start Game: no active saved-round card key on room — regenerating cards',
+      );
       return true;
     }
     for (const [playerId, raw] of room.bingoCards.entries()) {
@@ -10022,6 +10048,14 @@ io.on('connection', (socket) => {
                 }
               }
             }
+          }
+          // Prep bouncing can leave phones on a prior round's grids while the server already
+          // holds the correct prep-dealt cards — always re-push on skip-regen Start Game.
+          const resent = reemitAllPlayerBingoCards(room, { isNewCard: false });
+          if (resent > 0) {
+            routineServerLog(
+              `🃏 Re-emitted dealt cards to ${resent} player(s) (skip-regen Start Game sync)`,
+            );
           }
         }
 

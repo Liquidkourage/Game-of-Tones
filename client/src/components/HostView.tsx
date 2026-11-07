@@ -6351,15 +6351,16 @@ const HostView: React.FC = () => {
     const targetKey = selectionPlaylistKey(playlists);
     const uiKey = selectionPlaylistKey(mixPlaylistSelection);
 
-    const inFlight = finalizeMixPromiseRef.current;
-    if (inFlight) {
-      setFinalizeMixBusy(true);
-      addLog('Waiting for finalize already in progress…', 'info');
-      return inFlight;
-    }
-
+    /**
+     * Serialize finalize requests — never return another round's in-flight promise as "our"
+     * result. (That caused Round 4 UI + Round 1 Extra Life cards: select R4 saw R1 in flight
+     * and treated R1's success as R4 being ready.)
+     */
     setFinalizeMixBusy(true);
     finalizeMixInFlightRef.current = true;
+    if (finalizeMixPromiseRef.current) {
+      addLog('Waiting for finalize already in progress…', 'info');
+    }
 
     const run = async (): Promise<boolean> => {
       try {
@@ -6367,7 +6368,9 @@ const HostView: React.FC = () => {
 
         if (opts?.songListOverride && opts.songListOverride.length > 0) {
           addLog(
-            'Applying saved round snapshot to the room (display + cards; reuse dealt grids when possible)…',
+            opts.savedRoundId
+              ? `Applying saved round (${opts.savedRoundId}) to the room (display + cards; reuse dealt grids when possible)…`
+              : 'Applying saved round snapshot to the room (display + cards; reuse dealt grids when possible)…',
             'info',
           );
           listToSend = opts.songListOverride.map(cloneSongForSnapshot);
@@ -6543,14 +6546,29 @@ const HostView: React.FC = () => {
       } catch (error) {
         console.error('Error finalizing mix:', error);
         return false;
-      } finally {
-        finalizeMixInFlightRef.current = false;
-        finalizeMixPromiseRef.current = null;
-        setFinalizeMixBusy(false);
       }
     };
 
-    const p = run();
+    const prev = finalizeMixPromiseRef.current;
+    let p!: Promise<boolean>;
+    p = (async (): Promise<boolean> => {
+      if (prev) {
+        try {
+          await prev;
+        } catch {
+          /* prior finalize failure must not block the next round */
+        }
+      }
+      try {
+        return await run();
+      } finally {
+        if (finalizeMixPromiseRef.current === p) {
+          finalizeMixPromiseRef.current = null;
+          finalizeMixInFlightRef.current = false;
+          setFinalizeMixBusy(false);
+        }
+      }
+    })();
     finalizeMixPromiseRef.current = p;
     return p;
   };
