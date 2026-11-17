@@ -1853,13 +1853,20 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
     }
     routineServerLog(`🎵 Playing song ${songIndex + 1}/${room.playlistSongs.length}: ${song.name} by ${song.artist}`);
 
-    if (songUsesHostBrowserPlayback(song)) {
+    if (songUsesHostBrowserPlayback(song) || roomSimulatesSpotifyPlayback(room)) {
+      const sim = roomSimulatesSpotifyPlayback(room);
       const startMs = bump
         ? computeBumpSnippetStartMs(room, song, {
             avoidMs: room.currentSongStartMs,
-            contextLabel: songUsesApplePlayback(song) ? 'bump-apple' : 'bump-youtube',
+            contextLabel: sim
+              ? 'bump-sim'
+              : songUsesApplePlayback(song)
+                ? 'bump-apple'
+                : 'bump-youtube',
           })
-        : computeSnippetRandomStartMs(room, song);
+        : sim
+          ? computeSpotifySnippetRandomStartMs(room, song, 'playSongAtIndex sim')
+          : computeSnippetRandomStartMs(room, song);
       room.currentSongStartMs = startMs;
       if (bump) {
         routineServerLog(`🔁 Bump snippet start → ${startMs}ms (${Math.floor(startMs / 1000)}s) for ${song.name}`);
@@ -1876,7 +1883,9 @@ async function playSongAtIndex(roomId, deviceId, songIndex, options = {}) {
       emitSongPlayingToRoom(roomId, room, song, songIndex);
       sendPlayerCardUpdates(roomId, true);
       routineServerLog(
-        `✅ ${songUsesApplePlayback(song) ? 'Apple Music' : 'YouTube'} snippet (host browser): ${song.name}`,
+        sim
+          ? `🧪 Simulated snippet (no Connect): ${song.name}`
+          : `✅ ${songUsesApplePlayback(song) ? 'Apple Music' : 'YouTube'} snippet (host browser): ${song.name}`,
       );
       const saved = loadSavedDeviceForRoom(roomId);
       const dev = deviceId || (saved && saved.id) || '';
@@ -3458,6 +3467,11 @@ function songUsesHostBrowserPlayback(song) {
   return songUsesYoutubePlayback(song) || songUsesApplePlayback(song);
 }
 
+/** Host test mode: advance calls on snippet timer with zero Spotify player API calls. */
+function roomSimulatesSpotifyPlayback(room) {
+  return !!room?.simulateSpotifyPlayback;
+}
+
 /** Spotify track ids are 22-char base62; YouTube video ids are often 11 chars. */
 function looksLikeSpotifyTrackId(id) {
   const s = String(id || '');
@@ -4097,6 +4111,7 @@ function emitRoomCallLogReset(roomId, room) {
     totalSongs: room.playlistSongs?.length || 0,
     syncTimestamp: Date.now(),
     hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline,
+    simulateSpotifyPlayback: roomSimulatesSpotifyPlayback(room),
     mixFinalized: !!room.mixFinalized,
   };
   Object.assign(payload, publicDisplayRoomStateExtras(room));
@@ -4738,6 +4753,7 @@ function syncRoomStateAfterSongStart(roomId, room) {
     publicDisplayLetterRevealToast: letterRevealToastEnabledForRoom(room),
     venueBranding: venueBrandingForRoom(room),
     tipJar: tipJarForRoom(room),
+    simulateSpotifyPlayback: roomSimulatesSpotifyPlayback(room),
     playedSongs: playedSongsPayloadForRoomState(room, playedSongIds),
     playedSongIds,
     totalPlayedCount: playedSongIds.length,
@@ -4884,6 +4900,7 @@ function stopLiveRoundTimers(roomId, room) {
 }
 
 async function pauseSpotifyForRoom(roomId, room) {
+  if (roomSimulatesSpotifyPlayback(room)) return;
   const deviceId = room?.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
   if (!deviceId) return;
   try {
@@ -5317,13 +5334,16 @@ function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
   const idx = room.currentSongIndex ?? 0;
   const isLast = total > 0 && idx >= total - 1;
   const delaySec = snippetLengthSeconds;
+  const sim = roomSimulatesSpotifyPlayback(room);
 
   routineServerLog(
-    `⏰ Starting simple progression: ${snippetLengthSeconds}s per song${isLast ? ' (final — then end game)' : ''}`,
+    `⏰ Starting simple progression: ${snippetLengthSeconds}s per song${isLast ? ' (final — then end game)' : ''}${sim ? ' [simulate Spotify]' : ''}`,
   );
 
   clearRoomTimer(roomId);
-  startSimpleContextMonitor(roomId, deviceId);
+  if (!sim) {
+    startSimpleContextMonitor(roomId, deviceId);
+  }
 
   setRoomTimer(
     roomId,
@@ -5398,12 +5418,16 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     return;
   }
 
-  if (songUsesHostBrowserPlayback(nextSong)) {
+  if (songUsesHostBrowserPlayback(nextSong) || roomSimulatesSpotifyPlayback(room)) {
     if (!roomStillPlaying(roomId)) return;
-    room.currentSongStartMs = computeSnippetRandomStartMs(room, nextSong);
+    room.currentSongStartMs = roomSimulatesSpotifyPlayback(room)
+      ? computeSpotifySnippetRandomStartMs(room, nextSong, 'playNextSongSimple sim')
+      : computeSnippetRandomStartMs(room, nextSong);
     markNextSongCalledAndNotify(roomId, room, nextSong, room.currentSongIndex);
     routineServerLog(
-      `✅ Simple advance (${songUsesApplePlayback(nextSong) ? 'Apple Music' : 'YouTube'}): ${nextSong.name}`,
+      roomSimulatesSpotifyPlayback(room)
+        ? `🧪 Simulated advance (no Connect): ${nextSong.name}`
+        : `✅ Simple advance (${songUsesApplePlayback(nextSong) ? 'Apple Music' : 'YouTube'}): ${nextSong.name}`,
     );
     startSimpleProgression(roomId, deviceId, room.snippetLength);
     return;
@@ -6402,6 +6426,7 @@ io.on('connection', (socket) => {
           volume: 100,
           /** When true, only in-person players can pause/end the round with a verified bingo; online players get unofficial bingo. */
           hybridInPersonPlusOnline: false,
+          simulateSpotifyPlayback: false,
           playlistSongs: [],
           currentSongIndex: 0,
           // Pre-queue system removed for deterministic playback
@@ -6822,6 +6847,7 @@ io.on('connection', (socket) => {
             playlists: room.finalizedPlaylists || room.playlists || [],
             selectedDeviceId: room.selectedDeviceId || null,
             hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline,
+            simulateSpotifyPlayback: roomSimulatesSpotifyPlayback(room),
             publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
             publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
             letterRevealIntervalSec: letterRevealIntervalSecForRoom(room),
@@ -7824,6 +7850,28 @@ io.on('connection', (socket) => {
       );
     } catch (e) {
       console.error('❌ Error setting venue Spotify Jam mode:', e?.message || e);
+    }
+  });
+
+  socket.on('set-simulate-spotify-playback', (data = {}) => {
+    try {
+      const { roomId, enabled } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost =
+        room.host === socket.id ||
+        (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+      room.simulateSpotifyPlayback = !!enabled;
+      io.to(roomId).emit('simulate-spotify-playback-updated', {
+        simulateSpotifyPlayback: room.simulateSpotifyPlayback,
+      });
+      routineServerLog(
+        `🧪 Simulate Spotify playback for room ${roomId}: ${room.simulateSpotifyPlayback ? 'ON' : 'OFF'}`,
+      );
+      scheduleLiveRoomSnapshot(roomId);
+    } catch (e) {
+      console.error('❌ Error setting simulate Spotify playback:', e?.message || e);
     }
   });
 
@@ -9415,7 +9463,8 @@ io.on('connection', (socket) => {
         totalSongs: room.playlistSongs?.length || 0,
         // Sync timestamp for client reference
         syncTimestamp: Date.now(),
-        hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline
+        hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline,
+        simulateSpotifyPlayback: roomSimulatesSpotifyPlayback(room),
       };
 
       const syncingPlayer = room.players.get(socket.id);
@@ -10434,6 +10483,14 @@ io.on('connection', (socket) => {
 
         // Clear the timer when pausing
         clearRoomTimer(roomId);
+
+        if (roomSimulatesSpotifyPlayback(room)) {
+          room.gameState = 'paused';
+          io.to(roomId).emit('playback-paused');
+          routineServerLog('🧪 Simulated pause (no Connect)');
+          return;
+        }
+
         const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
         if (!deviceId) {
           console.error('❌ No device found for pause');
@@ -10539,6 +10596,21 @@ io.on('connection', (socket) => {
         room.needsHostResume = false;
         if (room.gameState === 'paused') {
           room.gameState = 'playing';
+        }
+        if (roomSimulatesSpotifyPlayback(room)) {
+          scheduleLiveRoomSnapshot(roomId);
+          const remainingSim = Math.max(
+            1000,
+            (Number(room.snippetLength) || 30) * 1000 -
+              (Number(room.snippetPausedElapsedMs) || 0),
+          );
+          room.snippetPausedElapsedMs = null;
+          room.snippetPausedAtMs = null;
+          room.songStartAtMs = Date.now() - ((Number(room.snippetLength) || 30) * 1000 - remainingSim);
+          startSimpleProgression(roomId, room.selectedDeviceId || '', room.snippetLength);
+          io.to(roomId).emit('playback-resumed');
+          routineServerLog('🧪 Simulated resume (no Connect)');
+          return;
         }
         const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
         if (!deviceId) {
@@ -13669,7 +13741,12 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       }
     }
 
-    const needsSpotifyTransport = allSongs.some((s) => !songUsesHostBrowserPlayback(s));
+    const simulatePlayback = roomSimulatesSpotifyPlayback(room);
+    if (simulatePlayback) {
+      routineServerLog('🧪 Simulate Spotify playback ON — skipping Connect transport');
+    }
+    const needsSpotifyTransport =
+      !simulatePlayback && allSongs.some((s) => !songUsesHostBrowserPlayback(s));
     const playlistHasYoutube = ytCount > 0;
     const playlistHasApple = appleCount > 0;
     if (needsSpotifyTransport) {
@@ -13806,8 +13883,10 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       room.selectedDeviceId = targetDeviceId;
     }
 
-    if (songUsesHostBrowserPlayback(firstSong)) {
-      const startMsBrowser = computeSnippetRandomStartMs(room, firstSong);
+    if (songUsesHostBrowserPlayback(firstSong) || simulatePlayback) {
+      const startMsBrowser = simulatePlayback
+        ? computeSpotifySnippetRandomStartMs(room, firstSong, 'auto first sim')
+        : computeSnippetRandomStartMs(room, firstSong);
       room.currentSongStartMs = startMsBrowser;
       callState.callSong(room, {
         ...firstSong,
@@ -13822,7 +13901,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       syncRoomStateAfterSongStart(roomId, room);
       sendPlayerCardUpdates(roomId, true);
       routineServerLog(
-        `✅ Started automatic playback (${songUsesApplePlayback(firstSong) ? 'Apple Music' : 'YouTube'} host browser): ${firstSong.name} by ${firstSong.artist}`,
+        simulatePlayback
+          ? `🧪 Simulated playback start (no Connect): ${firstSong.name} by ${firstSong.artist}`
+          : `✅ Started automatic playback (${songUsesApplePlayback(firstSong) ? 'Apple Music' : 'YouTube'} host browser): ${firstSong.name} by ${firstSong.artist}`,
       );
       startSimpleProgression(roomId, targetDeviceId || '', room.snippetLength);
       return;
@@ -14066,19 +14147,28 @@ async function playNextSong(roomId, deviceId) {
     }
     routineServerLog(`🎵 Playing song ${room.currentSongIndex + 1}/${room.playlistSongs.length}: ${nextSong.name} by ${nextSong.artist}`);
 
-    if (songUsesHostBrowserPlayback(nextSong)) {
+    if (songUsesHostBrowserPlayback(nextSong) || roomSimulatesSpotifyPlayback(room)) {
       if (!roomStillPlaying(roomId)) return;
-      room.currentSongStartMs = computeSnippetRandomStartMs(room, nextSong);
+      const sim = roomSimulatesSpotifyPlayback(room);
+      room.currentSongStartMs = sim
+        ? computeSpotifySnippetRandomStartMs(room, nextSong, 'playNextSong sim')
+        : computeSnippetRandomStartMs(room, nextSong);
       markNextSongCalledAndNotify(roomId, room, nextSong, room.currentSongIndex);
       routineServerLog(
-        `✅ Playing next song (${songUsesApplePlayback(nextSong) ? 'Apple Music' : 'YouTube'} host browser): ${nextSong.name}`,
+        sim
+          ? `🧪 Simulated next song (no Connect): ${nextSong.name}`
+          : `✅ Playing next song (${songUsesApplePlayback(nextSong) ? 'Apple Music' : 'YouTube'} host browser): ${nextSong.name}`,
       );
       const devPass = deviceId || room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id || '';
-      const playbackDuration = room.snippetLength * 1000;
-      setRoomTimer(roomId, async () => {
-        clearRoomTimer(roomId);
-        playNextSong(roomId, devPass);
-      }, playbackDuration);
+      if (sim) {
+        startSimpleProgression(roomId, devPass, room.snippetLength);
+      } else {
+        const playbackDuration = room.snippetLength * 1000;
+        setRoomTimer(roomId, async () => {
+          clearRoomTimer(roomId);
+          playNextSong(roomId, devPass);
+        }, playbackDuration);
+      }
       return;
     }
 
@@ -16127,6 +16217,7 @@ app.post('/api/host/rooms', async (req, res) => {
         repeatMode: false,
         volume: 100,
         hybridInPersonPlusOnline: false,
+        simulateSpotifyPlayback: false,
         playlistSongs: [],
         currentSongIndex: 0,
         pattern: 'line',

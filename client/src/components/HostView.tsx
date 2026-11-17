@@ -1805,6 +1805,8 @@ const HostView: React.FC = () => {
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
   const [spotifyJamActive, setSpotifyJamActive] = useState(false);
   const [venueSpotifyJamMode, setVenueSpotifyJamMode] = useState(false);
+  /** Test mode: advance the call board without Spotify Connect player API calls. */
+  const [simulateSpotifyPlayback, setSimulateSpotifyPlayback] = useState(false);
   /** Opt-in: auto-push "Played — …" Spotify playlists at round end (default off). */
   const [autoCreatePlayedSpotifyPlaylist, setAutoCreatePlayedSpotifyPlaylist] = useState(false);
   const autoCreatePlayedSpotifyPlaylistRef = useRef(false);
@@ -1863,12 +1865,15 @@ const HostView: React.FC = () => {
   const mixGameActionsBlocked = useMemo(
     () =>
       mixPlaylistSelection.length === 0 ||
-      (mixNeedsHostSpotify && (!isSpotifyConnected || isSpotifyConnecting)) ||
-      (mixNeedsHostSpotify && playbackDeviceNotInList) ||
+      (!simulateSpotifyPlayback &&
+        mixNeedsHostSpotify &&
+        (!isSpotifyConnected || isSpotifyConnecting)) ||
+      (!simulateSpotifyPlayback && mixNeedsHostSpotify && playbackDeviceNotInList) ||
       savedRoundRoomSyncBusy ||
       finalizeMixBusy,
     [
       mixPlaylistSelection.length,
+      simulateSpotifyPlayback,
       mixNeedsHostSpotify,
       isSpotifyConnected,
       isSpotifyConnecting,
@@ -4017,6 +4022,18 @@ const HostView: React.FC = () => {
     [socket, roomId],
   );
 
+  const syncSimulateSpotifyPlaybackToRoom = useCallback(
+    (enabled: boolean) => {
+      if (!socket || !roomId) return;
+      try {
+        socket.emit('set-simulate-spotify-playback', { roomId, enabled });
+      } catch {
+        /* ignore */
+      }
+    },
+    [socket, roomId],
+  );
+
   const syncSelectedPlaybackDeviceToRoom = useCallback(
     (device: Device | null) => {
       if (!socket || !roomId) return;
@@ -5219,6 +5236,12 @@ const HostView: React.FC = () => {
       }
     });
 
+    newSocket.on('simulate-spotify-playback-updated', (data: any) => {
+      if (typeof data?.simulateSpotifyPlayback === 'boolean') {
+        setSimulateSpotifyPlayback(data.simulateSpotifyPlayback);
+      }
+    });
+
     // Listen for pattern updates
     newSocket.on('pattern-updated', (data: any) => {
       if (data?.pattern) {
@@ -5368,6 +5391,9 @@ const HostView: React.FC = () => {
       }
       if (payload?.mixFinalized !== undefined) {
         setMixFinalized(!!payload.mixFinalized);
+      }
+      if (typeof payload?.simulateSpotifyPlayback === 'boolean') {
+        setSimulateSpotifyPlayback(payload.simulateSpotifyPlayback);
       }
       if (payload?.pattern) {
         const incomingPat = payload.pattern === 'blackout' ? 'full_card' : payload.pattern;
@@ -7043,7 +7069,7 @@ const HostView: React.FC = () => {
       return false;
     }
 
-    if (needsHostSpotifyForStart && !selectedDevice) {
+    if (!simulateSpotifyPlayback && needsHostSpotifyForStart && !selectedDevice) {
       connectionModalOpenedByUserRef.current = false;
       setShowConnectionModal(true);
       alert(
@@ -7052,7 +7078,7 @@ const HostView: React.FC = () => {
       return false;
     }
 
-    if (needsHostSpotifyForStart && playbackDeviceNotInList) {
+    if (!simulateSpotifyPlayback && needsHostSpotifyForStart && playbackDeviceNotInList) {
       connectionModalOpenedByUserRef.current = false;
       setShowConnectionModal(true);
       alert(
@@ -7061,7 +7087,7 @@ const HostView: React.FC = () => {
       return false;
     }
 
-    if (needsHostSpotifyForStart && selectedDevice) {
+    if (!simulateSpotifyPlayback && needsHostSpotifyForStart && selectedDevice) {
       syncSelectedPlaybackDeviceToRoom(selectedDevice);
     }
 
@@ -11953,11 +11979,11 @@ const HostView: React.FC = () => {
       window.alert('Apple Music is not connected. Open Settings → Playback & connections and connect Apple Music first.');
       return;
     }
-    if (needsHostSpotifyForRound && !isSpotifyConnected) {
+    if (!simulateSpotifyPlayback && needsHostSpotifyForRound && !isSpotifyConnected) {
       window.alert('Spotify is not connected. Open Settings → Playback & connections and connect Spotify first.');
       return;
     }
-    if (needsHostSpotifyForRound && !selectedDevice) {
+    if (!simulateSpotifyPlayback && needsHostSpotifyForRound && !selectedDevice) {
       connectionModalOpenedByUserRef.current = false;
       setShowConnectionModal(true);
       window.alert(
@@ -11965,7 +11991,7 @@ const HostView: React.FC = () => {
       );
       return;
     }
-    if (needsHostSpotifyForRound && playbackDeviceNotInList) {
+    if (!simulateSpotifyPlayback && needsHostSpotifyForRound && playbackDeviceNotInList) {
       connectionModalOpenedByUserRef.current = false;
       setShowConnectionModal(true);
       window.alert(
@@ -12504,6 +12530,12 @@ const HostView: React.FC = () => {
     syncVenueSpotifyJamModeToRoom(venueSpotifyJamMode);
   }, [socket, roomId, venueSpotifyJamMode, syncVenueSpotifyJamModeToRoom]);
 
+  /** Sync simulate-playback flag to the room (test mode; not a host preference). */
+  useEffect(() => {
+    if (!socket || !roomId) return;
+    syncSimulateSpotifyPlaybackToRoom(simulateSpotifyPlayback);
+  }, [socket, roomId, simulateSpotifyPlayback, syncSimulateSpotifyPlaybackToRoom]);
+
   /** Re-pick playback device when venue Jam mode toggles. */
   useEffect(() => {
     if (!readHostSpotifyWebEnabled() || devices.length === 0) return;
@@ -12988,6 +13020,30 @@ const HostView: React.FC = () => {
         />
         <span>
           <strong>Venue uses Spotify Jam</strong>
+        </span>
+      </label>
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 10,
+          marginBottom: 12,
+          fontSize: '0.88rem',
+          color: 'rgba(255,255,255,0.88)',
+          cursor: 'pointer',
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={simulateSpotifyPlayback}
+          onChange={(e) => setSimulateSpotifyPlayback(e.target.checked)}
+          style={{ marginTop: 3 }}
+        />
+        <span>
+          <strong>Simulate Spotify playback</strong>
+          <span style={{ display: 'block', opacity: 0.75, marginTop: 2, fontSize: '0.82rem' }}>
+            Test rounds without Connect play/pause — call board advances on the snippet timer only.
+          </span>
         </span>
       </label>
       {venueSpotifyJamMode && !spotifyJamActive && devices.length > 0 && (
@@ -15291,6 +15347,16 @@ const HostView: React.FC = () => {
                     ? ' · Ended'
                     : ' · Setup'}
               </span>
+              {simulateSpotifyPlayback ? (
+                <span
+                  className="host-header__state"
+                  style={{ color: '#ffb347', fontWeight: 700 }}
+                  title="Spotify Connect player calls are skipped"
+                >
+                  {' '}
+                  · Simulated playback
+                </span>
+              ) : null}
             </p>
           </div>
           <div className="room-info host-header__toolbar">
