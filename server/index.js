@@ -5743,8 +5743,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
             room.lastCorrectionAtMs = now;
           }
           
-          // Ensure control on target device without autoplaying a random context
-          try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
+          // Do not transfer(play=false) before correction — empties Windows Now Playing.
           if (!roomStillPlaying(roomId)) return;
           // Hard pause to stop any stray context audio before restart
           try { await spotifyFor(roomId).pausePlayback(deviceId); } catch {}
@@ -5850,7 +5849,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
             try {
               expectedProgress = expectedPlaybackProgressMsForRoom(r);
             } catch {}
-            try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
+            // Do not transfer(play=false) before stall restart — empties Windows Now Playing.
             try { await spotifyFor(roomId).pausePlayback(deviceId); } catch {}
             await spotifyFor(roomId).startPlayback(deviceId, [`spotify:track:${currentExpectedId}`], expectedProgress);
             try { await new Promise(res => setTimeout(res, 150)); await spotifyFor(roomId).seekToPosition(expectedProgress, deviceId); } catch {}
@@ -10441,12 +10440,7 @@ io.on('connection', (socket) => {
           socket.emit('error', { message: 'No device available for pause' });
           return;
         }
-        try {
-          // Ensure control on the locked device (do not auto-play)
-          await spotifyFor(roomId).transferPlayback(deviceId, false);
-        } catch (e) {
-          console.warn('⚠️ Transfer before pause failed:', e?.message || e);
-        }
+        // Do not transfer(play=false) before pause — empties Windows Now Playing (Connect rule).
 
         // If already paused, treat as success
         try {
@@ -10573,12 +10567,19 @@ io.on('connection', (socket) => {
           }
         }
 
-        // Ensure playback is locked to the device before resuming
+        // Never transfer(play=false) before resume — that clears Desktop Now Playing and
+        // leaves Web Player / Connect in a Restriction-prone empty state. If the locked
+        // device isn't active, transfer with play:true (Activate path), then resume/seek.
         try {
-          await spotifyFor(roomId).transferPlayback(deviceId, false);
-          } catch (e) {
-            console.warn('⚠️ Transfer playback failed before resume:', e?.message || e);
+          const spResume = spotifyFor(roomId);
+          const before = await spResume.getCurrentPlaybackState();
+          const activeId = before?.device?.id || null;
+          if (activeId && deviceId && activeId !== deviceId) {
+            await spResume.transferPlayback(deviceId, true);
           }
+        } catch (e) {
+          console.warn('⚠️ Transfer before resume failed:', e?.message || e);
+        }
 
           // Server-frozen clip clock beats the client's locally-extrapolated position: the Spotify
           // pause API landed 1–3s after the host clicked, so seek back to the click point.
@@ -19896,12 +19897,12 @@ async function activatePreferredDevice() {
     }
     
     if (targetDevice) {
-      // Assert control on the device without starting playback
+      // play:true — play:false empties Windows Now Playing when asserting control.
       try {
-        await spotifyServiceDefault.transferPlayback(targetDevice.id, false);
+        await spotifyServiceDefault.transferPlayback(targetDevice.id, true);
         try { await spotifyServiceDefault.setShuffleState(false, targetDevice.id); } catch (_) {}
         try { await spotifyServiceDefault.setRepeatState('off', targetDevice.id); } catch (_) {}
-        routineServerLog(`✅ Asserted control on device without playback: ${targetDevice.name}`);
+        routineServerLog(`✅ Asserted control on device (play=true): ${targetDevice.name}`);
           } catch (error) {
         routineServerLog(`⚠️ Could not assert control on ${targetDevice.name}, but device is available`);
       }
