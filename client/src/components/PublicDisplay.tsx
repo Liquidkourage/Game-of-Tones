@@ -1627,8 +1627,8 @@ const PublicDisplay: React.FC = () => {
   const carouselTickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Populated column bands the last time the carousel timer ran (detect 1×75 scroll-mode entry). */
   const carouselColumnCountRef = useRef(0);
-  /** Live call id for carousel idle clamp (keep current column on-screen; avoid wrap reverse-jumps). */
-  const carouselCurrentSongIdRef = useRef<string | null>(null);
+  /** Soft-ensure only once per live song id — idle may tour history afterward without snap-back. */
+  const carouselEnsuredSongIdRef = useRef<string | null>(null);
   const [animating, setAnimating] = useState<boolean>(true); // kept for compatibility but no longer toggled
   const carouselViewportRef = useRef<HTMLDivElement | null>(null);
   const [viewportWidth, setViewportWidth] = useState<number>(0);
@@ -1874,6 +1874,7 @@ const PublicDisplay: React.FC = () => {
   // (does not clear played order, reveals, or pool data).
   useEffect(() => {
     setCarouselIndex(0);
+    carouselEnsuredSongIdRef.current = null;
     setPhasePx(0);
     setFreezeAll(false);
   }, [callListMode]);
@@ -2119,6 +2120,7 @@ const PublicDisplay: React.FC = () => {
       setCarouselIndex(0);
       carouselIndexRef.current = 0;
       carouselColumnCountRef.current = 0;
+      carouselEnsuredSongIdRef.current = null;
       setPhasePx(0);
       setFreezeAll(false);
       setRevealLayoutNonce((n) => n + 1);
@@ -3757,10 +3759,6 @@ const PublicDisplay: React.FC = () => {
   }, [carouselIndex]);
 
   useEffect(() => {
-    carouselCurrentSongIdRef.current = gameState.currentSong?.id ?? null;
-  }, [gameState.currentSong?.id]);
-
-  useEffect(() => {
     if (columnCallListLayout || applyingServerRevealRef.current) return;
     syncRevealStateToServer();
   }, [carouselIndex, columnCallListLayout, roomId]);
@@ -3831,17 +3829,6 @@ const PublicDisplay: React.FC = () => {
         if (cancelled) return;
         setCarouselIndex((prev) => {
           const next = prev + 1;
-          // While a live call exists, do not scroll past the soft-ensure window (usually
-          // live column on the right). Entering the wrap tail snaps back to early calls —
-          // that reads as a reverse jump around song 26+ (e.g. 28→29).
-          const liveId = carouselCurrentSongIdRef.current;
-          if (liveId && total > visibleCols) {
-            const targetCol = playOrderColumnIndexForSong(playedOrderRef.current, liveId);
-            if (targetCol >= 0) {
-              const holdLeft = carouselIndexToShowColumn(targetCol, total, visibleCols, true);
-              if (next > holdLeft) return prev;
-            }
-          }
           // Step into duplicate tail once (same view as index 0); layout effect snaps to 0.
           return next > total ? prev : next;
         });
@@ -3870,10 +3857,9 @@ const PublicDisplay: React.FC = () => {
     !columnCallListLayout && countPlayOrderColumns(playedOrderForDisplay) > visibleCols;
 
   /**
-   * Soft-ensure: when a new snippet starts, if its play-order column is off-screen,
-   * slide forward so that column is visible (prefer rightmost). Never jump backward
-   * (that fights the idle loop / wrap and looks like a reverse scroll).
-   * Idle dwell stays parked at that window until the next call (see timer clamp).
+   * Soft-ensure once per live song: if that call’s column is off-screen at song start,
+   * slide forward so it’s visible (prefer rightmost). Then idle scroll/wrap tours history
+   * again — do not re-snap mid-snippet (that caused reverse jumps) or freeze on the live slot.
    */
   useLayoutEffect(() => {
     if (columnCallListLayout) return;
@@ -3887,12 +3873,19 @@ const PublicDisplay: React.FC = () => {
     const targetCol = playOrderColumnIndexForSong(order, songId);
     if (targetCol < 0) return;
 
+    // Wait until this id is in the call list; only ensure once per song.
+    if (carouselEnsuredSongIdRef.current === songId) return;
+
     const leftIdx = carouselIndexRef.current;
-    if (isPlayOrderColumnVisible(targetCol, leftIdx, visibleCols, total)) return;
+    if (isPlayOrderColumnVisible(targetCol, leftIdx, visibleCols, total)) {
+      carouselEnsuredSongIdRef.current = songId;
+      return;
+    }
 
     const next = carouselIndexToShowColumn(targetCol, total, visibleCols, true);
+    carouselEnsuredSongIdRef.current = songId;
     if (next === leftIdx) return;
-    // Forward-only: a lower index is a reverse jump (e.g. wrap seam → early columns).
+    // Forward-only: never jump backward into early columns (wrap already does that smoothly).
     if (next < leftIdx) return;
 
     setCarouselIndex(next);
