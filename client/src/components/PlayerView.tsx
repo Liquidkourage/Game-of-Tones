@@ -2035,30 +2035,75 @@ const PlayerView: React.FC = () => {
   const markSquare = (position: string) => {
     if (!bingoCard || !socket || !roomId) return;
 
-    const square = bingoCard.squares.find(s => s.position === position);
+    const square = bingoCard.squares.find((s) => s.position === position);
     if (!square) return;
 
     const free = isPlayerFreeSpaceSquare(square);
     const songId = free ? '__FREE_SPACE__' : square.songId;
     const nextMarked = !square.marked;
+    const activeKey = cardKey(bingoCard);
 
     // Phone owns marks (Option B). Local toggle + persist first; mark-square sends absolute marked for host.
-    updateActiveBingoCard((prev) => {
-      const updatedSquares = prev.squares.map((sq) =>
-        sq.position === position ? { ...sq, marked: nextMarked } : sq,
-      );
-      const updatedCard = { ...prev, squares: updatedSquares };
-      persistMarks(updatedCard);
-      return updatedCard;
+    // Same songId on other cards this round gets the same marked state (multi-card convenience).
+    setBingoCards((prev) => {
+      if (!prev.length) return prev;
+      const next = prev.map((card) => {
+        const isActive = cardKey(card) === activeKey;
+        let changed = false;
+        const updatedSquares = card.squares.map((sq) => {
+          if (free) {
+            // FREE is per-card only — never mirror across cards.
+            if (!isActive || sq.position !== position) return sq;
+            changed = true;
+            return { ...sq, marked: nextMarked };
+          }
+          if (isPlayerFreeSpaceSquare(sq)) return sq;
+          if (!songId || sq.songId !== songId) return sq;
+          if (!!sq.marked === nextMarked) return sq;
+          changed = true;
+          return { ...sq, marked: nextMarked };
+        });
+        if (!changed) return card;
+        const updatedCard = { ...card, squares: updatedSquares };
+        persistMarks(updatedCard);
+        return updatedCard;
+      });
+      return next;
     });
 
-    enqueueMarkSquareTelemetry({
-      roomId,
-      songId,
-      position,
-      cardId: bingoCard.cardId || bingoCard.id,
-      marked: nextMarked,
-    });
+    if (free) {
+      enqueueMarkSquareTelemetry({
+        roomId,
+        songId,
+        position,
+        cardId: bingoCard.cardId || bingoCard.id,
+        marked: nextMarked,
+      });
+    } else if (songId) {
+      // Telemetry for every mirrored square (active + other cards).
+      for (const card of bingoCards) {
+        for (const sq of card.squares) {
+          if (isPlayerFreeSpaceSquare(sq)) continue;
+          if (sq.songId !== songId) continue;
+          enqueueMarkSquareTelemetry({
+            roomId,
+            songId,
+            position: sq.position,
+            cardId: card.cardId || card.id,
+            marked: nextMarked,
+          });
+        }
+      }
+      // Active tap position may already be covered above; if the active card list was stale
+      // for this song at the tapped cell only, still send the tap.
+      enqueueMarkSquareTelemetry({
+        roomId,
+        songId,
+        position,
+        cardId: bingoCard.cardId || bingoCard.id,
+        marked: nextMarked,
+      });
+    }
 
     if (navigator.vibrate) navigator.vibrate(10);
   };
