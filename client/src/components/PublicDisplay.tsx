@@ -1083,54 +1083,6 @@ function countPlayOrderColumns(playedOrder: readonly string[]): number {
   return playOrderColumnSlices(playedOrder).length;
 }
 
-/** Play-order column index (0-based) containing songId, or -1 if not in the call list. */
-function playOrderColumnIndexForSong(playedOrder: readonly string[], songId: string): number {
-  const ids = compactPlayedOrderIds(playedOrder);
-  const idx = ids.indexOf(songId);
-  if (idx < 0) return -1;
-  return Math.floor(idx / 5);
-}
-
-/**
- * True if targetCol is among the five columns currently in the viewport at leftIndex.
- * leftIndex may sit in the wrap-duplicate tail (gi >= totalCols).
- */
-function isPlayOrderColumnVisible(
-  targetCol: number,
-  leftIndex: number,
-  visibleCols: number,
-  totalCols: number,
-): boolean {
-  if (targetCol < 0 || totalCols <= 0) return false;
-  if (totalCols <= visibleCols) return true;
-  for (let i = 0; i < visibleCols; i++) {
-    const gi = leftIndex + i;
-    const realCol = gi < totalCols ? gi : gi - totalCols;
-    if (realCol === targetCol) return true;
-  }
-  return false;
-}
-
-/**
- * carouselIndex that puts targetCol in the visible window.
- * Prefer rightmost slot so the live call reads as latest (history to the left).
- * Clamped to the non-wrap range [0, totalCols - visibleCols].
- */
-function carouselIndexToShowColumn(
-  targetCol: number,
-  totalCols: number,
-  visibleCols: number,
-  preferRightmost = true,
-): number {
-  if (totalCols <= visibleCols) return 0;
-  const maxLeft = Math.max(0, totalCols - visibleCols);
-  const col = Math.max(0, Math.min(targetCol, totalCols - 1));
-  let left = preferRightmost ? col - (visibleCols - 1) : col;
-  if (left < 0) left = 0;
-  if (left > maxLeft) left = maxLeft;
-  return left;
-}
-
 function poolHasTracks(ids: string[] | null | undefined): ids is string[] {
   return Array.isArray(ids) && ids.length > 0;
 }
@@ -1627,8 +1579,6 @@ const PublicDisplay: React.FC = () => {
   const carouselTickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Populated column bands the last time the carousel timer ran (detect 1×75 scroll-mode entry). */
   const carouselColumnCountRef = useRef(0);
-  /** Soft-ensure only once per live song id — idle may tour history afterward without snap-back. */
-  const carouselEnsuredSongIdRef = useRef<string | null>(null);
   const [animating, setAnimating] = useState<boolean>(true); // kept for compatibility but no longer toggled
   const carouselViewportRef = useRef<HTMLDivElement | null>(null);
   const [viewportWidth, setViewportWidth] = useState<number>(0);
@@ -1874,7 +1824,6 @@ const PublicDisplay: React.FC = () => {
   // (does not clear played order, reveals, or pool data).
   useEffect(() => {
     setCarouselIndex(0);
-    carouselEnsuredSongIdRef.current = null;
     setPhasePx(0);
     setFreezeAll(false);
   }, [callListMode]);
@@ -2120,7 +2069,6 @@ const PublicDisplay: React.FC = () => {
       setCarouselIndex(0);
       carouselIndexRef.current = 0;
       carouselColumnCountRef.current = 0;
-      carouselEnsuredSongIdRef.current = null;
       setPhasePx(0);
       setFreezeAll(false);
       setRevealLayoutNonce((n) => n + 1);
@@ -3844,60 +3792,17 @@ const PublicDisplay: React.FC = () => {
         carouselTickTimerRef.current = null;
       }
     };
+    // Do not depend on playedOrderRevision / totalPlayedCount — short snippets (e.g. 5s)
+    // would restart the dwell every call and cancel scrolling. scheduleTick reads playedOrderRef live.
   }, [
     oneBy75Ids,
     visibleCols,
     columnCallListLayout,
-    totalPlayedCount,
-    playedOrderRevision,
     remeasureCarouselViewport,
   ]);
 
   const carouselScrollEnabled =
     !columnCallListLayout && countPlayOrderColumns(playedOrderForDisplay) > visibleCols;
-
-  /**
-   * Soft-ensure once per live song: if that call’s column is off-screen at song start,
-   * slide forward so it’s visible (prefer rightmost). Then idle scroll/wrap tours history
-   * again — do not re-snap mid-snippet (that caused reverse jumps) or freeze on the live slot.
-   */
-  useLayoutEffect(() => {
-    if (columnCallListLayout) return;
-    const songId = gameState.currentSong?.id;
-    if (!songId) return;
-
-    const order = playedOrderRef.current;
-    const total = countPlayOrderColumns(order);
-    if (total <= visibleCols) return;
-
-    const targetCol = playOrderColumnIndexForSong(order, songId);
-    if (targetCol < 0) return;
-
-    // Wait until this id is in the call list; only ensure once per song.
-    if (carouselEnsuredSongIdRef.current === songId) return;
-
-    const leftIdx = carouselIndexRef.current;
-    if (isPlayOrderColumnVisible(targetCol, leftIdx, visibleCols, total)) {
-      carouselEnsuredSongIdRef.current = songId;
-      return;
-    }
-
-    const next = carouselIndexToShowColumn(targetCol, total, visibleCols, true);
-    carouselEnsuredSongIdRef.current = songId;
-    if (next === leftIdx) return;
-    // Forward-only: never jump backward into early columns (wrap already does that smoothly).
-    if (next < leftIdx) return;
-
-    setCarouselIndex(next);
-    carouselIndexRef.current = next;
-    // Existing carouselIndex → syncRevealStateToServer effect keeps multi-display aligned.
-  }, [
-    gameState.currentSong?.id,
-    playedOrderRevision,
-    totalPlayedCount,
-    columnCallListLayout,
-    visibleCols,
-  ]);
 
   /** After song 26+ (6th column), static grid swaps to scroll track — measure width once on entry. */
   useLayoutEffect(() => {
