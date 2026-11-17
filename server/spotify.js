@@ -1897,48 +1897,31 @@ class SpotifyService {
         }
 
         // Mid-track Early offset sometimes fails to bind — retry at 0 then seek (no URI).
-        // Caller allowBindAtZero=true: always allowed.
-        // Caller allowBindAtZero=false (Start Game / soft-recover): still allow when Now Playing
-        // is truly empty — priming a local track does not survive a failed context@Early play,
-        // and skipping bind@0 leaves the host soft-failing while Desktop shows blank metadata.
-        // Never bind@0 when something is already playing/bound (would restart audible Early).
-        if (positionMs > 0) {
+        // Only when item never bound; skip when caller forbids (soft-recover path).
+        if (positionMs > 0 && allowBindAtZero) {
           const preBind = await readSnap();
           if (await settleBoundTrack(preBind, 'pre-bind-0')) return;
-          const alreadyAudible =
-            preBind.playing ||
-            !!preBind.itemId ||
-            isAudibleNearEarlyStart(preBind.state, positionMs, { trackId });
-          const allowEmptyColdBind = !allowBindAtZero && !alreadyAudible;
-          if (allowBindAtZero || allowEmptyColdBind) {
-            routineSpotifyLog(
-              allowBindAtZero
-                ? '🔧 context@Early not confirmed — bind@0 then seek (last resort)'
-                : '🔧 context@Early not confirmed + empty Now Playing — bind@0 then seek (cold escape)',
-            );
-            await playViaContext(0);
-            if (await confirmPlaying('after-context-bind-0', 6)) {
-              try {
-                await this.seekToPosition(positionMs, deviceId);
-              } catch (_) {
-                /* keep playing from 0 rather than wipe session */
-              }
-              return;
+          routineSpotifyLog('🔧 context@Early not confirmed — bind@0 then seek (last resort)');
+          await playViaContext(0);
+          if (await confirmPlaying('after-context-bind-0', 6)) {
+            try {
+              await this.seekToPosition(positionMs, deviceId);
+            } catch (_) {
+              /* keep playing from 0 rather than wipe session */
             }
-            const postBind = await readSnap();
-            if (await settleBoundTrack(postBind, 'after-bind-0-late')) {
-              try {
-                await this.seekToPosition(positionMs, deviceId);
-              } catch (_) {
-                /* ignore */
-              }
-              return;
-            }
-          } else {
-            routineSpotifyLog(
-              '⏭️ context@Early unconfirmed — skipping bind@0 (session not empty; allowBindAtZero=false)',
-            );
+            return;
           }
+          const postBind = await readSnap();
+          if (await settleBoundTrack(postBind, 'after-bind-0-late')) {
+            try {
+              await this.seekToPosition(positionMs, deviceId);
+            } catch (_) {
+              /* ignore */
+            }
+            return;
+          }
+        } else if (positionMs > 0 && !allowBindAtZero) {
+          routineSpotifyLog('⏭️ context@Early unconfirmed — skipping bind@0 (allowBindAtZero=false)');
         }
 
         const errCtx = new Error(
