@@ -659,9 +659,10 @@ const PlayerView: React.FC = () => {
         isPlayerFreeSpaceSquare(square)
           ? {
               ...square,
-              // Keep whatever marked state the player toggled — FREE still counts for bingo.
+              // FREE is always daubed and never player-toggleable.
               isFreeSpace: true,
               songId: '__FREE_SPACE__',
+              marked: true,
             }
           : square,
       ),
@@ -680,8 +681,7 @@ const PlayerView: React.FC = () => {
       const marks: Record<string, boolean> = {};
       normalizedCard.squares.forEach((square) => {
         if (isPlayerFreeSpaceSquare(square)) {
-          // Persist FREE daub state (including false) so unmark/remount survives refresh.
-          marks[square.position] = !!square.marked;
+          marks[square.position] = true;
         } else if (square.marked) {
           marks[square.position] = true;
         }
@@ -697,17 +697,16 @@ const PlayerView: React.FC = () => {
     if (!normalizedCard) return normalizedCard;
     const storedMarks = getStoredMarks(normalizedCard);
     if (Object.keys(storedMarks).length === 0) {
-      // No local history — keep server/deal defaults (FREE starts marked).
+      // No local history — FREE already forced marked in normalize.
       return normalizedCard;
     }
 
     const updatedSquares = normalizedCard.squares.map((square) => {
-      if (Object.prototype.hasOwnProperty.call(storedMarks, square.position)) {
-        return { ...square, marked: storedMarks[square.position] === true };
-      }
-      // FREE defaults marked when never toggled in this browser.
       if (isPlayerFreeSpaceSquare(square)) {
         return { ...square, marked: true };
+      }
+      if (Object.prototype.hasOwnProperty.call(storedMarks, square.position)) {
+        return { ...square, marked: storedMarks[square.position] === true };
       }
       return { ...square, marked: square.marked };
     });
@@ -2037,9 +2036,10 @@ const PlayerView: React.FC = () => {
 
     const square = bingoCard.squares.find((s) => s.position === position);
     if (!square) return;
+    // FREE is always marked and not player-toggleable.
+    if (isPlayerFreeSpaceSquare(square)) return;
 
-    const free = isPlayerFreeSpaceSquare(square);
-    const songId = free ? '__FREE_SPACE__' : square.songId;
+    const songId = square.songId;
     const nextMarked = !square.marked;
     const activeKey = cardKey(bingoCard);
 
@@ -2047,17 +2047,13 @@ const PlayerView: React.FC = () => {
     // Same songId on other cards this round gets the same marked state (multi-card convenience).
     setBingoCards((prev) => {
       if (!prev.length) return prev;
-      const next = prev.map((card) => {
-        const isActive = cardKey(card) === activeKey;
+      return prev.map((card) => {
         let changed = false;
         const updatedSquares = card.squares.map((sq) => {
-          if (free) {
-            // FREE is per-card only — never mirror across cards.
-            if (!isActive || sq.position !== position) return sq;
-            changed = true;
-            return { ...sq, marked: nextMarked };
+          if (isPlayerFreeSpaceSquare(sq)) {
+            if (!sq.marked) changed = true;
+            return { ...sq, marked: true };
           }
-          if (isPlayerFreeSpaceSquare(sq)) return sq;
           if (!songId || sq.songId !== songId) return sq;
           if (!!sq.marked === nextMarked) return sq;
           changed = true;
@@ -2068,18 +2064,9 @@ const PlayerView: React.FC = () => {
         persistMarks(updatedCard);
         return updatedCard;
       });
-      return next;
     });
 
-    if (free) {
-      enqueueMarkSquareTelemetry({
-        roomId,
-        songId,
-        position,
-        cardId: bingoCard.cardId || bingoCard.id,
-        marked: nextMarked,
-      });
-    } else if (songId) {
+    if (songId) {
       // Telemetry for every mirrored square (active + other cards).
       for (const card of bingoCards) {
         for (const sq of card.squares) {
@@ -2094,8 +2081,6 @@ const PlayerView: React.FC = () => {
           });
         }
       }
-      // Active tap position may already be covered above; if the active card list was stale
-      // for this song at the tapped cell only, still send the tap.
       enqueueMarkSquareTelemetry({
         roomId,
         songId,
@@ -2380,7 +2365,6 @@ const PlayerView: React.FC = () => {
     const pattern = gameState.pattern;
     
     // Helper function to check if a square is marked (visual check only).
-    // FREE always counts even if the player toggled the daub off for fun.
     const isSquareMarked = (square: BingoSquare): boolean => {
       if (!square) return false;
       if (isPlayerFreeSpaceSquare(square)) return true;
