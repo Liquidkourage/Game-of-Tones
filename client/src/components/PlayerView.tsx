@@ -2041,7 +2041,6 @@ const PlayerView: React.FC = () => {
 
     const songId = square.songId;
     const nextMarked = !square.marked;
-    const activeKey = cardKey(bingoCard);
 
     // Phone owns marks (Option B). Local toggle + persist first; mark-square sends absolute marked for host.
     // Same songId on other cards this round gets the same marked state (multi-card convenience).
