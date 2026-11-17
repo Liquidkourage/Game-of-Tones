@@ -1627,6 +1627,8 @@ const PublicDisplay: React.FC = () => {
   const carouselTickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Populated column bands the last time the carousel timer ran (detect 1×75 scroll-mode entry). */
   const carouselColumnCountRef = useRef(0);
+  /** Live call id for carousel idle clamp (keep current column on-screen; avoid wrap reverse-jumps). */
+  const carouselCurrentSongIdRef = useRef<string | null>(null);
   const [animating, setAnimating] = useState<boolean>(true); // kept for compatibility but no longer toggled
   const carouselViewportRef = useRef<HTMLDivElement | null>(null);
   const [viewportWidth, setViewportWidth] = useState<number>(0);
@@ -3755,6 +3757,10 @@ const PublicDisplay: React.FC = () => {
   }, [carouselIndex]);
 
   useEffect(() => {
+    carouselCurrentSongIdRef.current = gameState.currentSong?.id ?? null;
+  }, [gameState.currentSong?.id]);
+
+  useEffect(() => {
     if (columnCallListLayout || applyingServerRevealRef.current) return;
     syncRevealStateToServer();
   }, [carouselIndex, columnCallListLayout, roomId]);
@@ -3825,6 +3831,17 @@ const PublicDisplay: React.FC = () => {
         if (cancelled) return;
         setCarouselIndex((prev) => {
           const next = prev + 1;
+          // While a live call exists, do not scroll past the soft-ensure window (usually
+          // live column on the right). Entering the wrap tail snaps back to early calls —
+          // that reads as a reverse jump around song 26+ (e.g. 28→29).
+          const liveId = carouselCurrentSongIdRef.current;
+          if (liveId && total > visibleCols) {
+            const targetCol = playOrderColumnIndexForSong(playedOrderRef.current, liveId);
+            if (targetCol >= 0) {
+              const holdLeft = carouselIndexToShowColumn(targetCol, total, visibleCols, true);
+              if (next > holdLeft) return prev;
+            }
+          }
           // Step into duplicate tail once (same view as index 0); layout effect snaps to 0.
           return next > total ? prev : next;
         });
@@ -3854,9 +3871,9 @@ const PublicDisplay: React.FC = () => {
 
   /**
    * Soft-ensure: when a new snippet starts, if its play-order column is off-screen,
-   * slide so that column is visible (prefer rightmost). Idle dwell/loop keeps running.
-   * No-op when already visible or in 5×15 / static (<26) mode.
-   * Layout phase avoids a one-frame flash of the wrong window (e.g. song 26).
+   * slide forward so that column is visible (prefer rightmost). Never jump backward
+   * (that fights the idle loop / wrap and looks like a reverse scroll).
+   * Idle dwell stays parked at that window until the next call (see timer clamp).
    */
   useLayoutEffect(() => {
     if (columnCallListLayout) return;
@@ -3875,6 +3892,8 @@ const PublicDisplay: React.FC = () => {
 
     const next = carouselIndexToShowColumn(targetCol, total, visibleCols, true);
     if (next === leftIdx) return;
+    // Forward-only: a lower index is a reverse jump (e.g. wrap seam → early columns).
+    if (next < leftIdx) return;
 
     setCarouselIndex(next);
     carouselIndexRef.current = next;
