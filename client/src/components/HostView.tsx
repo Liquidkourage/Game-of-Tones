@@ -6971,14 +6971,24 @@ const HostView: React.FC = () => {
       return false;
     }
 
+    // Dashboard used to pass onClick={startGame}; a React click event is truthy and was
+    // treated as roundOverride → playlist count 0 → silent early exit (alert) with no start-game emit.
+    const startOpts =
+      opts &&
+      typeof opts === 'object' &&
+      !('nativeEvent' in opts) &&
+      !('preventDefault' in opts)
+        ? opts
+        : undefined;
+
     const roundForStart =
-      opts?.roundOverride ??
+      startOpts?.roundOverride ??
       (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length ? eventRounds[currentRoundIndex] : null);
     // Always prefer round playlistIds order for Start Game — mix UI personal/catalog split
     // otherwise scrambles 5×15 projector columns vs host chips.
     const playlistsForStart = orderPlaylistsByRoundIds(
-      opts?.playlistsOverride && opts.playlistsOverride.length > 0
-        ? opts.playlistsOverride
+      startOpts?.playlistsOverride && startOpts.playlistsOverride.length > 0
+        ? startOpts.playlistsOverride
         : mixPlaylistSelection,
       roundForStart?.playlistIds,
     );
@@ -15575,7 +15585,7 @@ const HostView: React.FC = () => {
                     onVolumeChange={handleVolumeChange}
                     setIsMuted={setIsMuted}
                     setPlaybackVolume={(v) => setPlaybackState((prev) => ({ ...prev, volume: v }))}
-                    onStartGame={startGame}
+                    onStartGame={() => void startGame()}
                     onFinalizeMix={() => void finalizeMix()}
                     onOpenLibrary={openPlaylistLibrary}
                     onOpenPool={() => setShowBingoPoolModal(true)}

@@ -90,7 +90,9 @@ const HostQuickBar: React.FC<HostQuickBarProps> = ({
   canBumpOrMark = false,
 }) => {
   const isLive = gameState === 'playing';
-  const isPrep = !isLive && gameState !== 'ended';
+  // Include ended: after a soft-fail / End round, Start game on the bar must stay available
+  // (dashboard also shows it — both must work without a full event reset).
+  const isPrep = !isLive;
   const showDesk = gameLayout === 'show_desk' && isLive;
   const transportExtras = gameLayout === 'transport' && isLive;
   const poolFeedbackInMore = showDesk;
