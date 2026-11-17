@@ -3792,12 +3792,12 @@ const PublicDisplay: React.FC = () => {
         carouselTickTimerRef.current = null;
       }
     };
-    // Do not depend on playedOrderRevision / totalPlayedCount — short snippets (e.g. 5s)
-    // would restart the dwell every call and cancel scrolling. scheduleTick reads playedOrderRef live.
   }, [
     oneBy75Ids,
     visibleCols,
     columnCallListLayout,
+    totalPlayedCount,
+    playedOrderRevision,
     remeasureCarouselViewport,
   ]);
 
