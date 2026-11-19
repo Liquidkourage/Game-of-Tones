@@ -38,6 +38,45 @@ type PlatformSpotifyApp = {
   spotifyDashboardUrl?: string;
 };
 
+type OrgsHostsHost = {
+  id: number;
+  email: string;
+  displayName: string | null;
+  organizationId: number | null;
+  createdAt: string | null;
+  hasSpotifyTokens: boolean;
+  spotifyTokensUpdatedAt: string | null;
+  spotifyTokenExpiresAt: string | null;
+};
+
+type OrgsHostsOrg = {
+  id: number;
+  name: string;
+  spotifyClientId: string | null;
+  spotifyClientIdPrefix: string | null;
+  hasSpotifySecret: boolean;
+  usesTenantSpotifyApp: boolean;
+  ownerUserId: number | null;
+  pendingOwnerEmail: string | null;
+  createdAt: string | null;
+  billingStatus: string;
+  subscriptionStatus: string;
+  memberCount: number;
+  hosts: OrgsHostsHost[];
+  pendingInvites: { email: string; createdAt: string | null }[];
+};
+
+type OrgsHostsOverview = {
+  organizations: OrgsHostsOrg[];
+  unassignedHosts: OrgsHostsHost[];
+  totals: {
+    organizations: number;
+    hosts: number;
+    hostsWithSpotifyTokens: number;
+    unassignedHosts: number;
+  };
+};
+
 type VenueForm = {
   eventTitle: string;
   sponsorLine: string;
@@ -106,6 +145,11 @@ const AdminPage: React.FC = () => {
   const [editOrgSecret, setEditOrgSecret] = useState('');
   const [editOrgError, setEditOrgError] = useState<string | null>(null);
   const [editOrgSavedAt, setEditOrgSavedAt] = useState<number | null>(null);
+  const [orgsHosts, setOrgsHosts] = useState<OrgsHostsOverview | null>(null);
+  const [orgsHostsError, setOrgsHostsError] = useState<string | null>(null);
+  const [orgsHostsBusy, setOrgsHostsBusy] = useState(false);
+  const [expandedOrgId, setExpandedOrgId] = useState<number | null>(null);
+  const [hostSearch, setHostSearch] = useState('');
   const [assignUserId, setAssignUserId] = useState('');
   const [assignOrgId, setAssignOrgId] = useState('');
   const [spotifySetup, setSpotifySetup] = useState<SpotifyTenantSetup | null>(null);
@@ -250,6 +294,42 @@ const AdminPage: React.FC = () => {
   useEffect(() => {
     if (me?.admin) void refreshOrgs();
   }, [me?.admin, refreshOrgs]);
+
+  const refreshOrgsHosts = useCallback(async () => {
+    setOrgsHostsBusy(true);
+    setOrgsHostsError(null);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/admin/orgs-hosts`);
+      const data = (await res.json().catch(() => ({}))) as OrgsHostsOverview & {
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        setOrgsHostsError(data.message || data.error || `HTTP ${res.status}`);
+        setOrgsHosts(null);
+        return;
+      }
+      setOrgsHosts({
+        organizations: Array.isArray(data.organizations) ? data.organizations : [],
+        unassignedHosts: Array.isArray(data.unassignedHosts) ? data.unassignedHosts : [],
+        totals: data.totals || {
+          organizations: 0,
+          hosts: 0,
+          hostsWithSpotifyTokens: 0,
+          unassignedHosts: 0,
+        },
+      });
+    } catch (e) {
+      setOrgsHostsError(String(e));
+      setOrgsHosts(null);
+    } finally {
+      setOrgsHostsBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (me?.admin) void refreshOrgsHosts();
+  }, [me?.admin, refreshOrgsHosts]);
 
   useEffect(() => {
     if (me?.admin) void refreshPromoCodes();
@@ -600,6 +680,7 @@ const AdminPage: React.FC = () => {
       }
       setEditOrgSavedAt(Date.now());
       void refreshOrgs();
+      void refreshOrgsHosts();
     } finally {
       setBusy(false);
     }
@@ -633,6 +714,7 @@ const AdminPage: React.FC = () => {
       setEditOrgSecret('');
       setEditOrgSavedAt(Date.now());
       void refreshOrgs();
+      void refreshOrgsHosts();
     } finally {
       setBusy(false);
     }
@@ -913,6 +995,190 @@ const AdminPage: React.FC = () => {
             host.
           </p>
         )}
+
+        <section className="admin-page__table-wrap" style={{ marginBottom: '2rem' }}>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.75rem',
+              marginBottom: '0.75rem',
+            }}
+          >
+            <h2 className="admin-page__h2" style={{ margin: 0 }}>
+              Examine orgs &amp; hosts
+            </h2>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={orgsHostsBusy}
+              onClick={() => void refreshOrgsHosts()}
+            >
+              {orgsHostsBusy ? (
+                <>
+                  <Loader2 size={16} className="admin-page__spinner" aria-hidden /> Refreshing…
+                </>
+              ) : (
+                'Refresh'
+              )}
+            </button>
+          </div>
+          <p className="admin-page__muted" style={{ marginBottom: '0.75rem' }}>
+            Who belongs to which org, whether they have a tenant Spotify app, and whether Spotify tokens are on file (no
+            secrets shown). Useful when Connect works but API calls fail.
+          </p>
+          {orgsHostsError && <p className="admin-page__error">{orgsHostsError}</p>}
+          {orgsHosts && (
+            <>
+              <p className="admin-page__muted" style={{ marginBottom: '0.75rem' }}>
+                {orgsHosts.totals.organizations} orgs · {orgsHosts.totals.hosts} hosts ·{' '}
+                {orgsHosts.totals.hostsWithSpotifyTokens} with Spotify tokens · {orgsHosts.totals.unassignedHosts}{' '}
+                unassigned
+              </p>
+              <label className="admin-page__label" style={{ marginBottom: '0.75rem' }}>
+                Filter hosts (email / name / user id)
+                <input
+                  className="admin-page__input"
+                  type="search"
+                  value={hostSearch}
+                  onChange={(ev) => setHostSearch(ev.target.value)}
+                  placeholder="e.g. dbvision or 60"
+                  autoComplete="off"
+                />
+              </label>
+              <ul className="admin-page__list">
+                {orgsHosts.organizations.map((o) => {
+                  const q = hostSearch.trim().toLowerCase();
+                  const hosts = !q
+                    ? o.hosts
+                    : o.hosts.filter(
+                        (h) =>
+                          String(h.id).includes(q) ||
+                          (h.email || '').toLowerCase().includes(q) ||
+                          (h.displayName || '').toLowerCase().includes(q),
+                      );
+                  if (q && hosts.length === 0 && !(o.name || '').toLowerCase().includes(q) && String(o.id) !== q) {
+                    return null;
+                  }
+                  const open = expandedOrgId === o.id || (!!q && hosts.length > 0);
+                  return (
+                    <li key={o.id} className="admin-page__row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                      <button
+                        type="button"
+                        className="admin-page__row-email"
+                        style={{
+                          appearance: 'none',
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'inherit',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          padding: 0,
+                          font: 'inherit',
+                          width: '100%',
+                        }}
+                        onClick={() => setExpandedOrgId((cur) => (cur === o.id ? null : o.id))}
+                      >
+                        <strong>#{o.id}</strong> {o.name} · {o.memberCount} host
+                        {o.memberCount === 1 ? '' : 's'} ·{' '}
+                        {o.usesTenantSpotifyApp
+                          ? `tenant app ${o.spotifyClientIdPrefix || '?'}…`
+                          : 'platform Spotify app'}
+                        {o.hasSpotifySecret ? '' : o.usesTenantSpotifyApp ? ' (no secret!)' : ''}
+                      </button>
+                      {open ? (
+                        <div style={{ marginTop: '0.6rem', paddingLeft: '0.25rem' }}>
+                          <p className="admin-page__muted" style={{ margin: '0 0 0.4rem', fontSize: '0.8rem' }}>
+                            Owner user {o.ownerUserId ?? '—'}
+                            {o.pendingOwnerEmail ? ` · pending owner ${o.pendingOwnerEmail}` : ''} · billing{' '}
+                            {o.billingStatus}/{o.subscriptionStatus}
+                          </p>
+                          {hosts.length === 0 ? (
+                            <p className="admin-page__muted" style={{ margin: 0 }}>
+                              No hosts in this org{q ? ' match the filter' : ''}.
+                            </p>
+                          ) : (
+                            <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+                              {hosts.map((h) => (
+                                <li key={h.id} style={{ marginBottom: '0.35rem' }}>
+                                  <strong>#{h.id}</strong> {h.displayName || '—'} · {h.email}
+                                  {' · '}
+                                  {h.hasSpotifyTokens ? (
+                                    <span title={h.spotifyTokensUpdatedAt || undefined}>
+                                      Spotify tokens yes
+                                      {h.spotifyTokensUpdatedAt
+                                        ? ` (updated ${new Date(h.spotifyTokensUpdatedAt).toLocaleString()})`
+                                        : ''}
+                                    </span>
+                                  ) : (
+                                    <span>Spotify tokens no</span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    style={{ marginLeft: '0.5rem', padding: '2px 8px', fontSize: '0.75rem' }}
+                                    onClick={() => {
+                                      setEditOrgId(String(o.id));
+                                      setEditOrgClientId(o.spotifyClientId || '');
+                                      setEditOrgSecret('');
+                                      setAssignUserId(String(h.id));
+                                      setAssignOrgId(String(o.id));
+                                    }}
+                                  >
+                                    Use in editors
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          {o.pendingInvites.length > 0 ? (
+                            <p className="admin-page__muted" style={{ margin: '0.5rem 0 0', fontSize: '0.8rem' }}>
+                              Pending invites: {o.pendingInvites.map((i) => i.email).join(', ')}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+              {(() => {
+                const q = hostSearch.trim().toLowerCase();
+                const unassigned = !q
+                  ? orgsHosts.unassignedHosts
+                  : orgsHosts.unassignedHosts.filter(
+                      (h) =>
+                        String(h.id).includes(q) ||
+                        (h.email || '').toLowerCase().includes(q) ||
+                        (h.displayName || '').toLowerCase().includes(q),
+                    );
+                if (unassigned.length === 0) return null;
+                return (
+                  <div style={{ marginTop: '1rem' }}>
+                    <h3 className="admin-page__h2" style={{ fontSize: '1.05rem' }}>
+                      Unassigned hosts (platform app)
+                    </h3>
+                    <ul className="admin-page__list">
+                      {unassigned.map((h) => (
+                        <li key={h.id} className="admin-page__row">
+                          <span className="admin-page__row-email">
+                            <strong>#{h.id}</strong> {h.displayName || '—'} · {h.email} ·{' '}
+                            {h.hasSpotifyTokens ? 'Spotify tokens yes' : 'Spotify tokens no'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })()}
+            </>
+          )}
+          {!orgsHosts && !orgsHostsError && (
+            <p className="admin-page__muted">Loading orgs &amp; hosts…</p>
+          )}
+        </section>
 
         <section className="admin-page__table-wrap" style={{ marginBottom: '2rem' }}>
           <h2 className="admin-page__h2">Set up host</h2>

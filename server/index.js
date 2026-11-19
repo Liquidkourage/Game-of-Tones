@@ -15293,6 +15293,19 @@ app.get('/api/admin/organizations', async (req, res) => {
   }
 });
 
+/** Admin: examine orgs + hosts (Spotify link status, no secrets). */
+app.get('/api/admin/orgs-hosts', async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const overview = await organizationsStore.getAdminOrgsHostsOverview(db);
+    res.json({ ok: true, ...overview });
+  } catch (e) {
+    console.error('GET /api/admin/orgs-hosts:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
 app.post('/api/admin/organizations', async (req, res) => {
   try {
     if (!(await requireAdmin(req, res))) return;

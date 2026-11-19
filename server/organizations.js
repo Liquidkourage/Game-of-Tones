@@ -210,6 +210,117 @@ async function listOrganizations(db) {
   return r.rows;
 }
 
+/**
+ * Admin overview: orgs + hosts with Spotify link status (no secrets / no access tokens).
+ */
+async function getAdminOrgsHostsOverview(db) {
+  if (!db) throw new Error('DATABASE_URL required');
+  await ensureOrganizationsTable(db);
+
+  const orgsR = await db.query(`
+    SELECT o.id,
+           o.name,
+           o.spotify_client_id,
+           left(o.spotify_client_id, 8) AS spotify_client_id_prefix,
+           (o.spotify_client_secret_encrypted IS NOT NULL
+             AND length(o.spotify_client_secret_encrypted) > 0) AS has_spotify_secret,
+           o.owner_user_id,
+           o.pending_owner_email,
+           o.created_at,
+           o.billing_status,
+           o.subscription_status,
+           (SELECT COUNT(*)::int FROM users u WHERE u.organization_id = o.id) AS member_count
+    FROM organizations o
+    ORDER BY o.id ASC
+  `);
+
+  const hostsR = await db.query(`
+    SELECT u.id,
+           u.email,
+           u.display_name,
+           u.organization_id,
+           u.created_at,
+           t.updated_at AS spotify_tokens_updated_at,
+           t.expires_at AS spotify_token_expires_at,
+           (t.refresh_token IS NOT NULL AND length(t.refresh_token) > 0) AS has_spotify_tokens
+    FROM users u
+    LEFT JOIN spotify_tokens t ON t.organization_id = ('user_' || u.id::text)
+    ORDER BY u.organization_id NULLS LAST, u.id ASC
+  `);
+
+  const invitesR = await db.query(`
+    SELECT organization_id, email, created_at
+    FROM org_host_invites
+    ORDER BY organization_id ASC, email ASC
+  `).catch(() => ({ rows: [] }));
+
+  const hostsByOrg = new Map();
+  const unassignedHosts = [];
+  for (const h of hostsR.rows) {
+    const row = {
+      id: h.id,
+      email: h.email,
+      displayName: h.display_name || null,
+      organizationId: h.organization_id != null ? Number(h.organization_id) : null,
+      createdAt: h.created_at || null,
+      hasSpotifyTokens: h.has_spotify_tokens === true,
+      spotifyTokensUpdatedAt: h.spotify_tokens_updated_at
+        ? new Date(h.spotify_tokens_updated_at).toISOString()
+        : null,
+      spotifyTokenExpiresAt: h.spotify_token_expires_at
+        ? new Date(h.spotify_token_expires_at).toISOString()
+        : null,
+    };
+    if (row.organizationId == null) {
+      unassignedHosts.push(row);
+    } else {
+      if (!hostsByOrg.has(row.organizationId)) hostsByOrg.set(row.organizationId, []);
+      hostsByOrg.get(row.organizationId).push(row);
+    }
+  }
+
+  const invitesByOrg = new Map();
+  for (const inv of invitesR.rows) {
+    const oid = Number(inv.organization_id);
+    if (!invitesByOrg.has(oid)) invitesByOrg.set(oid, []);
+    invitesByOrg.get(oid).push({
+      email: inv.email,
+      createdAt: inv.created_at ? new Date(inv.created_at).toISOString() : null,
+    });
+  }
+
+  const organizations = orgsR.rows.map((o) => {
+    const id = Number(o.id);
+    return {
+      id,
+      name: o.name,
+      spotifyClientId: o.spotify_client_id || null,
+      spotifyClientIdPrefix: o.spotify_client_id_prefix || null,
+      hasSpotifySecret: o.has_spotify_secret === true,
+      usesTenantSpotifyApp: !!(o.spotify_client_id && String(o.spotify_client_id).trim()),
+      ownerUserId: o.owner_user_id != null ? Number(o.owner_user_id) : null,
+      pendingOwnerEmail: o.pending_owner_email || null,
+      createdAt: o.created_at ? new Date(o.created_at).toISOString() : null,
+      billingStatus: o.billing_status || 'none',
+      subscriptionStatus: o.subscription_status || 'none',
+      memberCount: o.member_count || 0,
+      hosts: hostsByOrg.get(id) || [],
+      pendingInvites: invitesByOrg.get(id) || [],
+    };
+  });
+
+  return {
+    organizations,
+    unassignedHosts,
+    totals: {
+      organizations: organizations.length,
+      hosts: hostsR.rows.length,
+      hostsWithSpotifyTokens: hostsR.rows.filter((h) => h.has_spotify_tokens === true).length,
+      unassignedHosts: unassignedHosts.length,
+    },
+  };
+}
+
 async function createOrganization(db, { name, spotifyClientId, spotifyClientSecret }) {
   if (!db) throw new Error('DATABASE_URL required');
   await ensureOrganizationsTable(db);
@@ -904,6 +1015,7 @@ module.exports = {
   getCredentialOptionsForUser,
   primeTenantSpotifyCredentials,
   listOrganizations,
+  getAdminOrgsHostsOverview,
   createOrganization,
   updateOrganizationSpotifyCredentials,
   createProvisionedOrganization,
