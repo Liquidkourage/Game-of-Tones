@@ -1091,19 +1091,13 @@ const ONE_BY_75_HISTORY_VISIBLE_COLS = 4;
 const ONE_BY_75_FREEZE_AFTER_CALLS = 25;
 
 /**
- * Frontier band index for 1×75 freeze column.
- * While a band is filling: floor((n-1)/5). When a band just completed and more pool remains:
- * jump to the next empty band (n/5). At end of pool: stay on the last band.
+ * Frontier band index for 1×75 freeze column = band of the latest call.
+ * A full band (e.g. 26–30) stays frozen through that last song; only the next call
+ * (31) advances frontier so the finished band joins history.
  */
-function oneBy75FrontierBandIndex(playedCount: number, poolTotal: number): number {
+function oneBy75FrontierBandIndex(playedCount: number, _poolTotal?: number): number {
   const n = Math.max(0, Math.floor(playedCount));
   if (n <= 0) return 0;
-  const pool = Math.max(n, Math.floor(poolTotal) || n);
-  const maxBand = Math.max(0, Math.ceil(pool / ONE_BY_75_BAND_SIZE) - 1);
-  if (n % ONE_BY_75_BAND_SIZE === 0) {
-    const next = n / ONE_BY_75_BAND_SIZE;
-    return next <= maxBand ? next : maxBand;
-  }
   return Math.floor((n - 1) / ONE_BY_75_BAND_SIZE);
 }
 
@@ -1607,8 +1601,8 @@ const PublicDisplay: React.FC = () => {
   const carouselTickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Populated column bands the last time the carousel timer ran (detect 1×75 scroll-mode entry). */
   const carouselColumnCountRef = useRef(0);
-  /** After call 26, prime history so 21–25 sit in column 4 (once per freeze entry). */
-  const freezeHistoryPrimedRef = useRef(false);
+  /** Last completed-band count we aligned history to (newest completed in column 4). */
+  const freezeHistoryCompletedRef = useRef(0);
   const [animating, setAnimating] = useState<boolean>(true); // kept for compatibility but no longer toggled
   const carouselViewportRef = useRef<HTMLDivElement | null>(null);
   const [viewportWidth, setViewportWidth] = useState<number>(0);
@@ -1855,7 +1849,7 @@ const PublicDisplay: React.FC = () => {
   useEffect(() => {
     setCarouselIndex(0);
     carouselIndexRef.current = 0;
-    freezeHistoryPrimedRef.current = false;
+    freezeHistoryCompletedRef.current = 0;
     setPhasePx(0);
     setFreezeAll(false);
   }, [callListMode]);
@@ -2113,7 +2107,7 @@ const PublicDisplay: React.FC = () => {
       setCarouselIndex(0);
       carouselIndexRef.current = 0;
       carouselColumnCountRef.current = 0;
-      freezeHistoryPrimedRef.current = false;
+      freezeHistoryCompletedRef.current = 0;
       setPhasePx(0);
       setFreezeAll(false);
       setRevealLayoutNonce((n) => n + 1);
@@ -3887,19 +3881,18 @@ const PublicDisplay: React.FC = () => {
     return countPlayOrderColumns(playedOrderForDisplay) > visibleCols;
   })();
 
-  // Song 26+: start history scrolled so the newest completed band (21–25) is in column 4,
-  // not still showing 1–5 on the left. Idle dwell continues from there — do not re-prime each call.
+  // When a finished band joins history (26 starts → 21–25 in col 4; 31 starts → 26–30 in col 4),
+  // align history once per completed-band growth. Idle dwell continues between bumps.
   useEffect(() => {
     if (columnCallListLayout) {
-      freezeHistoryPrimedRef.current = false;
+      freezeHistoryCompletedRef.current = 0;
       return;
     }
     const playedCount = playedOrderForDisplay.length;
     if (!oneBy75FreezeModeActive(playedCount)) {
-      freezeHistoryPrimedRef.current = false;
+      freezeHistoryCompletedRef.current = 0;
       return;
     }
-    if (freezeHistoryPrimedRef.current) return;
     const poolLen = Math.max(
       playedCount,
       (oneBy75Ids || oneBy75IdsRef.current || []).length,
@@ -3908,8 +3901,9 @@ const PublicDisplay: React.FC = () => {
     const frontier = oneBy75FrontierBandIndex(playedCount, poolLen);
     const completedTotal = Math.min(frontier, countPlayOrderColumns(playedOrderForDisplay));
     if (completedTotal <= ONE_BY_75_HISTORY_VISIBLE_COLS) return;
+    if (completedTotal <= freezeHistoryCompletedRef.current) return;
     const startIdx = completedTotal - ONE_BY_75_HISTORY_VISIBLE_COLS;
-    freezeHistoryPrimedRef.current = true;
+    freezeHistoryCompletedRef.current = completedTotal;
     setAnimating(false);
     setCarouselIndex(startIdx);
     carouselIndexRef.current = startIdx;
