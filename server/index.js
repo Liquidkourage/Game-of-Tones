@@ -15377,6 +15377,45 @@ app.patch('/api/admin/organizations/:id', async (req, res) => {
   }
 });
 
+/** Admin: update or clear tenant Spotify client id/secret for an existing org (plaintext in body → encrypted). */
+app.put('/api/admin/organizations/:id/spotify', async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'invalid_id', message: 'Invalid organization id.' });
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const result = await organizationsStore.updateOrganizationSpotifyCredentials(db, id, {
+      spotifyClientId: body.spotifyClientId,
+      spotifyClientSecret: body.spotifyClientSecret,
+      clear: body.clear === true,
+    });
+    for (const uid of result.memberUserIds || []) {
+      await organizationsStore.primeTenantSpotifyCredentials(db, multiTenantSpotify, uid);
+    }
+    res.json({
+      ok: true,
+      organization: {
+        id: result.id,
+        name: result.name,
+        spotify_client_id: result.spotify_client_id,
+        hasSpotifySecret: result.hasSpotifySecret,
+      },
+      membersReprimed: (result.memberUserIds || []).length,
+      note: result.spotify_client_id
+        ? 'Tenant Spotify app updated. Hosts on this org must Connect Spotify again if the client id changed.'
+        : 'Tenant Spotify app cleared — hosts on this org use the platform Spotify app.',
+    });
+  } catch (e) {
+    console.error('PUT /api/admin/organizations/:id/spotify:', e);
+    const msg = e?.message || 'Failed';
+    const code = msg === 'organization not found' ? 404 : 400;
+    res.status(code).json({ error: 'failed', message: msg });
+  }
+});
+
 /** Hints for onboarding tenant Spotify apps: exact redirect URIs and encryption key status. */
 app.get('/api/admin/spotify-tenant-setup', async (req, res) => {
   try {

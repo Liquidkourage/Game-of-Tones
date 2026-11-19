@@ -230,6 +230,84 @@ async function createOrganization(db, { name, spotifyClientId, spotifyClientSecr
 }
 
 /**
+ * Admin: update or clear tenant Spotify Developer app for an existing org.
+ * Paste plaintext client id + secret (encrypted on write). Empty secret keeps the
+ * existing secret when a row already has one. `clear: true` removes tenant app
+ * so hosts fall back to the platform Spotify app.
+ *
+ * @returns {Promise<{ id: number, name: string, spotify_client_id: string | null, hasSpotifySecret: boolean, memberUserIds: number[] }>}
+ */
+async function updateOrganizationSpotifyCredentials(
+  db,
+  orgId,
+  { spotifyClientId, spotifyClientSecret, clear },
+) {
+  if (!db) throw new Error('DATABASE_URL required');
+  await ensureOrganizationsTable(db);
+  const id = parseInt(String(orgId), 10);
+  if (!Number.isFinite(id)) throw new Error('invalid organization id');
+
+  const existing = await db.query(
+    `SELECT id, name, spotify_client_id, spotify_client_secret_encrypted FROM organizations WHERE id = $1`,
+    [id],
+  );
+  if (!existing.rows[0]) throw new Error('organization not found');
+
+  if (clear === true) {
+    await db.query(
+      `UPDATE organizations
+       SET spotify_client_id = NULL, spotify_client_secret_encrypted = NULL
+       WHERE id = $1`,
+      [id],
+    );
+  } else {
+    const cid = String(spotifyClientId || '').trim();
+    let csec = String(spotifyClientSecret || '').trim();
+    if (!cid || cid.length < 8) {
+      throw new Error('spotifyClientId is required (or pass clear: true to use the platform app)');
+    }
+    if (!csec) {
+      const prevEnc = existing.rows[0].spotify_client_secret_encrypted;
+      if (!prevEnc) {
+        throw new Error('spotifyClientSecret is required when setting a new tenant app');
+      }
+      if (orgPlaintextSecretsMode()) {
+        csec = String(prevEnc);
+      } else {
+        const prev = credentialCrypto.decryptSecret(prevEnc);
+        if (!prev) {
+          throw new Error('Could not keep existing secret — paste a new client secret');
+        }
+        csec = prev;
+      }
+    }
+    const enc = orgPlaintextSecretsMode() ? csec : credentialCrypto.encryptSecret(csec);
+    await db.query(
+      `UPDATE organizations
+       SET spotify_client_id = $2, spotify_client_secret_encrypted = $3
+       WHERE id = $1`,
+      [id, cid, enc],
+    );
+  }
+
+  const updated = await db.query(
+    `SELECT id, name, spotify_client_id, spotify_client_secret_encrypted FROM organizations WHERE id = $1`,
+    [id],
+  );
+  const row = updated.rows[0];
+  const members = await db.query(`SELECT id FROM users WHERE organization_id = $1 ORDER BY id ASC`, [id]);
+  const memberUserIds = members.rows.map((r) => Number(r.id)).filter((n) => Number.isFinite(n));
+
+  return {
+    id: row.id,
+    name: row.name,
+    spotify_client_id: row.spotify_client_id,
+    hasSpotifySecret: !!(row.spotify_client_secret_encrypted && String(row.spotify_client_secret_encrypted).length > 0),
+    memberUserIds,
+  };
+}
+
+/**
  * Admin provisioning: create an org with optional tenant Spotify credentials
  * and optional pending owner email (applied on first Google login).
  */
@@ -827,6 +905,7 @@ module.exports = {
   primeTenantSpotifyCredentials,
   listOrganizations,
   createOrganization,
+  updateOrganizationSpotifyCredentials,
   createProvisionedOrganization,
   setOrganizationOwner,
   setPendingOwnerEmail,

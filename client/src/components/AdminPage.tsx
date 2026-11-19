@@ -101,6 +101,11 @@ const AdminPage: React.FC = () => {
   const [orgName, setOrgName] = useState('');
   const [orgClientId, setOrgClientId] = useState('');
   const [orgSecret, setOrgSecret] = useState('');
+  const [editOrgId, setEditOrgId] = useState('');
+  const [editOrgClientId, setEditOrgClientId] = useState('');
+  const [editOrgSecret, setEditOrgSecret] = useState('');
+  const [editOrgError, setEditOrgError] = useState<string | null>(null);
+  const [editOrgSavedAt, setEditOrgSavedAt] = useState<number | null>(null);
   const [assignUserId, setAssignUserId] = useState('');
   const [assignOrgId, setAssignOrgId] = useState('');
   const [spotifySetup, setSpotifySetup] = useState<SpotifyTenantSetup | null>(null);
@@ -558,6 +563,76 @@ const AdminPage: React.FC = () => {
       }
       setAssignUserId('');
       setAssignOrgId('');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const updateOrgSpotifyCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const id = editOrgId.trim();
+    if (!id) return;
+    const cid = editOrgClientId.trim();
+    if (!cid) {
+      setEditOrgError('Paste a Spotify client id, or use Clear tenant app.');
+      return;
+    }
+    setBusy(true);
+    setEditOrgError(null);
+    setEditOrgSavedAt(null);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/admin/organizations/${encodeURIComponent(id)}/spotify`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          spotifyClientId: cid,
+          spotifyClientSecret: editOrgSecret.trim(),
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEditOrgError((j && j.message) || `Could not update (${res.status})`);
+        return;
+      }
+      setEditOrgSecret('');
+      if (j.organization?.spotify_client_id) {
+        setEditOrgClientId(String(j.organization.spotify_client_id));
+      }
+      setEditOrgSavedAt(Date.now());
+      void refreshOrgs();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clearOrgSpotifyCredentials = async () => {
+    const id = editOrgId.trim();
+    if (!id) return;
+    if (
+      !window.confirm(
+        'Clear this org’s Spotify app so its hosts use the platform (default) Spotify app instead?',
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setEditOrgError(null);
+    setEditOrgSavedAt(null);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/admin/organizations/${encodeURIComponent(id)}/spotify`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clear: true }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEditOrgError((j && j.message) || `Could not clear (${res.status})`);
+        return;
+      }
+      setEditOrgClientId('');
+      setEditOrgSecret('');
+      setEditOrgSavedAt(Date.now());
+      void refreshOrgs();
     } finally {
       setBusy(false);
     }
@@ -1214,6 +1289,83 @@ const AdminPage: React.FC = () => {
               </button>
             </div>
           </form>
+
+          <h3 className="admin-page__h2" style={{ fontSize: '1.05rem', marginTop: '1.5rem' }}>
+            Update tenant Spotify app
+          </h3>
+          <p className="admin-page__muted" style={{ marginBottom: '0.75rem' }}>
+            Paste a new client id + secret for an existing org (e.g. 910Comedy). Leave secret blank to keep the current
+            secret when only changing the id. Clear removes the tenant app so hosts use the platform app.
+          </p>
+          {editOrgError && <p className="admin-page__error">{editOrgError}</p>}
+          {editOrgSavedAt != null && (
+            <p className="admin-page__banner admin-page__banner--on" style={{ marginBottom: '0.75rem' }}>
+              Tenant Spotify credentials updated. Hosts on this org should Connect Spotify again if the client id
+              changed.
+            </p>
+          )}
+          <form className="admin-page__add" onSubmit={(e) => void updateOrgSpotifyCredentials(e)}>
+            <div className="admin-page__add-row" style={{ flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <select
+                className="input"
+                value={editOrgId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setEditOrgId(id);
+                  setEditOrgSavedAt(null);
+                  setEditOrgError(null);
+                  const o = (orgs || []).find((row) => String(row.id) === id);
+                  setEditOrgClientId(o?.spotify_client_id ? String(o.spotify_client_id) : '');
+                  setEditOrgSecret('');
+                }}
+                disabled={busy}
+                style={{ minWidth: '220px' }}
+                required
+              >
+                <option value="">Select organization…</option>
+                {(orgs || []).map((o) => (
+                  <option key={o.id} value={String(o.id)}>
+                    #{o.id} {o.name}
+                    {o.spotify_client_id ? ` (${String(o.spotify_client_id).slice(0, 8)}…)` : ' (platform)'}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="admin-page__add-row" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+              <input
+                type="text"
+                className="input"
+                placeholder="Spotify Client ID"
+                value={editOrgClientId}
+                onChange={(e) => setEditOrgClientId(e.target.value)}
+                autoComplete="off"
+                disabled={busy || !editOrgId}
+                style={{ minWidth: '200px' }}
+              />
+              <input
+                type="password"
+                className="input"
+                placeholder="Spotify Client Secret (blank = keep)"
+                value={editOrgSecret}
+                onChange={(e) => setEditOrgSecret(e.target.value)}
+                autoComplete="new-password"
+                disabled={busy || !editOrgId}
+                style={{ minWidth: '200px' }}
+              />
+              <button type="submit" className="btn btn-primary" disabled={busy || !editOrgId || !editOrgClientId.trim()}>
+                Save tenant Spotify app
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={busy || !editOrgId}
+                onClick={() => void clearOrgSpotifyCredentials()}
+              >
+                Clear tenant app
+              </button>
+            </div>
+          </form>
+
           {orgs === null ? (
             <p className="admin-page__muted">Loading organizations…</p>
           ) : orgs.length === 0 ? (
@@ -1223,8 +1375,24 @@ const AdminPage: React.FC = () => {
               {orgs.map((o) => (
                 <li key={o.id} className="admin-page__row">
                   <span className="admin-page__row-email">
-                    <strong>#{o.id}</strong> {o.name} — client id {o.spotify_client_id?.slice(0, 8)}…
+                    <strong>#{o.id}</strong> {o.name} — client id{' '}
+                    {o.spotify_client_id ? `${String(o.spotify_client_id).slice(0, 8)}…` : '(none / platform)'}
                   </span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ marginLeft: '0.5rem' }}
+                    disabled={busy}
+                    onClick={() => {
+                      setEditOrgId(String(o.id));
+                      setEditOrgClientId(o.spotify_client_id ? String(o.spotify_client_id) : '');
+                      setEditOrgSecret('');
+                      setEditOrgError(null);
+                      setEditOrgSavedAt(null);
+                    }}
+                  >
+                    Edit
+                  </button>
                 </li>
               ))}
             </ul>
