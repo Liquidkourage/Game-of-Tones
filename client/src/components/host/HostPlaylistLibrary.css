@@ -406,6 +406,34 @@
   gap: 8px;
 }
 
+button.host-playlist-library-name-peek {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.host-playlist-library-name-peek:hover,
+button.host-playlist-library-name-peek:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+button.host-playlist-library-name-peek--virtual:hover,
+button.host-playlist-library-name-peek--virtual:focus-visible {
+  color: #e0c8ff;
+}
+
 /* Assigned-to-a-round indicator (replaces the legacy mix checkbox): invisible spacer when
    unassigned (keeps names aligned), green check chip once the playlist is in a round. */
 .host-playlist-assigned-chip {

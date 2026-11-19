@@ -13690,7 +13690,19 @@ const HostView: React.FC = () => {
                             gap: 6,
                           }}
                         >
-                          {displayName}
+                          <button
+                            type="button"
+                            className="host-playlist-library-name-peek"
+                            title={`View songs in ${displayName}`}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handlePeekPlaylist(pack);
+                            }}
+                          >
+                            {displayName}
+                          </button>
                           {poolSize ? (
                             <span className="host-playlist-pool-size-chip" aria-label={`${poolSize} song pool`}>
                               {poolSize}+
@@ -14350,7 +14362,19 @@ const HostView: React.FC = () => {
                         </span>
                         <span style={{ flex: '1 1 260px', minWidth: 0 }}>
                           <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                            {REQUESTS_PLAYLIST_NAME}
+                            <button
+                              type="button"
+                              className="host-playlist-library-name-peek host-playlist-library-name-peek--virtual"
+                              title="View approved request songs"
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handlePeekPlaylist(requestsVirtualPlaylist);
+                              }}
+                            >
+                              {REQUESTS_PLAYLIST_NAME}
+                            </button>
                             <span className="host-playlist-virtual-badge">Virtual</span>
                           </span>
                           <span className="host-playlist-desc">
@@ -14445,7 +14469,19 @@ const HostView: React.FC = () => {
                                   color: count >= 15 ? '#c9a6ff' : '#fff',
                                 }}
                               >
-                                {LEFTOVERS_PLAYLIST_NAME}
+                                <button
+                                  type="button"
+                                  className="host-playlist-library-name-peek host-playlist-library-name-peek--virtual"
+                                  title="View leftover songs"
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handlePeekPlaylist(leftoversVirtualPlaylist);
+                                  }}
+                                >
+                                  {LEFTOVERS_PLAYLIST_NAME}
+                                </button>
                                 <span
                                   className="host-playlist-virtual-badge"
                                   title="Built from completed rounds — not a Spotify playlist"
@@ -14669,7 +14705,19 @@ const HostView: React.FC = () => {
                                     color: isAcceptable ? '#00ff88' : '#fff',
                                   }}
                                 >
-                                  {displayName}
+                                  <button
+                                    type="button"
+                                    className="host-playlist-library-name-peek"
+                                    title={`View songs in ${displayName}`}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handlePeekPlaylist(p);
+                                    }}
+                                  >
+                                    {displayName}
+                                  </button>
                                   {plainDesc ? (
                                     <span
                                       className="host-playlist-desc-hint"
