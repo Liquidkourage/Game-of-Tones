@@ -377,9 +377,19 @@ function getCatalogSpotifyService() {
           resolvedSecret = String(esec).trim();
           credSource = 'TEMPO_CATALOG_SPOTIFY_CLIENT_ID / TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET';
         } else {
-          resolvedId = String(process.env.SPOTIFY_CLIENT_ID || '').trim();
-          resolvedSecret = String(process.env.SPOTIFY_CLIENT_SECRET || '').trim();
-          credSource = 'SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET';
+          try {
+            const platform = require('./platformSpotifyCredentials').getEffectiveCredentials();
+            resolvedId = String(platform.clientId || '').trim();
+            resolvedSecret = String(platform.clientSecret || '').trim();
+            credSource =
+              platform.source === 'db'
+                ? 'platform Spotify app (Admin DB)'
+                : 'SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET';
+          } catch {
+            resolvedId = String(process.env.SPOTIFY_CLIENT_ID || '').trim();
+            resolvedSecret = String(process.env.SPOTIFY_CLIENT_SECRET || '').trim();
+            credSource = 'SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET';
+          }
         }
       }
     }

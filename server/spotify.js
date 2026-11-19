@@ -409,7 +409,7 @@ const NON_ESSENTIAL_WEB_API_CALLERS = new Set([
 
 class SpotifyService {
   /**
-   * @param {undefined | null | { clientId: string; clientSecret: string }} options - If object with id+secret, use tenant's Spotify Developer app; else env SPOTIFY_*.
+   * @param {undefined | null | { clientId: string; clientSecret: string }} options - If object with id+secret, use tenant's Spotify Developer app; else platform (Admin DB override or SPOTIFY_* env).
    */
   constructor(options) {
     this.defaultRedirectUri = process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:7094/callback';
@@ -420,15 +420,36 @@ class SpotifyService {
       options.clientId &&
       typeof options.clientSecret === 'string' &&
       options.clientSecret;
+    let platformCreds = null;
+    if (!override) {
+      try {
+        // Lazy require avoids circular load with index boot paths.
+        platformCreds = require('./platformSpotifyCredentials').getEffectiveCredentials();
+      } catch {
+        platformCreds = null;
+      }
+    }
+    const platformId =
+      platformCreds && platformCreds.clientId
+        ? platformCreds.clientId
+        : process.env.SPOTIFY_CLIENT_ID;
+    const platformSecret =
+      platformCreds && platformCreds.clientSecret
+        ? platformCreds.clientSecret
+        : process.env.SPOTIFY_CLIENT_SECRET;
     this.spotifyApi = new SpotifyWebApi({
-      clientId: override ? options.clientId : process.env.SPOTIFY_CLIENT_ID,
-      clientSecret: override ? options.clientSecret : process.env.SPOTIFY_CLIENT_SECRET,
+      clientId: override ? options.clientId : platformId,
+      clientSecret: override ? options.clientSecret : platformSecret,
       redirectUri: this.defaultRedirectUri,
     });
     this._wrapSpotifyWebApiForMeter();
-    const cidForLog = override ? options.clientId : process.env.SPOTIFY_CLIENT_ID;
+    const cidForLog = override ? options.clientId : platformId;
     this._pipelineClientIdPrefix = pl.clientIdPrefix(cidForLog);
-    this._pipelineCredentialMode = override ? 'organization_client' : 'env_client';
+    this._pipelineCredentialMode = override
+      ? 'organization_client'
+      : platformCreds && platformCreds.source === 'db'
+        ? 'platform_db_client'
+        : 'env_client';
 
     this.accessToken = null;
     this.refreshToken = null;

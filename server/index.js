@@ -2053,6 +2053,11 @@ class MultiTenantSpotifyManager {
     const key = `user_${uid}`;
     this.orgServices.delete(key);
   }
+
+  /** Drop all cached SpotifyService instances (platform client id/secret rotated). Tokens stay loaded. */
+  invalidateAllServices() {
+    this.orgServices.clear();
+  }
   
   getService(organizationId = this.defaultOrg) {
     if (!this.orgServices.has(organizationId)) {
@@ -2068,10 +2073,11 @@ class MultiTenantSpotifyManager {
           : credentialOverride === null
             ? 'primed_no_org_row_uses_env'
             : 'organizations_table_client';
+      const platformSpotifyCredentials = require('./platformSpotifyCredentials');
       const newClientPrefix =
         credentialOverride && credentialOverride.clientId
           ? spotifyPipelineLog.clientIdPrefix(credentialOverride.clientId)
-          : spotifyPipelineLog.clientIdPrefix(process.env.SPOTIFY_CLIENT_ID);
+          : spotifyPipelineLog.clientIdPrefix(platformSpotifyCredentials.getEffectiveClientId());
       if (spotifyPipelineLog.isEnabled()) {
         spotifyPipelineLog.log('spotify_service_constructed', {
           organization_id: organizationId,
@@ -2295,6 +2301,9 @@ async function initializeDatabase() {
     await usersStore.ensureUsersTable(db);
     await usersStore.ensureHostAllowlistTable(db);
     await organizationsStore.ensureOrganizationsTable(db);
+    const platformSpotifyCredentials = require('./platformSpotifyCredentials');
+    await platformSpotifyCredentials.ensureTable(db);
+    await platformSpotifyCredentials.refreshFromDb(db);
     await billingStore.ensureBillingTables(db);
     await tipsStore.ensureHostTipsTable(db);
     await songAliasesStore.ensureSongAliasesTable(db);
@@ -15383,6 +15392,89 @@ app.get('/api/admin/spotify-tenant-setup', async (req, res) => {
   }
 });
 
+/**
+ * Platform Spotify Developer app (hosts on the default / allowlisted API — not tenant org apps).
+ * Admin can rotate client id/secret after Spotify 429 app recreations without Railway redeploy.
+ */
+app.get('/api/admin/platform-spotify-app', async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const platformSpotifyCredentials = require('./platformSpotifyCredentials');
+    if (db) await platformSpotifyCredentials.refreshFromDb(db);
+    res.json({
+      ok: true,
+      ...platformSpotifyCredentials.getAdminStatus(),
+      spotifyDashboardUrl: 'https://developer.spotify.com/dashboard',
+      redirectUris: collectSpotifySpaRedirectUrisForAdmin(),
+      note:
+        'Hosts without a tenant Spotify app use these credentials. Changing client id invalidates existing Spotify refresh tokens — those hosts must Connect Spotify again.',
+    });
+  } catch (e) {
+    console.error('GET /api/admin/platform-spotify-app:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.put('/api/admin/platform-spotify-app', async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    if (!db) {
+      return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    }
+    const platformSpotifyCredentials = require('./platformSpotifyCredentials');
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const adminUid = hostAuth.getHostUserIdFromRequest(req);
+    const status = await platformSpotifyCredentials.savePlatformCredentials(db, {
+      clientId: body.clientId,
+      clientSecret: body.clientSecret,
+      updatedByUserId: adminUid,
+    });
+    if (typeof multiTenantSpotify.invalidateAllServices === 'function') {
+      multiTenantSpotify.invalidateAllServices();
+    }
+    res.json({
+      ok: true,
+      ...status,
+      note: 'Saved. Platform hosts must re-connect Spotify if the client id changed.',
+    });
+  } catch (e) {
+    console.error('PUT /api/admin/platform-spotify-app:', e);
+    const msg = e?.message || 'Failed';
+    const code =
+      msg === 'database_required'
+        ? 503
+        : msg.includes('TEMPO_ORG_CREDENTIALS_KEY') ||
+            msg === 'client_id_required' ||
+            msg === 'client_secret_required' ||
+            msg === 'client_secret_required_reenter'
+          ? 400
+          : 500;
+    res.status(code).json({ error: 'failed', message: msg });
+  }
+});
+
+app.delete('/api/admin/platform-spotify-app', async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    if (!db) {
+      return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    }
+    const platformSpotifyCredentials = require('./platformSpotifyCredentials');
+    const status = await platformSpotifyCredentials.clearPlatformCredentials(db);
+    if (typeof multiTenantSpotify.invalidateAllServices === 'function') {
+      multiTenantSpotify.invalidateAllServices();
+    }
+    res.json({
+      ok: true,
+      ...status,
+      note: 'Cleared DB override — using Railway SPOTIFY_CLIENT_ID / SECRET again.',
+    });
+  } catch (e) {
+    console.error('DELETE /api/admin/platform-spotify-app:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
 /** Self-serve organization portal (owner invites hosts; org-level pay-as-you-like billing). */
 app.get('/api/org/me', async (req, res) => {
   try {
@@ -17311,7 +17403,9 @@ app.get('/api/spotify/callback', async (req, res) => {
     }
     if (parsed?.userId != null) {
       const copt = organizationsStore.getCredentialOptionsForUser(parsed.userId);
-      const envCid = String(process.env.SPOTIFY_CLIENT_ID || '').trim();
+      const platformSpotifyCredentials = require('./platformSpotifyCredentials');
+      const platformCid = String(platformSpotifyCredentials.getEffectiveClientId() || '').trim();
+      const platformSource = platformSpotifyCredentials.getEffectiveCredentials().source;
       if (copt && copt.clientId) {
         routineServerLog(
           `[Spotify OAuth] user_${parsed.userId} token exchange: ORGANIZATION row client_id prefix ${String(
@@ -17320,10 +17414,10 @@ app.get('/api/spotify/callback', async (req, res) => {
         );
       } else {
         routineServerLog(
-          `[Spotify OAuth] user_${parsed.userId} token exchange: server ENV SPOTIFY_CLIENT_ID/SECRET${
-            envCid
-              ? ` (client_id prefix ${envCid.slice(0, 8)}…)`
-              : ' (SPOTIFY_CLIENT_ID unset — fix Railway)'
+          `[Spotify OAuth] user_${parsed.userId} token exchange: platform Spotify app (${platformSource})${
+            platformCid
+              ? ` (client_id prefix ${platformCid.slice(0, 8)}…)`
+              : ' (no client id — set Admin platform app or SPOTIFY_CLIENT_ID)'
           }`
         );
       }
@@ -17331,9 +17425,9 @@ app.get('/api/spotify/callback', async (req, res) => {
         spotifyPipelineLog.log('oauth_code_exchange', {
           host_user_id: String(parsed.userId),
           org_key: `user_${parsed.userId}`,
-          client_source: copt && copt.clientId ? 'organizations_table' : 'env',
+          client_source: copt && copt.clientId ? 'organizations_table' : platformSource,
           client_id_prefix: spotifyPipelineLog.clientIdPrefix(
-            copt && copt.clientId ? copt.clientId : process.env.SPOTIFY_CLIENT_ID
+            copt && copt.clientId ? copt.clientId : platformCid
           ),
         });
       }

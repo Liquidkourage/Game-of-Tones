@@ -25,6 +25,19 @@ type SpotifyTenantSetup = {
   orgEncryptionKeyConfigured: boolean;
 };
 
+type PlatformSpotifyApp = {
+  source: 'db' | 'env';
+  clientId: string;
+  clientIdPrefix: string;
+  hasSecret: boolean;
+  updatedAt: string | null;
+  encryptionKeyConfigured: boolean;
+  envClientIdPrefix: string;
+  usingDbOverride: boolean;
+  note?: string;
+  spotifyDashboardUrl?: string;
+};
+
 type VenueForm = {
   eventTitle: string;
   sponsorLine: string;
@@ -92,6 +105,12 @@ const AdminPage: React.FC = () => {
   const [assignOrgId, setAssignOrgId] = useState('');
   const [spotifySetup, setSpotifySetup] = useState<SpotifyTenantSetup | null>(null);
   const [spotifySetupError, setSpotifySetupError] = useState<string | null>(null);
+  const [platformSpotify, setPlatformSpotify] = useState<PlatformSpotifyApp | null>(null);
+  const [platformSpotifyError, setPlatformSpotifyError] = useState<string | null>(null);
+  const [platformClientId, setPlatformClientId] = useState('');
+  const [platformSecret, setPlatformSecret] = useState('');
+  const [platformBusy, setPlatformBusy] = useState(false);
+  const [platformSavedAt, setPlatformSavedAt] = useState<number | null>(null);
   const [copiedUri, setCopiedUri] = useState<string | null>(null);
   const [venueOrgId, setVenueOrgId] = useState('');
   const [venueForm, setVenueForm] = useState<VenueForm>(emptyVenueForm);
@@ -231,6 +250,27 @@ const AdminPage: React.FC = () => {
     if (me?.admin) void refreshPromoCodes();
   }, [me?.admin, refreshPromoCodes]);
 
+  const refreshPlatformSpotify = useCallback(async () => {
+    setPlatformSpotifyError(null);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/admin/platform-spotify-app`);
+      const data = (await res.json().catch(() => ({}))) as PlatformSpotifyApp & {
+        error?: string;
+        message?: string;
+      };
+      if (!res.ok) {
+        setPlatformSpotifyError(data.message || data.error || `HTTP ${res.status}`);
+        setPlatformSpotify(null);
+        return;
+      }
+      setPlatformSpotify(data);
+      if (data.clientId) setPlatformClientId(data.clientId);
+    } catch (e) {
+      setPlatformSpotifyError(String(e));
+      setPlatformSpotify(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (!me?.admin) return;
     let cancelled = false;
@@ -258,6 +298,79 @@ const AdminPage: React.FC = () => {
       cancelled = true;
     };
   }, [me?.admin]);
+
+  useEffect(() => {
+    if (!me?.admin) return;
+    void refreshPlatformSpotify();
+  }, [me?.admin, refreshPlatformSpotify]);
+
+  const savePlatformSpotify = useCallback(
+    async (ev: React.FormEvent) => {
+      ev.preventDefault();
+      setPlatformBusy(true);
+      setPlatformSpotifyError(null);
+      try {
+        const res = await hostFetch(`${API_BASE || ''}/api/admin/platform-spotify-app`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clientId: platformClientId.trim(),
+            clientSecret: platformSecret.trim(),
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as PlatformSpotifyApp & {
+          message?: string;
+          error?: string;
+        };
+        if (!res.ok) {
+          setPlatformSpotifyError(data.message || data.error || `HTTP ${res.status}`);
+          return;
+        }
+        setPlatformSpotify(data);
+        if (data.clientId) setPlatformClientId(data.clientId);
+        setPlatformSecret('');
+        setPlatformSavedAt(Date.now());
+      } catch (e) {
+        setPlatformSpotifyError(String(e));
+      } finally {
+        setPlatformBusy(false);
+      }
+    },
+    [platformClientId, platformSecret],
+  );
+
+  const clearPlatformSpotify = useCallback(async () => {
+    if (
+      !window.confirm(
+        'Clear Admin-saved platform Spotify credentials and fall back to Railway SPOTIFY_CLIENT_ID / SECRET?',
+      )
+    ) {
+      return;
+    }
+    setPlatformBusy(true);
+    setPlatformSpotifyError(null);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/admin/platform-spotify-app`, {
+        method: 'DELETE',
+      });
+      const data = (await res.json().catch(() => ({}))) as PlatformSpotifyApp & {
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        setPlatformSpotifyError(data.message || data.error || `HTTP ${res.status}`);
+        return;
+      }
+      setPlatformSpotify(data);
+      setPlatformClientId(data.clientId || '');
+      setPlatformSecret('');
+      setPlatformSavedAt(Date.now());
+    } catch (e) {
+      setPlatformSpotifyError(String(e));
+    } finally {
+      setPlatformBusy(false);
+    }
+  }, []);
 
   const loadVenueForOrg = useCallback(async (id: string) => {
     if (!id.trim()) return;
@@ -885,6 +998,107 @@ const AdminPage: React.FC = () => {
                 </>
               )}
             </button>
+          </form>
+        </section>
+
+        <section className="admin-page__table-wrap" style={{ marginBottom: '2rem' }}>
+          <h2 className="admin-page__h2">Platform Spotify app (default / allowlisted hosts)</h2>
+          <p className="admin-page__muted" style={{ marginBottom: '1rem' }}>
+            Client id + secret for hosts on <strong>your</strong> Spotify Developer app (no tenant override). After a
+            429 forces a new Spotify app, paste the new credentials here — no Railway redeploy. Hosts must{' '}
+            <strong>Connect Spotify</strong> again if the client id changes. Tenant org apps below are separate.
+          </p>
+          {platformSpotify && (
+            <p className="admin-page__muted" style={{ marginBottom: '0.75rem' }}>
+              Active source:{' '}
+              <strong>{platformSpotify.usingDbOverride ? 'Admin (database)' : 'Railway env'}</strong>
+              {platformSpotify.clientIdPrefix ? ` · prefix ${platformSpotify.clientIdPrefix}…` : ''}
+              {platformSpotify.updatedAt
+                ? ` · saved ${new Date(platformSpotify.updatedAt).toLocaleString()}`
+                : ''}
+              {!platformSpotify.usingDbOverride && platformSpotify.envClientIdPrefix
+                ? ` · env prefix ${platformSpotify.envClientIdPrefix}…`
+                : ''}
+            </p>
+          )}
+          {platformSpotify && !platformSpotify.encryptionKeyConfigured && (
+            <p className="admin-page__banner admin-page__banner--on" style={{ marginBottom: '1rem' }}>
+              <strong>Encryption key required</strong> — set <code>TEMPO_ORG_CREDENTIALS_KEY</code> (64 hex) on the
+              server before saving secrets here.
+            </p>
+          )}
+          {platformSpotifyError && (
+            <p className="admin-page__error" style={{ marginBottom: '0.5rem' }}>
+              {platformSpotifyError}
+            </p>
+          )}
+          {platformSavedAt && (
+            <p className="admin-page__banner admin-page__banner--on" style={{ marginBottom: '0.75rem' }}>
+              Platform Spotify credentials updated.
+            </p>
+          )}
+          <form onSubmit={(ev) => void savePlatformSpotify(ev)} className="admin-page__form">
+            <label className="admin-page__label">
+              Client id
+              <input
+                className="admin-page__input"
+                type="text"
+                value={platformClientId}
+                onChange={(ev) => setPlatformClientId(ev.target.value)}
+                placeholder="Spotify Developer client id"
+                autoComplete="off"
+                required
+                minLength={8}
+              />
+            </label>
+            <label className="admin-page__label">
+              Client secret
+              <input
+                className="admin-page__input"
+                type="password"
+                value={platformSecret}
+                onChange={(ev) => setPlatformSecret(ev.target.value)}
+                placeholder={
+                  platformSpotify?.hasSecret && platformSpotify.usingDbOverride
+                    ? 'Leave blank to keep current secret'
+                    : 'Spotify Developer client secret'
+                }
+                autoComplete="new-password"
+              />
+            </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '0.75rem' }}>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={platformBusy || !platformSpotify?.encryptionKeyConfigured}
+              >
+                {platformBusy ? (
+                  <>
+                    <Loader2 size={18} className="admin-page__spinner" aria-hidden /> Saving…
+                  </>
+                ) : (
+                  'Save platform Spotify app'
+                )}
+              </button>
+              {platformSpotify?.usingDbOverride ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={platformBusy}
+                  onClick={() => void clearPlatformSpotify()}
+                >
+                  Clear (use Railway env)
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={platformBusy}
+                onClick={() => void refreshPlatformSpotify()}
+              >
+                Refresh status
+              </button>
+            </div>
           </form>
         </section>
 
