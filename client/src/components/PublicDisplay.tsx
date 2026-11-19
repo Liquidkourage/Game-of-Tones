@@ -1083,6 +1083,34 @@ function countPlayOrderColumns(playedOrder: readonly string[]): number {
   return playOrderColumnSlices(playedOrder).length;
 }
 
+/** Songs per 1×75 play-order column (fill down, then next column). */
+const ONE_BY_75_BAND_SIZE = 5;
+/** Left history window once freeze column is active (rightmost slot is frontier). */
+const ONE_BY_75_HISTORY_VISIBLE_COLS = 4;
+/** After the first full five-column window, pin frontier on the right. */
+const ONE_BY_75_FREEZE_AFTER_CALLS = 25;
+
+/**
+ * Frontier band index for 1×75 freeze column.
+ * While a band is filling: floor((n-1)/5). When a band just completed and more pool remains:
+ * jump to the next empty band (n/5). At end of pool: stay on the last band.
+ */
+function oneBy75FrontierBandIndex(playedCount: number, poolTotal: number): number {
+  const n = Math.max(0, Math.floor(playedCount));
+  if (n <= 0) return 0;
+  const pool = Math.max(n, Math.floor(poolTotal) || n);
+  const maxBand = Math.max(0, Math.ceil(pool / ONE_BY_75_BAND_SIZE) - 1);
+  if (n % ONE_BY_75_BAND_SIZE === 0) {
+    const next = n / ONE_BY_75_BAND_SIZE;
+    return next <= maxBand ? next : maxBand;
+  }
+  return Math.floor((n - 1) / ONE_BY_75_BAND_SIZE);
+}
+
+function oneBy75FreezeModeActive(playedCount: number): boolean {
+  return Math.max(0, Math.floor(playedCount)) > ONE_BY_75_FREEZE_AFTER_CALLS;
+}
+
 function poolHasTracks(ids: string[] | null | undefined): ids is string[] {
   return Array.isArray(ids) && ids.length > 0;
 }
@@ -1974,8 +2002,20 @@ const PublicDisplay: React.FC = () => {
           // room-state often carries carouselIndex 0 until the display sync lands — never regress live scroll.
           let idx = takeWholesale ? serverIdx : serverIdx >= localIdx ? serverIdx : localIdx;
           // Collapse duplicate-tail indices from a pre-wrap server value (avoids one fly-through on reconnect).
-          const totalCols = countPlayOrderColumns(playedOrderRef.current);
-          if (totalCols > visibleCols) {
+          const playedRestore = playedOrderRef.current;
+          const playedRestoreCount = playedRestore.length;
+          const freezeRestore = oneBy75FreezeModeActive(playedRestoreCount);
+          const poolRestore = Math.max(
+            playedRestoreCount,
+            (oneBy75IdsRef.current || []).length,
+            countPlayOrderColumns(playedRestore) * ONE_BY_75_BAND_SIZE,
+          );
+          const frontierRestore = oneBy75FrontierBandIndex(playedRestoreCount, poolRestore);
+          const totalCols = freezeRestore
+            ? Math.min(frontierRestore, countPlayOrderColumns(playedRestore))
+            : countPlayOrderColumns(playedRestore);
+          const histVisibleRestore = freezeRestore ? ONE_BY_75_HISTORY_VISIBLE_COLS : visibleCols;
+          if (totalCols > histVisibleRestore) {
             while (idx >= totalCols) idx -= totalCols;
           }
           setCarouselIndex(idx);
@@ -3728,12 +3768,24 @@ const PublicDisplay: React.FC = () => {
 
   const snapCarouselAfterForwardLoop = useCallback(() => {
     if (columnCallListLayout || !animating) return;
-    const total = countPlayOrderColumns(playedOrderRef.current);
-    if (total <= visibleCols) return;
+    const played = playedOrderRef.current;
+    const playedCount = played.length;
+    const freezeOn = oneBy75FreezeModeActive(playedCount);
+    const poolLen = Math.max(
+      playedCount,
+      (oneBy75IdsRef.current || []).length,
+      countPlayOrderColumns(played) * ONE_BY_75_BAND_SIZE,
+    );
+    const frontier = oneBy75FrontierBandIndex(playedCount, poolLen);
+    const completedTotal = freezeOn
+      ? Math.min(frontier, countPlayOrderColumns(played))
+      : countPlayOrderColumns(played);
+    const histVisible = freezeOn ? ONE_BY_75_HISTORY_VISIBLE_COLS : visibleCols;
+    if (completedTotal <= histVisible) return;
     const idx = carouselIndexRef.current;
-    if (idx < total) return;
+    if (idx < completedTotal) return;
     setAnimating(false);
-    const wrapped = idx - total;
+    const wrapped = idx - completedTotal;
     setCarouselIndex(wrapped);
     carouselIndexRef.current = wrapped;
     // Server rejects plain lower carouselIndex ("never regress"); flag the intentional wrap.
@@ -3742,6 +3794,7 @@ const PublicDisplay: React.FC = () => {
   }, [columnCallListLayout, animating, visibleCols]);
 
   // Auto-advance the 1×75 carousel; dwell grows for later leftmost bands (see carouselDwellMsForLeftColumn).
+  // Freeze mode (call 26+): scroll completed history only (4-wide); frontier column is static.
   useEffect(() => {
     if (columnCallListLayout) return;
 
@@ -3749,36 +3802,48 @@ const PublicDisplay: React.FC = () => {
 
     const scheduleTick = () => {
       if (cancelled) return;
-      const total = countPlayOrderColumns(playedOrderRef.current);
+      const played = playedOrderRef.current;
+      const playedCount = played.length;
+      const freezeOn = oneBy75FreezeModeActive(playedCount);
+      const poolLen = Math.max(
+        playedCount,
+        (oneBy75IdsRef.current || []).length,
+        countPlayOrderColumns(played) * ONE_BY_75_BAND_SIZE,
+      );
+      const frontier = oneBy75FrontierBandIndex(playedCount, poolLen);
+      const scrollTotal = freezeOn
+        ? Math.min(frontier, countPlayOrderColumns(played))
+        : countPlayOrderColumns(played);
+      const histVisible = freezeOn ? ONE_BY_75_HISTORY_VISIBLE_COLS : visibleCols;
       const prevTotal = carouselColumnCountRef.current;
-      carouselColumnCountRef.current = total;
+      carouselColumnCountRef.current = scrollTotal;
 
-      if (total === 0) {
+      if (scrollTotal === 0) {
         carouselTickTimerRef.current = setTimeout(scheduleTick, CAROUSEL_BASE_DWELL_MS);
         return;
       }
 
-      if (total <= visibleCols) {
+      if (scrollTotal <= histVisible) {
         carouselTickTimerRef.current = setTimeout(scheduleTick, CAROUSEL_BASE_DWELL_MS);
         return;
       }
 
-      // First band past one visible window: swap static grid → scroll track and measure width.
-      if (prevTotal <= visibleCols && total > visibleCols) {
+      // First band past one visible history window: swap static → scroll track and measure width.
+      if (prevTotal <= histVisible && scrollTotal > histVisible) {
         requestAnimationFrame(() => {
           remeasureCarouselViewport();
         });
       }
 
       const leftIdx = carouselIndexRef.current;
-      const delayMs = carouselDwellMsForLeftColumn(leftIdx, total);
+      const delayMs = carouselDwellMsForLeftColumn(leftIdx, scrollTotal);
 
       carouselTickTimerRef.current = setTimeout(() => {
         if (cancelled) return;
         setCarouselIndex((prev) => {
           const next = prev + 1;
           // Step into duplicate tail once (same view as index 0); layout effect snaps to 0.
-          return next > total ? prev : next;
+          return next > scrollTotal ? prev : next;
         });
         scheduleTick();
       }, delayMs);
@@ -3801,8 +3866,21 @@ const PublicDisplay: React.FC = () => {
     remeasureCarouselViewport,
   ]);
 
-  const carouselScrollEnabled =
-    !columnCallListLayout && countPlayOrderColumns(playedOrderForDisplay) > visibleCols;
+  const carouselScrollEnabled = (() => {
+    if (columnCallListLayout) return false;
+    const playedCount = playedOrderForDisplay.length;
+    if (oneBy75FreezeModeActive(playedCount)) {
+      const poolLen = Math.max(
+        playedCount,
+        (oneBy75Ids || oneBy75IdsRef.current || []).length,
+        countPlayOrderColumns(playedOrderForDisplay) * ONE_BY_75_BAND_SIZE,
+      );
+      const frontier = oneBy75FrontierBandIndex(playedCount, poolLen);
+      const completedTotal = Math.min(frontier, countPlayOrderColumns(playedOrderForDisplay));
+      return completedTotal > ONE_BY_75_HISTORY_VISIBLE_COLS;
+    }
+    return countPlayOrderColumns(playedOrderForDisplay) > visibleCols;
+  })();
 
   /** After song 26+ (6th column), static grid swaps to scroll track — measure width once on entry. */
   useLayoutEffect(() => {
@@ -5191,32 +5269,46 @@ const PublicDisplay: React.FC = () => {
     }
     
     const allPlayCols = playOrderColumnSlices(playedOrderForDisplay);
-    const total = allPlayCols.length;
-    const shouldScroll = total > visibleCols;
+    const playedCount = playedOrderForDisplay.length;
+    const freezeMode = oneBy75FreezeModeActive(playedCount);
+    const poolLen = Math.max(
+      playedCount,
+      idsToUse.length,
+      allPlayCols.length * ONE_BY_75_BAND_SIZE,
+    );
+    const frontier = oneBy75FrontierBandIndex(playedCount, poolLen);
+    const completedBands = freezeMode
+      ? allPlayCols.slice(0, Math.min(frontier, allPlayCols.length))
+      : allPlayCols;
+    const freezeBand =
+      freezeMode && frontier < allPlayCols.length ? allPlayCols[frontier] : [];
+    const histVisible = freezeMode ? ONE_BY_75_HISTORY_VISIBLE_COLS : visibleCols;
+    const scrollTotal = freezeMode ? completedBands.length : allPlayCols.length;
+    const shouldScroll = scrollTotal > histVisible;
 
     const staticSlots: string[][] = Array.from({ length: visibleCols }, (_, colIdx) => allPlayCols[colIdx] || []);
 
-    const scrollGroups: string[][] = shouldScroll
-      ? [...allPlayCols, ...allPlayCols.slice(0, visibleCols)]
-      : staticSlots;
-
-    const maxSlideIndex = shouldScroll ? total + visibleCols - 1 : 0;
-    const effectiveIndex = shouldScroll ? Math.min(carouselIndex, maxSlideIndex) : 0;
     const colWidthPx = viewportWidth > 0 ? Math.floor(viewportWidth / visibleCols) : 0;
-    const trackWidthPx = shouldScroll && colWidthPx > 0 ? scrollGroups.length * colWidthPx : 0;
-    const xPx = colWidthPx > 0 ? -(effectiveIndex * colWidthPx) : 0;
-
     const colStyle: React.CSSProperties | undefined =
       colWidthPx > 0
         ? { flex: `0 0 ${colWidthPx}px`, width: colWidthPx, maxWidth: colWidthPx, minWidth: 0 }
         : undefined;
 
-    if (!shouldScroll) {
+    const playlistHeader =
+      playlistNames.filter((n) => String(n || '').trim()).length <= 1
+        ? renderPlaylistNamesHeaderRow('1x75')
+        : null;
+
+    const fullCardColClass =
+      isFullCardPattern && uncapFullCardCallLayout ? ' call-carousel-col--full-card' : '';
+    const fullCardInnerClass =
+      isFullCardPattern && uncapFullCardCallLayout ? ' call-carousel-col-inner--full-card' : '';
+
+    // First 25 calls: five static equal columns (unchanged).
+    if (!freezeMode) {
       return (
         <div className="call-list-content">
-          {playlistNames.filter((n) => String(n || '').trim()).length <= 1
-            ? renderPlaylistNamesHeaderRow('1x75')
-            : null}
+          {playlistHeader}
           <div
             ref={carouselViewportRef}
             className="call-carousel-viewport call-carousel-viewport--static-grid"
@@ -5225,19 +5317,8 @@ const PublicDisplay: React.FC = () => {
             }}
           >
             {staticSlots.map((group, gi) => (
-              <div
-                key={`slot-${gi}`}
-                className={`call-carousel-col-static${
-                  isFullCardPattern && uncapFullCardCallLayout ? ' call-carousel-col--full-card' : ''
-                }`}
-              >
-                <div
-                  className={`call-carousel-col-inner${
-                    isFullCardPattern && uncapFullCardCallLayout
-                      ? ' call-carousel-col-inner--full-card'
-                      : ''
-                  }`}
-                >
+              <div key={`slot-${gi}`} className={`call-carousel-col-static${fullCardColClass}`}>
+                <div className={`call-carousel-col-inner${fullCardInnerClass}`}>
                   {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
                 </div>
               </div>
@@ -5247,49 +5328,103 @@ const PublicDisplay: React.FC = () => {
       );
     }
 
+    // Call 26+: left 4 = completed history (scroll when >4); right = frozen frontier.
+    const historySlots: string[][] = shouldScroll
+      ? [...completedBands, ...completedBands.slice(0, histVisible)]
+      : Array.from({ length: histVisible }, (_, i) => completedBands[i] || []);
+    const maxSlideIndex = shouldScroll ? scrollTotal + histVisible - 1 : 0;
+    const effectiveIndex = shouldScroll ? Math.min(carouselIndex, maxSlideIndex) : 0;
+    const historyWidthPx = colWidthPx > 0 ? colWidthPx * histVisible : 0;
+    const trackWidthPx = shouldScroll && colWidthPx > 0 ? historySlots.length * colWidthPx : 0;
+    const xPx = colWidthPx > 0 ? -(effectiveIndex * colWidthPx) : 0;
+
+    const freezeInner =
+      freezeBand.length === 0
+        ? Array.from({ length: ONE_BY_75_BAND_SIZE }, (_, rowIdx) => (
+            <div
+              key={`freeze-empty-${rowIdx}`}
+              className="call-item call-item-slot"
+              aria-hidden
+              style={{ visibility: 'hidden', pointerEvents: 'none' }}
+            />
+          ))
+        : renderCarouselCallRows(freezeBand, frontier, idsToUse, isFullCardPattern);
+
     return (
       <div className="call-list-content">
-        {playlistNames.filter((n) => String(n || '').trim()).length <= 1
-          ? renderPlaylistNamesHeaderRow('1x75')
-          : null}
+        {playlistHeader}
         <div
           ref={carouselViewportRef}
-          className="call-carousel-viewport"
+          className="call-carousel-viewport call-carousel-viewport--freeze-split"
           style={{ ['--carousel-visible-cols' as any]: String(visibleCols) }}
         >
-          <motion.div
-            className="call-carousel-track"
-            style={trackWidthPx > 0 ? { width: trackWidthPx, minWidth: trackWidthPx } : undefined}
-            animate={{ x: colWidthPx > 0 ? xPx : 0 }}
-            transition={{ duration: animating && shouldScroll ? 1 : 0, ease: 'easeInOut' }}
-            onAnimationComplete={() => {
-              if (shouldScroll) snapCarouselAfterForwardLoop();
-            }}
+          <div
+            className="call-carousel-history-clip"
+            style={
+              historyWidthPx > 0
+                ? { flex: `0 0 ${historyWidthPx}px`, width: historyWidthPx, maxWidth: historyWidthPx }
+                : { flex: `${histVisible} 1 0%` }
+            }
           >
-            {scrollGroups.map((group, gi) => {
-              // Wrap seam: last play-order column | first column (loop copy).
-              const isWrapStart = shouldScroll && total > 0 && gi === total;
-              return (
-              <div
-                key={`scroll-${gi}`}
-                className={`call-carousel-col${
-                  isFullCardPattern && uncapFullCardCallLayout ? ' call-carousel-col--full-card' : ''
-                }${isWrapStart ? ' call-carousel-col--wrap-seam' : ''}`}
-                style={colStyle}
+            {shouldScroll ? (
+              <motion.div
+                className="call-carousel-track"
+                style={trackWidthPx > 0 ? { width: trackWidthPx, minWidth: trackWidthPx } : undefined}
+                animate={{ x: colWidthPx > 0 ? xPx : 0 }}
+                transition={{ duration: animating && shouldScroll ? 1 : 0, ease: 'easeInOut' }}
+                onAnimationComplete={() => {
+                  if (shouldScroll) snapCarouselAfterForwardLoop();
+                }}
               >
-                <div
-                  className={`call-carousel-col-inner${
-                    isFullCardPattern && uncapFullCardCallLayout
-                      ? ' call-carousel-col-inner--full-card'
-                      : ''
-                  }`}
-                >
-                  {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
-                </div>
+                {historySlots.map((group, gi) => {
+                  const isWrapStart = scrollTotal > 0 && gi === scrollTotal;
+                  return (
+                    <div
+                      key={`hist-scroll-${gi}`}
+                      className={`call-carousel-col${fullCardColClass}${
+                        isWrapStart ? ' call-carousel-col--wrap-seam' : ''
+                      }`}
+                      style={colStyle}
+                    >
+                      <div className={`call-carousel-col-inner${fullCardInnerClass}`}>
+                        {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </motion.div>
+            ) : (
+              <div
+                className="call-carousel-history-static"
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${histVisible}, minmax(0, 1fr))`,
+                  height: '100%',
+                  width: '100%',
+                  minWidth: 0,
+                }}
+              >
+                {historySlots.map((group, gi) => (
+                  <div key={`hist-static-${gi}`} className={`call-carousel-col-static${fullCardColClass}`}>
+                    <div className={`call-carousel-col-inner${fullCardInnerClass}`}>
+                      {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
+                    </div>
+                  </div>
+                ))}
               </div>
-              );
-            })}
-          </motion.div>
+            )}
+          </div>
+          <div
+            className={`call-carousel-col-static call-carousel-col--freeze${fullCardColClass}`}
+            style={
+              colWidthPx > 0
+                ? { flex: `0 0 ${colWidthPx}px`, width: colWidthPx, maxWidth: colWidthPx, minWidth: 0 }
+                : { flex: '1 1 0%' }
+            }
+            aria-label="Live call column"
+          >
+            <div className={`call-carousel-col-inner${fullCardInnerClass}`}>{freezeInner}</div>
+          </div>
         </div>
       </div>
     );
