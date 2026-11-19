@@ -297,10 +297,28 @@
   flex: 1;
   min-width: 0;
   color: #e8fff4;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+button.round-planner-chip__name--peek {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+button.round-planner-chip__name--peek:hover,
+button.round-planner-chip__name--peek:focus-visible {
+  color: #00ff88;
+  text-decoration: underline;
+  outline: none;
 }
 
 .round-planner-chip__count {

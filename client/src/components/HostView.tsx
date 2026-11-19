@@ -83,6 +83,7 @@ import CustomPatternModal, {
 } from './CustomPatternModal';
 import CombinedPatternModal from './CombinedPatternModal';
 import SongAliasModal from './SongAliasModal';
+import RoundPlaylistTracksModal, { type RoundPeekTrack } from './RoundPlaylistTracksModal';
 import {
   displayTitleForSong,
   displayArtistForSong,
@@ -2008,6 +2009,14 @@ const HostView: React.FC = () => {
   
   // Song title editing
   const [showSongTitleModal, setShowSongTitleModal] = useState(false);
+  /** Round planner: peek songs for one assigned playlist (cache-first; never shelf hydrate). */
+  const [peekPlaylist, setPeekPlaylist] = useState<Playlist | null>(null);
+  const [peekTracks, setPeekTracks] = useState<RoundPeekTrack[]>([]);
+  const [peekLoading, setPeekLoading] = useState(false);
+  const [peekRefreshing, setPeekRefreshing] = useState(false);
+  const [peekError, setPeekError] = useState<string | null>(null);
+  const [peekSourceNote, setPeekSourceNote] = useState<string | null>(null);
+  const peekTracksGenRef = useRef(0);
   /** Five playlists: cross-playlist dedup leaves a column short of 15 unique tracks (precheck blocks finalize; server uses fallback). */
   const [fiveByFifteenInsufficientModal, setFiveByFifteenInsufficientModal] = useState<{
     variant: 'blocked' | 'fallback';
@@ -9173,6 +9182,114 @@ const HostView: React.FC = () => {
   const requestPoolSongsRef = useRef(requestPoolSongs);
   requestPoolSongsRef.current = requestPoolSongs;
 
+  const loadPeekPlaylistTracks = useCallback(
+    async (playlist: Playlist, opts?: { refresh?: boolean }) => {
+      const gen = ++peekTracksGenRef.current;
+      const refresh = opts?.refresh === true;
+      if (refresh) setPeekRefreshing(true);
+      else {
+        setPeekLoading(true);
+        setPeekTracks([]);
+        setPeekSourceNote(null);
+      }
+      setPeekError(null);
+
+      const finish = (tracks: RoundPeekTrack[], note: string | null, err: string | null) => {
+        if (gen !== peekTracksGenRef.current) return;
+        setPeekTracks(tracks);
+        setPeekSourceNote(note);
+        setPeekError(err);
+        setPeekLoading(false);
+        setPeekRefreshing(false);
+      };
+
+      if (isLeftoversPlaylistId(playlist.id)) {
+        const tracks = leftoverPoolSongsRef.current.map((s) => ({
+          name: s.name || 'Untitled',
+          artist: s.artist || '—',
+        }));
+        finish(tracks, tracks.length ? 'From completed-round leftovers' : null, null);
+        return;
+      }
+      if (isRequestsPlaylistId(playlist.id)) {
+        const tracks = requestPoolSongsRef.current.map((s) => ({
+          name: s.name || 'Untitled',
+          artist: s.artist || '—',
+        }));
+        finish(tracks, tracks.length ? 'Approved requests' : null, null);
+        return;
+      }
+
+      try {
+        const qs = new URLSearchParams();
+        if (playlist.name) qs.set('playlistName', playlist.name);
+        if (refresh) qs.set('refresh', '1');
+        const q = qs.toString();
+        const catalog = playlist.catalog === true;
+        const yt = playlist.youtubeMusic === true;
+        const apple = playlist.appleMusic === true;
+        const url = yt
+          ? `${API_BASE || ''}/api/youtube/music/playlist/${encodeURIComponent(playlist.id)}/items${q ? `?${q}` : ''}`
+          : apple
+            ? `${API_BASE || ''}/api/apple/music/playlist/${encodeURIComponent(playlist.id)}/tracks${q ? `?${q}` : ''}`
+            : catalog
+              ? `${API_BASE || ''}/api/spotify/catalog/playlist/${encodeURIComponent(playlist.id)}/tracks${q ? `?${q}` : ''}`
+              : `${API_BASE || ''}/api/spotify/playlist-tracks/${encodeURIComponent(playlist.id)}${q ? `?${q}` : ''}`;
+        const response = await hostFetch(url, { cache: 'no-store' });
+        let data: {
+          success?: boolean;
+          tracks?: Song[];
+          error?: string;
+          message?: string;
+          fromOrgTeammateCache?: boolean;
+          fromOrgPrepSnapshot?: boolean;
+          fromAdminHostCache?: boolean;
+          fromAdminPrepSnapshot?: boolean;
+          cacheMessage?: string;
+        } = {};
+        try {
+          data = (await response.json()) as typeof data;
+        } catch {
+          finish([], null, `Failed to load tracks (${response.status}).`);
+          return;
+        }
+        if (gen !== peekTracksGenRef.current) return;
+        if (!response.ok && !data.success) {
+          finish(
+            [],
+            null,
+            data.message || data.error || `Failed to load tracks (${response.status}).`,
+          );
+          return;
+        }
+        const tracks = (Array.isArray(data.tracks) ? data.tracks : []).map((s) => ({
+          name: (s?.name || '').trim() || 'Untitled',
+          artist: (s?.artist || '').trim() || '—',
+        }));
+        let note: string | null = null;
+        if (data.fromOrgPrepSnapshot || data.fromAdminPrepSnapshot) note = 'From prep snapshot';
+        else if (data.fromOrgTeammateCache || data.fromAdminHostCache) note = 'From host track cache';
+        else if (typeof data.cacheMessage === 'string' && data.cacheMessage.trim()) {
+          note = data.cacheMessage.trim();
+        } else if (refresh) {
+          note = yt || apple ? 'Refreshed' : 'Refreshed from Spotify';
+        }
+        finish(tracks, note, null);
+      } catch (e) {
+        finish([], null, e instanceof Error ? e.message : 'Failed to load tracks.');
+      }
+    },
+    [],
+  );
+
+  const handlePeekPlaylist = useCallback(
+    (playlist: Playlist) => {
+      setPeekPlaylist(playlist);
+      void loadPeekPlaylistTracks(playlist, { refresh: false });
+    },
+    [loadPeekPlaylistTracks],
+  );
+
   const requestsVirtualPlaylist = useMemo<Playlist>(
     () => ({
       id: REQUESTS_PLAYLIST_ID,
@@ -13312,6 +13429,7 @@ const HostView: React.FC = () => {
         poolTrackCountForRound={getBingoPoolTrackCountForRound}
         setupSurface={setupSurface}
         hideRoundPicker={setupSurface !== 'full'}
+        onPeekPlaylist={handlePeekPlaylist}
       />
     ),
     [
@@ -13353,6 +13471,7 @@ const HostView: React.FC = () => {
       getRoundStatusSummary,
       hostRoomHydrating,
       getBingoPoolTrackCountForRound,
+      handlePeekPlaylist,
     ],
   );
 
@@ -17333,6 +17452,48 @@ const HostView: React.FC = () => {
           aliasArtist={songAliases[editingSong.id]?.artist}
         />
       )}
+
+      <RoundPlaylistTracksModal
+        isOpen={!!peekPlaylist}
+        onClose={() => {
+          peekTracksGenRef.current += 1;
+          setPeekPlaylist(null);
+          setPeekTracks([]);
+          setPeekError(null);
+          setPeekSourceNote(null);
+          setPeekLoading(false);
+          setPeekRefreshing(false);
+        }}
+        playlistName={
+          peekPlaylist
+            ? playlistDisplayParts(
+                peekPlaylist.name,
+                peekPlaylist.tracksLoaded != null && peekPlaylist.tracksLoaded > 0
+                  ? peekPlaylist.tracksLoaded
+                  : peekPlaylist.tracks,
+              ).title
+            : 'Playlist'
+        }
+        tracks={peekTracks}
+        loading={peekLoading}
+        error={peekError}
+        canRefreshFromSpotify={
+          !!peekPlaylist &&
+          !peekPlaylist.youtubeMusic &&
+          !peekPlaylist.appleMusic &&
+          !isLeftoversPlaylistId(peekPlaylist.id) &&
+          !isRequestsPlaylistId(peekPlaylist.id)
+        }
+        refreshing={peekRefreshing}
+        onRefresh={
+          peekPlaylist
+            ? () => {
+                void loadPeekPlaylistTracks(peekPlaylist, { refresh: true });
+              }
+            : undefined
+        }
+        sourceNote={peekSourceNote}
+      />
 
       <HostSubmodalPortal
         isOpen={showPlayerFeedbackModal}

@@ -54,7 +54,9 @@ interface Playlist {
   /** Unique tracks loaded this session (from full playlist-tracks fetch). */
   tracksLoaded?: number;
   description?: string;
+  catalog?: boolean;
   youtubeMusic?: boolean;
+  appleMusic?: boolean;
 }
 
 export interface RoundPlannerRound {
@@ -151,6 +153,8 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   setupSurface?: 'playlists' | 'criteria' | 'full';
   /** Hide round picker tabs when an external timeline selects the round. */
   hideRoundPicker?: boolean;
+  /** Open a host-only track list peek for one assigned playlist. */
+  onPeekPlaylist?: (playlist: Playlist) => void;
 }
 
 const MAX_ROUND_BUCKETS = 12;
@@ -214,6 +218,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   hostControlsHydrating = false,
   setupSurface = 'full',
   hideRoundPicker = false,
+  onPeekPlaylist,
 }: RoundPlannerProps<TRound>) {
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [dragOverBucket, setDragOverBucket] = useState(false);
@@ -869,9 +874,23 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
                         {colLetter}
                       </span>
                     ) : null}
-                    <span className="round-planner-chip__name" title={cleanName}>
-                      {cleanName}
-                    </span>
+                    {onPeekPlaylist ? (
+                      <button
+                        type="button"
+                        className="round-planner-chip__name round-planner-chip__name--peek"
+                        title={`View songs in ${cleanName}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPeekPlaylist(playlist);
+                        }}
+                      >
+                        {cleanName}
+                      </button>
+                    ) : (
+                      <span className="round-planner-chip__name" title={cleanName}>
+                        {cleanName}
+                      </span>
+                    )}
                     {poolSize ? (
                       <span className="round-planner-chip__count" aria-label={`${poolSize} song pool`}>
                         {poolSize}+
@@ -912,7 +931,24 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
                 playlist.name,
                 trackCount,
               );
-              return (
+              return onPeekPlaylist ? (
+                <button
+                  key={playlistId}
+                  type="button"
+                  className={`round-planner-bucket__playlist-readonly-chip round-planner-bucket__playlist-readonly-chip--peek${
+                    poolSize ? ' round-planner-bucket__playlist-readonly-chip--pool' : ''
+                  }`}
+                  title={`View songs in ${cleanName}`}
+                  onClick={() => onPeekPlaylist(playlist)}
+                >
+                  {cleanName}
+                  {poolSize ? (
+                    <span className="round-planner-chip__count" aria-label={`${poolSize} song pool`}>
+                      {poolSize}+
+                    </span>
+                  ) : null}
+                </button>
+              ) : (
                 <span
                   key={playlistId}
                   className={`round-planner-bucket__playlist-readonly-chip${

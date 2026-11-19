@@ -251,6 +251,20 @@
   margin-bottom: 10px;
 }
 
+button.round-planner-bucket__playlist-readonly-chip--peek {
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+button.round-planner-bucket__playlist-readonly-chip--peek:hover,
+button.round-planner-bucket__playlist-readonly-chip--peek:focus-visible {
+  color: #00ff88;
+  outline: none;
+  border-color: rgba(0, 255, 136, 0.55);
+}
+
 .round-planner-bucket__playlist-readonly-chip {
   padding: 4px 10px;
   border-radius: 999px;
