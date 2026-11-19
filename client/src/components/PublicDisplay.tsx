@@ -1607,6 +1607,8 @@ const PublicDisplay: React.FC = () => {
   const carouselTickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Populated column bands the last time the carousel timer ran (detect 1×75 scroll-mode entry). */
   const carouselColumnCountRef = useRef(0);
+  /** After call 26, prime history so 21–25 sit in column 4 (once per freeze entry). */
+  const freezeHistoryPrimedRef = useRef(false);
   const [animating, setAnimating] = useState<boolean>(true); // kept for compatibility but no longer toggled
   const carouselViewportRef = useRef<HTMLDivElement | null>(null);
   const [viewportWidth, setViewportWidth] = useState<number>(0);
@@ -1852,6 +1854,8 @@ const PublicDisplay: React.FC = () => {
   // (does not clear played order, reveals, or pool data).
   useEffect(() => {
     setCarouselIndex(0);
+    carouselIndexRef.current = 0;
+    freezeHistoryPrimedRef.current = false;
     setPhasePx(0);
     setFreezeAll(false);
   }, [callListMode]);
@@ -2109,6 +2113,7 @@ const PublicDisplay: React.FC = () => {
       setCarouselIndex(0);
       carouselIndexRef.current = 0;
       carouselColumnCountRef.current = 0;
+      freezeHistoryPrimedRef.current = false;
       setPhasePx(0);
       setFreezeAll(false);
       setRevealLayoutNonce((n) => n + 1);
@@ -3881,6 +3886,42 @@ const PublicDisplay: React.FC = () => {
     }
     return countPlayOrderColumns(playedOrderForDisplay) > visibleCols;
   })();
+
+  // Song 26+: start history scrolled so the newest completed band (21–25) is in column 4,
+  // not still showing 1–5 on the left. Idle dwell continues from there — do not re-prime each call.
+  useEffect(() => {
+    if (columnCallListLayout) {
+      freezeHistoryPrimedRef.current = false;
+      return;
+    }
+    const playedCount = playedOrderForDisplay.length;
+    if (!oneBy75FreezeModeActive(playedCount)) {
+      freezeHistoryPrimedRef.current = false;
+      return;
+    }
+    if (freezeHistoryPrimedRef.current) return;
+    const poolLen = Math.max(
+      playedCount,
+      (oneBy75Ids || oneBy75IdsRef.current || []).length,
+      countPlayOrderColumns(playedOrderForDisplay) * ONE_BY_75_BAND_SIZE,
+    );
+    const frontier = oneBy75FrontierBandIndex(playedCount, poolLen);
+    const completedTotal = Math.min(frontier, countPlayOrderColumns(playedOrderForDisplay));
+    if (completedTotal <= ONE_BY_75_HISTORY_VISIBLE_COLS) return;
+    const startIdx = completedTotal - ONE_BY_75_HISTORY_VISIBLE_COLS;
+    freezeHistoryPrimedRef.current = true;
+    setAnimating(false);
+    setCarouselIndex(startIdx);
+    carouselIndexRef.current = startIdx;
+    requestAnimationFrame(() => setAnimating(true));
+    syncRevealStateToServer();
+  }, [
+    columnCallListLayout,
+    playedOrderForDisplay,
+    oneBy75Ids,
+    playedOrderRevision,
+    totalPlayedCount,
+  ]);
 
   /** After song 26+ (6th column), static grid swaps to scroll track — measure width once on entry. */
   useLayoutEffect(() => {
