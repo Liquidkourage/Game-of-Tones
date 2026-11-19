@@ -5458,6 +5458,9 @@ const PublicDisplay: React.FC = () => {
             }
             aria-label="Live call column"
           >
+            <div className="call-carousel-freeze-badge" aria-hidden>
+              LIVE
+            </div>
             <div className={`call-carousel-col-inner${fullCardInnerClass}`}>{freezeInner}</div>
           </div>
         </div>
