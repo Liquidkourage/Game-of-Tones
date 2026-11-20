@@ -685,6 +685,9 @@ interface Song {
    */
   albumId?: string;
   spotifyContextAlbumId?: string;
+  /** Audience requester label(s) for Requests meta-round projector copy. */
+  requestedBy?: string;
+  requestedByNames?: string[];
   /** Full YouTube `snippet.title` when loaded from Data API; finalize reconciliation uses this. */
   youtubeRawTitle?: string;
   /** Canonical title/artist from optional iTunes pass + disk cache at finalize. */
@@ -9165,19 +9168,40 @@ const HostView: React.FC = () => {
 
   /** Approved requests resolve to playable Spotify tracks and form the Requests virtual playlist. */
   const requestPoolSongs = useMemo<Song[]>(() => {
-    const seen = new Set<string>();
-    const songs: Song[] = [];
+    const byId = new Map<string, Song>();
     for (const request of songRequests) {
       if (request.status !== 'approved' || !request.resolvedSong?.id) continue;
-      if (seen.has(request.resolvedSong.id)) continue;
-      seen.add(request.resolvedSong.id);
-      songs.push({
+      const songId = request.resolvedSong.id;
+      const requester =
+        typeof request.playerName === 'string' && request.playerName.trim()
+          ? request.playerName.trim()
+          : 'Player';
+      const existing = byId.get(songId);
+      if (existing) {
+        const names = Array.isArray(existing.requestedByNames)
+          ? existing.requestedByNames.slice()
+          : existing.requestedBy
+            ? [existing.requestedBy]
+            : [];
+        if (!names.some((n) => n.toLowerCase() === requester.toLowerCase())) names.push(requester);
+        const requestedBy =
+          names.length === 1
+            ? names[0]
+            : names.length === 2
+              ? `${names[0]} & ${names[1]}`
+              : `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`;
+        byId.set(songId, { ...existing, requestedBy, requestedByNames: names });
+        continue;
+      }
+      byId.set(songId, {
         ...request.resolvedSong,
         sourcePlaylistId: REQUESTS_PLAYLIST_ID,
         sourcePlaylistName: REQUESTS_PLAYLIST_NAME,
+        requestedBy: requester,
+        requestedByNames: [requester],
       });
     }
-    return songs;
+    return Array.from(byId.values());
   }, [songRequests]);
   const requestPoolSongsRef = useRef(requestPoolSongs);
   requestPoolSongsRef.current = requestPoolSongs;

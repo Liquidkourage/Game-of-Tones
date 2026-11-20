@@ -20,6 +20,8 @@ const tipsStore = require('./tips');
 const hostRoomPrepStore = require('./hostRoomPrep');
 const orgHostSharedAssetsStore = require('./orgHostSharedAssets');
 const roomSongRequestsStore = require('./roomSongRequests');
+const songRequestArchive = require('./songRequestArchive');
+const requestCardPlacement = require('./game/requestCardPlacement');
 const hostPreferencesStore = require('./hostPreferences');
 const playersStore = require('./players');
 const playerAuth = require('./playerAuth');
@@ -1236,6 +1238,14 @@ function persistRoomSongRequests(room) {
   });
 }
 
+/** Append/update durable request log (independent of room queue clears). */
+function archiveSongRequest(room, request) {
+  if (!db || !room || !request) return;
+  void songRequestArchive.recordSongRequestReceived(db, room, request).catch((error) => {
+    console.error('archiveSongRequest failed:', error?.message || error);
+  });
+}
+
 function clearPersistedRoomSongRequests(roomId) {
   if (!roomId || !db) return;
   void roomSongRequestsStore.clearRequests(db, roomId).catch((error) => {
@@ -2310,6 +2320,7 @@ async function initializeDatabase() {
     await hostRoomPrepStore.ensureHostRoomPrepTable(db);
     await orgHostSharedAssetsStore.ensureOrgHostSharedAssetsTable(db);
     await roomSongRequestsStore.ensureRoomSongRequestsTable(db);
+    await songRequestArchive.ensureSongRequestArchiveTable(db);
     await hostPreferencesStore.ensureHostPreferencesTable(db);
     await playersStore.ensurePlayerTables(db);
     await playerAccountsStore.ensurePlayerAccountTables(db);
@@ -4668,11 +4679,16 @@ function applyLivePlaybackSettings(roomId, room, patch = {}) {
 /** Display titles for room-state: matches song-playing (host overrides + cleaned Spotify titles). */
 function clientSongMetaFromPlaylistSong(foundSong, orgId) {
   if (!foundSong) return null;
+  const requestedBy =
+    typeof foundSong.requestedBy === 'string' && foundSong.requestedBy.trim()
+      ? foundSong.requestedBy.trim().slice(0, 200)
+      : '';
   return {
     id: foundSong.id,
     name: foundSong.name,
     artist: foundSong.artist,
     ...songAliasDisplayFields(foundSong.id, foundSong.name, foundSong.artist, orgId),
+    ...(requestedBy ? { requestedBy } : {}),
   };
 }
 
@@ -4705,11 +4721,16 @@ function buildSongPlayingPayload(room, song, currentIndex) {
   const startMs = room.currentSongStartMs || 0;
   const totalSongs = Array.isArray(room.playlistSongs) ? room.playlistSongs.length : 0;
   const playedSongIds = syncCalledSongIdsFromPlaybackIndex(room);
+  const requestedBy =
+    typeof song?.requestedBy === 'string' && song.requestedBy.trim()
+      ? song.requestedBy.trim().slice(0, 200)
+      : '';
   const payload = {
     songId: song.id,
     songName: song.name,
     ...songAliasDisplayFields(song.id, song.name, song.artist, room.dbOrganizationId ?? null),
     artistName: song.artist,
+    ...(requestedBy ? { requestedBy } : {}),
     explicit: song.explicit === true,
     snippetLength: room.snippetLength,
     currentIndex,
@@ -7035,6 +7056,7 @@ io.on('connection', (socket) => {
         request,
       ].slice(-roomSongRequestsStore.MAX_ROOM_SONG_REQUESTS);
       persistRoomSongRequests(room);
+      archiveSongRequest(room, request);
       for (const [playerId, roomPlayer] of room.players) {
         if (playerId === room.host || roomPlayer?.isHost) {
           io.to(playerId).emit('song-request-updated', request);
@@ -7105,6 +7127,7 @@ io.on('connection', (socket) => {
         request,
       ].slice(-roomSongRequestsStore.MAX_ROOM_SONG_REQUESTS);
       persistRoomSongRequests(room);
+      archiveSongRequest(room, request);
       for (const [playerId, roomPlayer] of room.players) {
         if (playerId === room.host || roomPlayer?.isHost) {
           io.to(playerId).emit('song-request-updated', request);
@@ -7195,6 +7218,7 @@ io.on('connection', (socket) => {
       };
       room.songRequests = requests.map((entry, i) => (i === index ? updated : entry));
       persistRoomSongRequests(room);
+      archiveSongRequest(room, updated);
       const submitterClientId =
         typeof updated.clientId === 'string' && updated.clientId.trim()
           ? updated.clientId.trim()
@@ -10156,6 +10180,9 @@ io.on('connection', (socket) => {
           ...(typeof s.originPlaylistName === 'string' && s.originPlaylistName.trim() !== ''
             ? { originPlaylistName: s.originPlaylistName.trim() }
             : {}),
+          ...(typeof s.requestedBy === 'string' && s.requestedBy.trim()
+            ? { requestedBy: s.requestedBy.trim().slice(0, 200) }
+            : {}),
           ...((() => {
             const albumIdRaw =
               s.spotifyContextAlbumId != null
@@ -11687,8 +11714,12 @@ function applyShowPoolOrderToRoom(room, roomId, showDeck) {
   if (!room || !Array.isArray(showDeck) || showDeck.length === 0) return;
   // The Start Game deck is the round's source of truth. Never reorder it to a stale
   // finalize/card-layout cache; card generation uses the same track set.
+  const requestAttr = requestCardPlacement.buildRequestAttributionBySongId(room.songRequests);
   const normalized = normalizeShowDeckForRoom(room, showDeck).map((s) =>
-    enrichSongDurationFromRoomMeta(room, s),
+    requestCardPlacement.applyRequestAttributionToSong(
+      enrichSongDurationFromRoomMeta(room, s),
+      requestAttr,
+    ),
   );
   if (normalized.length === 0) return;
   room.finalizedSongOrder = normalized.map((s) => ({ ...s }));
@@ -11750,6 +11781,10 @@ function finalizedOrderRowPayload(s, idOverride) {
   const ctxPlRaw =
     s?.spotifyContextPlaylistId != null ? String(s.spotifyContextPlaylistId).trim() : '';
   const spotifyContextPlaylistId = /^[A-Za-z0-9]{22}$/.test(ctxPlRaw) ? ctxPlRaw : '';
+  const requestedBy =
+    typeof s?.requestedBy === 'string' && s.requestedBy.trim()
+      ? s.requestedBy.trim().slice(0, 200)
+      : '';
   return {
     id,
     name: s?.name || '',
@@ -11761,6 +11796,7 @@ function finalizedOrderRowPayload(s, idOverride) {
     sourcePlaylistName: typeof s?.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
     ...(albumId ? { albumId, spotifyContextAlbumId: albumId } : {}),
     ...(spotifyContextPlaylistId ? { spotifyContextPlaylistId } : {}),
+    ...(requestedBy ? { requestedBy } : {}),
     ...durationFieldsFromSong(s),
   };
 }
@@ -12276,26 +12312,41 @@ async function generateBingoCards(roomId, playlists, songOrder = null, options =
               solePl != null && solePl.id != null ? String(solePl.id).trim() : '';
             const solePlaylistName =
               solePl != null && typeof solePl.name === 'string' ? solePl.name : '';
-            const orderWithMeta = base.map((s) => ({
-              id: s.id,
-              name: s.name || '',
-              artist: s.artist || '',
-              explicit: s.explicit === true,
-              youtubeMusic: s.youtubeMusic === true,
-            appleMusic: s.appleMusic === true,
-              ...durationFieldsFromSong(s),
-              sourcePlaylistId:
-                s.sourcePlaylistId != null && String(s.sourcePlaylistId).trim() !== ''
-                  ? String(s.sourcePlaylistId)
-                  : solePlaylistId || undefined,
-              sourcePlaylistName:
-                typeof s.sourcePlaylistName === 'string' && s.sourcePlaylistName.trim() !== ''
-                  ? s.sourcePlaylistName
-                  : solePlaylistName || undefined,
-              ...(typeof s.originPlaylistName === 'string' && s.originPlaylistName.trim() !== ''
-                ? { originPlaylistName: s.originPlaylistName.trim() }
-                : {}),
-            }));
+            const requestAttr1x75 = requestCardPlacement.buildRequestAttributionBySongId(
+              roomRef.songRequests,
+            );
+            const orderWithMeta = base.map((s) => {
+              const attributed = requestCardPlacement.applyRequestAttributionToSong(
+                s,
+                requestAttr1x75,
+              );
+              return {
+                id: attributed.id,
+                name: attributed.name || '',
+                artist: attributed.artist || '',
+                explicit: attributed.explicit === true,
+                youtubeMusic: attributed.youtubeMusic === true,
+                appleMusic: attributed.appleMusic === true,
+                ...durationFieldsFromSong(attributed),
+                sourcePlaylistId:
+                  attributed.sourcePlaylistId != null &&
+                  String(attributed.sourcePlaylistId).trim() !== ''
+                    ? String(attributed.sourcePlaylistId)
+                    : solePlaylistId || undefined,
+                sourcePlaylistName:
+                  typeof attributed.sourcePlaylistName === 'string' &&
+                  attributed.sourcePlaylistName.trim() !== ''
+                    ? attributed.sourcePlaylistName
+                    : solePlaylistName || undefined,
+                ...(typeof attributed.originPlaylistName === 'string' &&
+                attributed.originPlaylistName.trim() !== ''
+                  ? { originPlaylistName: attributed.originPlaylistName.trim() }
+                  : {}),
+                ...(typeof attributed.requestedBy === 'string' && attributed.requestedBy.trim()
+                  ? { requestedBy: attributed.requestedBy.trim().slice(0, 200) }
+                  : {}),
+              };
+            });
             emitToHostAndDisplays(roomId, roomRef, 'finalized-order', { order: orderWithMeta });
           }
         } catch (_) {}
@@ -12415,6 +12466,17 @@ async function generateBingoCards(roomId, playlists, songOrder = null, options =
       // Build N cards for this player (dealt at start; N = room.maxPlayerBingoCards)
       const cardsToDeal = maxPlayerBingoCardsForRoom(room);
       const playerCardList = [];
+      const requestPoolById = new Map();
+      for (const pl of perListGloballyUnique) {
+        for (const s of pl.songs || []) {
+          if (s && s.id) requestPoolById.set(String(s.id), s);
+        }
+      }
+      const playerRequestSongs = requestCardPlacement.approvedRequestSongsForPlayer(
+        room.songRequests,
+        player,
+        requestPoolById,
+      );
       for (let dealIdx = 0; dealIdx < cardsToDeal; dealIdx++) {
         let pick25 = chosen25;
         if (dealIdx > 0) {
@@ -12455,6 +12517,14 @@ async function generateBingoCards(roomId, playlists, songOrder = null, options =
             if (pool.length < songsNeededPerCard) break;
             pick25 = properShuffle(pool).slice(0, songsNeededPerCard);
           }
+        }
+
+        if (playerRequestSongs.length > 0) {
+          pick25 = requestCardPlacement.ensurePlayerRequestSongsOnPick(
+            pick25,
+            playerRequestSongs,
+            songsNeededPerCard,
+          );
         }
 
         const card = {
@@ -12973,6 +13043,9 @@ function normalizeSongSnapshotForPrint(raw) {
         typeof item.originPlaylistName === 'string' && item.originPlaylistName.trim() !== ''
           ? item.originPlaylistName.trim()
           : undefined,
+      ...(typeof item.requestedBy === 'string' && item.requestedBy.trim()
+        ? { requestedBy: item.requestedBy.trim().slice(0, 200) }
+        : {}),
       ...spotifyConnectContextFieldsFromSong(item),
       ...durationFieldsFromSong(item),
       youtubeRawTitle: typeof item.youtubeRawTitle === 'string' ? item.youtubeRawTitle : undefined,
@@ -13345,6 +13418,29 @@ async function generateBingoCardForPlayer(roomId, playerId, options = {}) {
       // CRITICAL: Use completely independent shuffle for late-join bingo cards
       chosen25 = properShuffle(pool).slice(0, songsNeededPerCard);
       routineServerLog(`🎲 Generated TRULY FAIR late-join card from ${pool.length} song pool`);
+    }
+
+    const lateJoinPlayer = room.players.get(playerId);
+    const lateJoinRequestPool = new Map();
+    for (const pl of perListGloballyUnique) {
+      for (const s of pl.songs || []) {
+        if (s && s.id) lateJoinRequestPool.set(String(s.id), s);
+      }
+    }
+    for (const [, song] of songMap) {
+      if (song && song.id) lateJoinRequestPool.set(String(song.id), song);
+    }
+    const lateJoinRequestSongs = requestCardPlacement.approvedRequestSongsForPlayer(
+      room.songRequests,
+      lateJoinPlayer,
+      lateJoinRequestPool,
+    );
+    if (lateJoinRequestSongs.length > 0) {
+      chosen25 = requestCardPlacement.ensurePlayerRequestSongsOnPick(
+        chosen25,
+        lateJoinRequestSongs,
+        songsNeededPerCard,
+      );
     }
 
     const card = {

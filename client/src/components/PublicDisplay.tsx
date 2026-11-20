@@ -387,6 +387,40 @@ interface Song {
   id: string;
   name: string;
   artist: string;
+  requestedBy?: string;
+}
+
+type CallSongMeta = {
+  name: string;
+  artist: string;
+  /** Names only; UI prefixes "Requested by". */
+  requestedBy?: string;
+};
+
+function requestedByFromUnknown(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const s = raw.trim();
+  return s ? s.slice(0, 200) : undefined;
+}
+
+function writeCallSongMeta(
+  map: Record<string, CallSongMeta>,
+  id: string,
+  patch: { name?: string; artist?: string; requestedBy?: string | null },
+) {
+  if (!id) return;
+  const prev = map[id];
+  const nextRequested =
+    patch.requestedBy === null
+      ? undefined
+      : patch.requestedBy !== undefined
+        ? requestedByFromUnknown(patch.requestedBy) || undefined
+        : prev?.requestedBy;
+  map[id] = {
+    name: patch.name != null ? patch.name : prev?.name || '',
+    artist: patch.artist != null ? patch.artist : prev?.artist || '',
+    ...(nextRequested ? { requestedBy: nextRequested } : {}),
+  };
 }
 
 interface Winner {
@@ -1184,9 +1218,13 @@ const CallSongInfoFitBox: React.FC<{
         // (scrollHeight > clientHeight false-positives were shrinking short titles).
         const name = el.querySelector('.call-song-name') as HTMLElement | null;
         const artist = el.querySelector('.call-song-artist') as HTMLElement | null;
+        const requestedBy = el.querySelector('.call-song-requested-by') as HTMLElement | null;
         let contentBottom = 0;
         if (name) contentBottom = Math.max(contentBottom, name.offsetTop + name.offsetHeight);
         if (artist) contentBottom = Math.max(contentBottom, artist.offsetTop + artist.offsetHeight);
+        if (requestedBy) {
+          contentBottom = Math.max(contentBottom, requestedBy.offsetTop + requestedBy.offsetHeight);
+        }
         if (contentBottom > el.clientHeight + 2) {
           onOverflow(songId);
         }
@@ -1488,7 +1526,7 @@ const PublicDisplay: React.FC = () => {
   const playedOrderRef = useRef<string[]>([]);
   /** Bumped whenever playedOrderRef changes so call-list render stays in sync (refs alone do not re-render). */
   const [playedOrderRevision, setPlayedOrderRevision] = useState(0);
-  const idMetaRef = useRef<Record<string, { name: string; artist: string }>>({});
+  const idMetaRef = useRef<Record<string, CallSongMeta>>({});
   const currentIndexRef = useRef<number>(-1);
   const socketRef = useRef<any>(null);
   const revealSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2231,10 +2269,11 @@ const PublicDisplay: React.FC = () => {
               if (Array.isArray(payload.playedSongs)) {
                 payload.playedSongs.forEach((song: any) => {
                   if (song && typeof song === 'object' && song.id && song.name != null) {
-                    idMetaRef.current[song.id] = {
+                    writeCallSongMeta(idMetaRef.current, song.id, {
                       name: displayTitleFromSyncedSong(song),
-                      artist: song.artist || ''
-                    };
+                      artist: song.artist || '',
+                      requestedBy: requestedByFromUnknown(song.requestedBy),
+                    });
                   }
                 });
                 return payload.playedSongs
@@ -2250,7 +2289,11 @@ const PublicDisplay: React.FC = () => {
                       typeof song === 'object' && song.artist
                         ? song.artist
                         : meta?.artist || '';
-                    return { id, name, artist };
+                    const requestedBy =
+                      typeof song === 'object'
+                        ? requestedByFromUnknown(song.requestedBy) || meta?.requestedBy
+                        : meta?.requestedBy;
+                    return { id, name, artist, ...(requestedBy ? { requestedBy } : {}) };
                   })
                   .filter(Boolean) as Song[];
               }
@@ -2410,10 +2453,11 @@ const PublicDisplay: React.FC = () => {
               payload.playedSongs.forEach((song: any) => {
                 const sid = typeof song === 'string' ? song : song?.id;
                 if (sid && typeof song === 'object' && song.name != null) {
-                  idMetaRef.current[sid] = {
+                  writeCallSongMeta(idMetaRef.current, sid, {
                     name: displayTitleFromSyncedSong(song),
                     artist: song.artist || '',
-                  };
+                    requestedBy: requestedByFromUnknown(song.requestedBy),
+                  });
                 }
               });
             }
@@ -2682,10 +2726,11 @@ const PublicDisplay: React.FC = () => {
           // Preload metadata for revealed titles to avoid 'Unknown'
           if (data?.meta && typeof data.meta === 'object') {
             Object.entries(data.meta).forEach(([id, m]: any) => {
-              idMetaRef.current[id] = {
+              writeCallSongMeta(idMetaRef.current, id, {
                 name: cleanSongTitle(String(m?.name || 'Unknown')),
-                artist: m?.artist || ''
-              };
+                artist: m?.artist || '',
+                requestedBy: requestedByFromUnknown(m?.requestedBy),
+              });
             });
           }
           // Flatten for meta resolution and baseline tracking order
@@ -2834,21 +2879,28 @@ const PublicDisplay: React.FC = () => {
         artist: data.artistName,
         youtubeMusic: data.youtubeMusic === true,
       });
+      const songRequestedBy = requestedByFromUnknown(data.requestedBy);
       const song = {
         id: data.songId,
         name: data.customSongName || cleanSongTitle(ytf.title),
         artist: aliased ? String(data.customArtistName).trim() : ytf.artist,
+        ...(songRequestedBy ? { requestedBy: songRequestedBy } : {}),
       };
       // cache metadata for reveal lookups
-      idMetaRef.current[song.id] = { name: song.name, artist: song.artist };
+      writeCallSongMeta(idMetaRef.current, song.id, {
+        name: song.name,
+        artist: song.artist,
+        requestedBy: songRequestedBy,
+      });
       if (Array.isArray(data.playedSongs)) {
         data.playedSongs.forEach((entry: any) => {
           const sid = typeof entry === 'string' ? entry : entry?.id;
           if (sid && typeof entry === 'object' && entry.name != null) {
-            idMetaRef.current[sid] = {
+            writeCallSongMeta(idMetaRef.current, sid, {
               name: displayTitleFromSyncedSong(entry),
               artist: entry.artist || '',
-            };
+              requestedBy: requestedByFromUnknown(entry.requestedBy),
+            });
           }
         });
       }
@@ -4392,7 +4444,7 @@ const PublicDisplay: React.FC = () => {
     isFullCardPattern: boolean;
     layout: '5x15' | 'carousel';
     rowPx: number;
-    meta: { name: string; artist: string };
+    meta: CallSongMeta;
     isCurrent: boolean;
     recencyClass: string;
     recencyStyle?: React.CSSProperties;
@@ -4414,6 +4466,7 @@ const PublicDisplay: React.FC = () => {
     const typo = typographyForCallCard(songId, meta, isFullCardPattern, layout);
     const uncapThisCard = isFullCardPattern && uncapFullCardCallLayout;
     const hasArtist = !!meta.artist?.trim();
+    const requestedByLabel = meta.requestedBy?.trim() || '';
     const { title, artist } = renderCallSongLines(songId, meta, (t, s, h, weight) =>
       renderMaskedText(t, s, h, typo.letterBoxScale, weight),
     );
@@ -4499,6 +4552,38 @@ const PublicDisplay: React.FC = () => {
                 {artist}
               </motion.div>
             </AnimatePresence>
+          ) : null}
+          {requestedByLabel ? (
+            <motion.div
+              key={requestedByLabel + '-r' + motionKeySuffix}
+              initial={{ opacity: 0, y: 3 }}
+              animate={{ opacity: 0.78, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className="call-song-requested-by"
+              style={{
+                marginTop: isFullCardPattern ? 4 : 6,
+                fontFamily: PUBLIC_DISPLAY_CALL_ARTIST_FONT_FAMILY,
+                fontWeight: 600,
+                fontSize: `${Math.max(
+                  11,
+                  Math.round(
+                    (resolveCallCardFontSizes({
+                      textScale: typo.textScale,
+                      artistTextScale: typo.artistTextScale,
+                      hostZoom,
+                    }).artistPx || 16) * 0.72,
+                  ),
+                )}px`,
+                lineHeight: 1.2,
+                color: '#c8c8c8',
+                textShadow: '0 1px 3px rgba(0,0,0,0.55)',
+                whiteSpace: 'normal',
+                wordBreak: 'normal',
+                overflowWrap: 'normal',
+              }}
+            >
+              {`Requested by ${requestedByLabel}`}
+            </motion.div>
           ) : null}
         </CallSongInfoFitBox>
       </motion.div>
