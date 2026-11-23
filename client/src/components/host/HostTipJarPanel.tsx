@@ -10,6 +10,14 @@ export type HostTipJarLinks = {
   otherLabel?: string;
 };
 
+export type HostCommunityChestConfig = {
+  enabled: boolean;
+  displayName?: string;
+  blurb?: string;
+  kofiUrl?: string;
+  membershipUrl?: string;
+};
+
 export type HostTipJarConfig = {
   enabled: boolean;
   displayName?: string;
@@ -20,6 +28,15 @@ export type HostTipJarConfig = {
   links: HostTipJarLinks;
   stripeConnectAccountId?: string;
   stripeConnectChargesEnabled?: boolean;
+  communityChest?: HostCommunityChestConfig;
+};
+
+const DEFAULT_COMMUNITY_CHEST: HostCommunityChestConfig = {
+  enabled: false,
+  displayName: 'Kommunity Chest',
+  blurb: 'Donations help community members in need — not a tip to the host.',
+  kofiUrl: 'https://ko-fi.com/kommunitychest',
+  membershipUrl: '',
 };
 
 const DEFAULT_TIP_JAR: HostTipJarConfig = {
@@ -29,7 +46,28 @@ const DEFAULT_TIP_JAR: HostTipJarConfig = {
   presetCents: [300, 500, 1000],
   allowCustomAmount: true,
   links: {},
+  communityChest: { ...DEFAULT_COMMUNITY_CHEST },
 };
+
+function normalizeCommunityChest(raw: unknown): HostCommunityChestConfig {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return {
+    enabled: o.enabled === true,
+    displayName:
+      typeof o.displayName === 'string' && o.displayName.trim()
+        ? o.displayName.trim()
+        : DEFAULT_COMMUNITY_CHEST.displayName,
+    blurb:
+      typeof o.blurb === 'string' && o.blurb.trim()
+        ? o.blurb.trim()
+        : DEFAULT_COMMUNITY_CHEST.blurb,
+    kofiUrl:
+      typeof o.kofiUrl === 'string' && o.kofiUrl.trim()
+        ? o.kofiUrl.trim()
+        : DEFAULT_COMMUNITY_CHEST.kofiUrl,
+    membershipUrl: typeof o.membershipUrl === 'string' ? o.membershipUrl.trim() : '',
+  };
+}
 
 function centsToDollarsLabel(cents: number): string {
   return `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
@@ -67,6 +105,7 @@ const HostTipJarPanel: React.FC<HostTipJarPanelProps> = ({ className }) => {
         links: tj.links && typeof tj.links === 'object' ? tj.links : {},
         stripeConnectAccountId: tj.stripeConnectAccountId,
         stripeConnectChargesEnabled: tj.stripeConnectChargesEnabled === true,
+        communityChest: normalizeCommunityChest(tj.communityChest),
       });
       setPresetsText(
         (Array.isArray(tj.presetCents) ? tj.presetCents : [300, 500, 1000])
@@ -131,10 +170,22 @@ const HostTipJarPanel: React.FC<HostTipJarPanelProps> = ({ className }) => {
         links: savedLinks,
         stripeConnectAccountId: tj.stripeConnectAccountId,
         stripeConnectChargesEnabled: tj.stripeConnectChargesEnabled === true,
+        communityChest: normalizeCommunityChest(tj.communityChest ?? body.communityChest),
       });
       if (dropped.length) {
         setError(
           `${dropped.join(', ')} link was not saved — use a full URL (e.g. https://venmo.com/YourName) or just your handle.`,
+        );
+      }
+      const wantedKofi = String(tipJar.communityChest?.kofiUrl || '').trim();
+      const savedKofi = String(
+        (tj.communityChest && typeof tj.communityChest === 'object'
+          ? (tj.communityChest as HostCommunityChestConfig).kofiUrl
+          : '') || '',
+      ).trim();
+      if (tipJar.communityChest?.enabled && wantedKofi && !savedKofi) {
+        setError(
+          'Kommunity Chest Ko-fi URL was not saved — use https://ko-fi.com/yourpage (or just the page name).',
         );
       }
     } catch (e) {
@@ -174,6 +225,20 @@ const HostTipJarPanel: React.FC<HostTipJarPanelProps> = ({ className }) => {
     setTipJar((prev) => ({
       ...prev,
       links: { ...prev.links, [key]: value },
+    }));
+  };
+
+  const setCommunityChest = <K extends keyof HostCommunityChestConfig>(
+    key: K,
+    value: HostCommunityChestConfig[K],
+  ) => {
+    setTipJar((prev) => ({
+      ...prev,
+      communityChest: {
+        ...DEFAULT_COMMUNITY_CHEST,
+        ...(prev.communityChest || {}),
+        [key]: value,
+      },
     }));
   };
 
@@ -306,6 +371,96 @@ const HostTipJarPanel: React.FC<HostTipJarPanelProps> = ({ className }) => {
           maxLength={40}
           style={{ width: '100%' }}
         />
+      </div>
+
+      <div
+        style={{
+          marginBottom: 14,
+          padding: '10px 12px',
+          borderRadius: 8,
+          border: '1px solid rgba(255,255,255,0.12)',
+          background: 'rgba(0,0,0,0.25)',
+          maxWidth: 420,
+        }}
+      >
+        <div style={{ color: '#c8d8d0', fontSize: '0.85rem', marginBottom: 8 }}>
+          Kommunity Chest (community)
+        </div>
+        <p className="host-muted" style={{ margin: '0 0 10px', fontSize: '0.8rem' }}>
+          Always-on community donate via Ko-fi — separate from tips to you. Monthly memberships are
+          set up on Ko-fi; Tempo opens your page.
+        </p>
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 10,
+            color: '#e8e8e8',
+            fontSize: '0.85rem',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={tipJar.communityChest?.enabled === true}
+            onChange={(e) => setCommunityChest('enabled', e.target.checked)}
+          />
+          Show Kommunity Chest to players
+        </label>
+        <label className="host-field" style={{ display: 'block', marginBottom: 8 }}>
+          <span className="host-muted" style={{ display: 'block', marginBottom: 4 }}>
+            Display name
+          </span>
+          <input
+            type="text"
+            value={tipJar.communityChest?.displayName || ''}
+            onChange={(e) => setCommunityChest('displayName', e.target.value)}
+            placeholder="Kommunity Chest"
+            maxLength={60}
+            style={{ width: '100%' }}
+          />
+        </label>
+        <label className="host-field" style={{ display: 'block', marginBottom: 8 }}>
+          <span className="host-muted" style={{ display: 'block', marginBottom: 4 }}>
+            Short blurb
+          </span>
+          <input
+            type="text"
+            value={tipJar.communityChest?.blurb || ''}
+            onChange={(e) => setCommunityChest('blurb', e.target.value)}
+            placeholder="Donations help community members in need…"
+            maxLength={160}
+            style={{ width: '100%' }}
+          />
+        </label>
+        <label className="host-field" style={{ display: 'block', marginBottom: 8 }}>
+          <span className="host-muted" style={{ display: 'block', marginBottom: 4 }}>
+            Ko-fi page (one-time donate)
+          </span>
+          <input
+            type="text"
+            inputMode="url"
+            autoComplete="url"
+            value={tipJar.communityChest?.kofiUrl || ''}
+            onChange={(e) => setCommunityChest('kofiUrl', e.target.value)}
+            placeholder="https://ko-fi.com/kommunitychest"
+            style={{ width: '100%' }}
+          />
+        </label>
+        <label className="host-field" style={{ display: 'block', marginBottom: 0 }}>
+          <span className="host-muted" style={{ display: 'block', marginBottom: 4 }}>
+            Monthly / membership URL (optional — defaults to Ko-fi page)
+          </span>
+          <input
+            type="text"
+            inputMode="url"
+            autoComplete="url"
+            value={tipJar.communityChest?.membershipUrl || ''}
+            onChange={(e) => setCommunityChest('membershipUrl', e.target.value)}
+            placeholder="https://ko-fi.com/kommunitychest (or membership link)"
+            style={{ width: '100%' }}
+          />
+        </label>
       </div>
 
       <div

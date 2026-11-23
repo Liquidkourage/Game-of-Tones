@@ -175,6 +175,39 @@ export function tipRailHref(
   return raw;
 }
 
+const DEFAULT_KOFI_COMMUNITY_URL = 'https://ko-fi.com/kommunitychest';
+
+/** Normalize a Ko-fi page URL or slug for Kommunity Chest deep links. */
+export function normalizeKofiUrl(saved: string | undefined): string | null {
+  const t = String(saved || '').trim();
+  if (!t) return null;
+  if (/^[A-Za-z0-9_-]{2,40}$/.test(t)) return `https://ko-fi.com/${t}`;
+  try {
+    const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(t)
+      ? t
+      : t.startsWith('www.') || /^ko-fi\.com\//i.test(t)
+        ? `https://${t.replace(/^www\./i, '')}`
+        : t;
+    const u = new URL(withScheme);
+    const host = u.hostname.replace(/^www\./i, '').toLowerCase();
+    if (host !== 'ko-fi.com') return null;
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+
+export function communityChestOneTimeHref(kofiUrl: string | undefined): string {
+  return normalizeKofiUrl(kofiUrl) || DEFAULT_KOFI_COMMUNITY_URL;
+}
+
+export function communityChestMonthlyHref(
+  membershipUrl: string | undefined,
+  kofiUrl: string | undefined,
+): string {
+  return normalizeKofiUrl(membershipUrl) || communityChestOneTimeHref(kofiUrl);
+}
+
 /**
  * Copy @handle (for To), then open Venmo with amount + note prefilled.
  * Returns the handle string when clipboard write was attempted.

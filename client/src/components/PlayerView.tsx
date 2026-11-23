@@ -31,7 +31,13 @@ import { youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import { patchSquaresWithAlias, patchSquaresClearAlias } from '../utils/songAliasDisplay';
 import { softHyphenateLongWords, stripSoftHyphens } from '../utils/softHyphenateLongWords';
 import { playerCardTitleCollisionPositions } from '../utils/playerCardTitleCollisions';
-import { extractVenmoUsername, openVenmoTip, tipRailHref } from '../utils/tipDeepLinks';
+import {
+  communityChestMonthlyHref,
+  communityChestOneTimeHref,
+  extractVenmoUsername,
+  openVenmoTip,
+  tipRailHref,
+} from '../utils/tipDeepLinks';
 import {
   STANDARD_BINGO_POSITIONS,
   validateBingoCardGrid,
@@ -106,6 +112,14 @@ interface VenueBranding {
 }
 
 /** Player-safe tip jar from room-state (no Connect account id). */
+type PlayerCommunityChest = {
+  enabled: true;
+  displayName: string;
+  blurb: string;
+  kofiUrl: string;
+  membershipUrl?: string;
+};
+
 type PlayerTipJar = {
   enabled: boolean;
   displayName: string;
@@ -120,7 +134,33 @@ type PlayerTipJar = {
     otherUrl?: string;
     otherLabel?: string;
   };
+  communityChest?: PlayerCommunityChest;
 };
+
+function normalizePlayerCommunityChest(raw: unknown): PlayerCommunityChest | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if (o.enabled !== true) return null;
+  const kofiUrl = typeof o.kofiUrl === 'string' ? o.kofiUrl.trim() : '';
+  if (!kofiUrl) return null;
+  const membershipUrl =
+    typeof o.membershipUrl === 'string' && o.membershipUrl.trim()
+      ? o.membershipUrl.trim()
+      : undefined;
+  return {
+    enabled: true,
+    displayName:
+      typeof o.displayName === 'string' && o.displayName.trim()
+        ? o.displayName.trim()
+        : 'Kommunity Chest',
+    blurb:
+      typeof o.blurb === 'string' && o.blurb.trim()
+        ? o.blurb.trim().slice(0, 160)
+        : 'Donations help community members in need — not a tip to the host.',
+    kofiUrl,
+    ...(membershipUrl ? { membershipUrl } : {}),
+  };
+}
 
 function normalizePlayerTipJar(raw: unknown): PlayerTipJar | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -140,7 +180,8 @@ function normalizePlayerTipJar(raw: unknown): PlayerTipJar | null {
     : [300, 500, 1000];
   const cardTipsEnabled = o.cardTipsEnabled === true;
   const hasLinks = !!(links.venmo || links.cashapp || links.paypal || links.otherUrl);
-  if (!cardTipsEnabled && !hasLinks) return null;
+  const communityChest = normalizePlayerCommunityChest(o.communityChest);
+  if (!cardTipsEnabled && !hasLinks && !communityChest) return null;
   return {
     enabled: true,
     displayName:
@@ -155,6 +196,7 @@ function normalizePlayerTipJar(raw: unknown): PlayerTipJar | null {
     allowCustomAmount: o.allowCustomAmount !== false,
     cardTipsEnabled,
     links,
+    ...(communityChest ? { communityChest } : {}),
   };
 }
 
@@ -3128,233 +3170,319 @@ const PlayerView: React.FC = () => {
                   ) : null}
                 </div>
 
-                {tipJar ? (
-                  <div className={`player-v2-sheet-row${tipOpen ? ' player-v2-sheet-row--stacked' : ''}`}>
-                    <div className="player-v2-sheet-copy">
-                      <div className="player-v2-sheet-label">{tipJar.displayName}</div>
-                      <div className="player-v2-sheet-note">
-                        Support the host — card or quick link.
-                      </div>
-                    </div>
-                    {!tipOpen ? (
-                      <button
-                        type="button"
-                        className="player-v2-inline-button player-v2-feedback-open"
-                        onClick={() => {
-                          setTipOpen(true);
-                          setTipStatus('idle');
-                          setTipError('');
-                          setTipAmountCents(tipJar.presetCents[0] || 500);
-                        }}
-                      >
-                        Tip
-                      </button>
-                    ) : (
-                      <div className="player-v2-feedback-form">
-                        <div
-                          style={{
-                            display: 'flex',
-                            flexWrap: 'wrap',
-                            gap: 8,
-                            marginBottom: 8,
-                          }}
-                        >
-                          {tipJar.presetCents.map((cents) => (
-                            <button
-                              key={cents}
-                              type="button"
-                              className="player-v2-inline-button"
-                              style={{
-                                opacity: tipAmountCents === cents ? 1 : 0.7,
-                                borderColor:
-                                  tipAmountCents === cents
-                                    ? 'rgba(0,255,136,0.55)'
-                                    : undefined,
-                              }}
-                              onClick={() => {
-                                setTipAmountCents(cents);
-                                setTipCustomDollars('');
-                              }}
+                {tipJar
+                  ? (() => {
+                      const hasHostTips =
+                        tipJar.cardTipsEnabled ||
+                        !!(
+                          tipJar.links.venmo ||
+                          tipJar.links.cashapp ||
+                          tipJar.links.paypal ||
+                          tipJar.links.otherUrl
+                        );
+                      const chest = tipJar.communityChest;
+                      return (
+                        <>
+                          {hasHostTips ? (
+                            <div
+                              className={`player-v2-sheet-row${tipOpen ? ' player-v2-sheet-row--stacked' : ''}`}
                             >
-                              ${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}
-                            </button>
-                          ))}
-                        </div>
-                        {tipJar.allowCustomAmount ? (
-                          <input
-                            className="player-v2-feedback-input"
-                            style={{ minHeight: 44, resize: 'none', marginBottom: 8 }}
-                            inputMode="decimal"
-                            placeholder="Custom $"
-                            aria-label="Custom tip amount in dollars"
-                            value={tipCustomDollars}
-                            onChange={(e) => {
-                              setTipCustomDollars(e.target.value);
-                              const n = Math.round(Number(e.target.value) * 100);
-                              if (Number.isFinite(n) && n >= 100) setTipAmountCents(n);
-                            }}
-                          />
-                        ) : null}
-                        {tipJar.cardTipsEnabled ? (
-                          <button
-                            type="button"
-                            className="player-v2-inline-button player-v2-feedback-submit"
-                            disabled={tipStatus === 'checkout'}
-                            onClick={() => {
-                              void (async () => {
-                                setTipStatus('checkout');
-                                setTipError('');
-                                try {
-                                  const res = await fetch(
-                                    `${API_BASE || ''}/api/rooms/${encodeURIComponent(String(roomId || ''))}/tips/checkout`,
-                                    {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({
-                                        amountCents: tipAmountCents,
-                                        playerName: playerName || '',
-                                        playerId: clientId || '',
-                                      }),
-                                    },
-                                  );
-                                  const data = await res.json().catch(() => ({}));
-                                  if (!res.ok || !data?.url) {
-                                    throw new Error(
-                                      data?.message || data?.error || 'Could not start checkout',
+                              <div className="player-v2-sheet-copy">
+                                <div className="player-v2-sheet-label">{tipJar.displayName}</div>
+                                <div className="player-v2-sheet-note">
+                                  Support the host — card or quick link.
+                                </div>
+                              </div>
+                              {!tipOpen ? (
+                                <button
+                                  type="button"
+                                  className="player-v2-inline-button player-v2-feedback-open"
+                                  onClick={() => {
+                                    setTipOpen(true);
+                                    setTipStatus('idle');
+                                    setTipError('');
+                                    setTipAmountCents(tipJar.presetCents[0] || 500);
+                                  }}
+                                >
+                                  Tip
+                                </button>
+                              ) : (
+                                <div className="player-v2-feedback-form">
+                                  <div
+                                    style={{
+                                      display: 'flex',
+                                      flexWrap: 'wrap',
+                                      gap: 8,
+                                      marginBottom: 8,
+                                    }}
+                                  >
+                                    {tipJar.presetCents.map((cents) => (
+                                      <button
+                                        key={cents}
+                                        type="button"
+                                        className="player-v2-inline-button"
+                                        style={{
+                                          minHeight: 44,
+                                          opacity: tipAmountCents === cents ? 1 : 0.7,
+                                          borderColor:
+                                            tipAmountCents === cents
+                                              ? 'rgba(0,255,136,0.55)'
+                                              : undefined,
+                                        }}
+                                        onClick={() => {
+                                          setTipAmountCents(cents);
+                                          setTipCustomDollars('');
+                                        }}
+                                      >
+                                        ${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  {tipJar.allowCustomAmount ? (
+                                    <input
+                                      className="player-v2-feedback-input"
+                                      style={{ minHeight: 44, resize: 'none', marginBottom: 8 }}
+                                      inputMode="decimal"
+                                      placeholder="Custom $"
+                                      aria-label="Custom tip amount in dollars"
+                                      value={tipCustomDollars}
+                                      onChange={(e) => {
+                                        setTipCustomDollars(e.target.value);
+                                        const n = Math.round(Number(e.target.value) * 100);
+                                        if (Number.isFinite(n) && n >= 100) setTipAmountCents(n);
+                                      }}
+                                    />
+                                  ) : null}
+                                  {tipJar.cardTipsEnabled ? (
+                                    <button
+                                      type="button"
+                                      className="player-v2-inline-button player-v2-feedback-submit"
+                                      disabled={tipStatus === 'checkout'}
+                                      style={{ minHeight: 44 }}
+                                      onClick={() => {
+                                        void (async () => {
+                                          setTipStatus('checkout');
+                                          setTipError('');
+                                          try {
+                                            const res = await fetch(
+                                              `${API_BASE || ''}/api/rooms/${encodeURIComponent(String(roomId || ''))}/tips/checkout`,
+                                              {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                  amountCents: tipAmountCents,
+                                                  playerName: playerName || '',
+                                                  playerId: clientId || '',
+                                                }),
+                                              },
+                                            );
+                                            const data = await res.json().catch(() => ({}));
+                                            if (!res.ok || !data?.url) {
+                                              throw new Error(
+                                                data?.message ||
+                                                  data?.error ||
+                                                  'Could not start checkout',
+                                              );
+                                            }
+                                            window.location.href = data.url;
+                                          } catch (e) {
+                                            setTipStatus('error');
+                                            setTipError(
+                                              e instanceof Error ? e.message : 'Checkout failed',
+                                            );
+                                          }
+                                        })();
+                                      }}
+                                    >
+                                      {tipStatus === 'checkout' ? 'Opening…' : 'Pay with card'}
+                                    </button>
+                                  ) : null}
+                                  {(() => {
+                                    const tipNote = tipJar.deepLinkNote || 'Tempo tip';
+                                    const venmoSaved = tipJar.links.venmo;
+                                    const venmoUser = venmoSaved
+                                      ? extractVenmoUsername(venmoSaved)
+                                      : null;
+                                    const venmoHref = tipRailHref(
+                                      'venmo',
+                                      venmoSaved,
+                                      tipAmountCents,
+                                      tipNote,
                                     );
-                                  }
-                                  window.location.href = data.url;
-                                } catch (e) {
-                                  setTipStatus('error');
-                                  setTipError(
-                                    e instanceof Error ? e.message : 'Checkout failed',
-                                  );
-                                }
-                              })();
-                            }}
-                          >
-                            {tipStatus === 'checkout' ? 'Opening…' : 'Pay with card'}
-                          </button>
-                        ) : null}
-                        {(() => {
-                          const tipNote = tipJar.deepLinkNote || 'Tempo tip';
-                          const venmoSaved = tipJar.links.venmo;
-                          const venmoUser = venmoSaved ? extractVenmoUsername(venmoSaved) : null;
-                          const venmoHref = tipRailHref(
-                            'venmo',
-                            venmoSaved,
-                            tipAmountCents,
-                            tipNote,
-                          );
-                          const cashHref = tipRailHref('cashapp', tipJar.links.cashapp, tipAmountCents);
-                          const paypalHref = tipRailHref('paypal', tipJar.links.paypal, tipAmountCents);
-                          const otherHref = tipRailHref('other', tipJar.links.otherUrl, tipAmountCents);
-                          const amountLabel = `$${(tipAmountCents / 100).toFixed(
-                            tipAmountCents % 100 === 0 ? 0 : 2,
-                          )}`;
-                          const hasAppLinks = !!(venmoHref || cashHref || paypalHref || otherHref);
-                          if (!hasAppLinks) return null;
-                          return (
-                            <div style={{ marginTop: 8 }}>
-                              <div
-                                className="player-v2-sheet-note"
-                                style={{ marginBottom: 6 }}
-                              >
-                                Opens with {amountLabel} when the app supports it.
-                                {venmoUser
-                                  ? ' Venmo leaves To blank — we copy the @handle for you to paste.'
-                                  : ''}
+                                    const cashHref = tipRailHref(
+                                      'cashapp',
+                                      tipJar.links.cashapp,
+                                      tipAmountCents,
+                                    );
+                                    const paypalHref = tipRailHref(
+                                      'paypal',
+                                      tipJar.links.paypal,
+                                      tipAmountCents,
+                                    );
+                                    const otherHref = tipRailHref(
+                                      'other',
+                                      tipJar.links.otherUrl,
+                                      tipAmountCents,
+                                    );
+                                    const amountLabel = `$${(tipAmountCents / 100).toFixed(
+                                      tipAmountCents % 100 === 0 ? 0 : 2,
+                                    )}`;
+                                    const hasAppLinks = !!(
+                                      venmoHref ||
+                                      cashHref ||
+                                      paypalHref ||
+                                      otherHref
+                                    );
+                                    if (!hasAppLinks) return null;
+                                    return (
+                                      <div style={{ marginTop: 8 }}>
+                                        <div
+                                          className="player-v2-sheet-note"
+                                          style={{ marginBottom: 6 }}
+                                        >
+                                          Opens with {amountLabel} when the app supports it.
+                                          {venmoUser
+                                            ? ' Venmo leaves To blank — we copy the @handle for you to paste.'
+                                            : ''}
+                                        </div>
+                                        <div
+                                          style={{
+                                            display: 'flex',
+                                            flexWrap: 'wrap',
+                                            gap: 8,
+                                          }}
+                                        >
+                                          {venmoHref ? (
+                                            <a
+                                              className="player-v2-inline-button"
+                                              href={venmoHref}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              style={{ minHeight: 44 }}
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                void (async () => {
+                                                  const { handle } = await openVenmoTip(
+                                                    venmoSaved,
+                                                    tipAmountCents,
+                                                    tipNote,
+                                                  );
+                                                  if (handle) {
+                                                    setTipVenmoHandle(handle);
+                                                    setTipStatus('venmo-copied');
+                                                  }
+                                                })();
+                                              }}
+                                            >
+                                              Venmo {amountLabel}
+                                            </a>
+                                          ) : null}
+                                          {cashHref ? (
+                                            <a
+                                              className="player-v2-inline-button"
+                                              href={cashHref}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              style={{ minHeight: 44 }}
+                                            >
+                                              Cash App {amountLabel}
+                                            </a>
+                                          ) : null}
+                                          {paypalHref ? (
+                                            <a
+                                              className="player-v2-inline-button"
+                                              href={paypalHref}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              style={{ minHeight: 44 }}
+                                            >
+                                              PayPal {amountLabel}
+                                            </a>
+                                          ) : null}
+                                          {otherHref ? (
+                                            <a
+                                              className="player-v2-inline-button"
+                                              href={otherHref}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              style={{ minHeight: 44 }}
+                                            >
+                                              {tipJar.links.otherLabel || 'Tip link'}
+                                            </a>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+                                  {tipStatus === 'venmo-copied' && tipVenmoHandle ? (
+                                    <span className="player-v2-feedback-status" role="status">
+                                      Copied {tipVenmoHandle} — paste into Venmo’s To field.
+                                    </span>
+                                  ) : null}
+                                  {tipStatus === 'error' ? (
+                                    <span
+                                      className="player-v2-feedback-status player-v2-feedback-status--error"
+                                      role="status"
+                                    >
+                                      {tipError || 'Could not tip right now.'}
+                                    </span>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    className="player-v2-inline-button"
+                                    style={{ marginTop: 8, minHeight: 44 }}
+                                    onClick={() => setTipOpen(false)}
+                                  >
+                                    Close
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+
+                          {chest ? (
+                            <div className="player-v2-sheet-row player-v2-sheet-row--stacked">
+                              <div className="player-v2-sheet-copy">
+                                <div className="player-v2-sheet-label">{chest.displayName}</div>
+                                <div className="player-v2-sheet-note">{chest.blurb}</div>
                               </div>
                               <div
+                                className="player-v2-feedback-form"
                                 style={{
                                   display: 'flex',
                                   flexWrap: 'wrap',
                                   gap: 8,
+                                  width: '100%',
                                 }}
                               >
-                                {venmoHref ? (
-                                  <a
-                                    className="player-v2-inline-button"
-                                    href={venmoHref}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      void (async () => {
-                                        const { handle } = await openVenmoTip(
-                                          venmoSaved,
-                                          tipAmountCents,
-                                          tipNote,
-                                        );
-                                        if (handle) {
-                                          setTipVenmoHandle(handle);
-                                          setTipStatus('venmo-copied');
-                                        }
-                                      })();
-                                    }}
-                                  >
-                                    Venmo {amountLabel}
-                                  </a>
-                                ) : null}
-                                {cashHref ? (
-                                  <a
-                                    className="player-v2-inline-button"
-                                    href={cashHref}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    Cash App {amountLabel}
-                                  </a>
-                                ) : null}
-                                {paypalHref ? (
-                                  <a
-                                    className="player-v2-inline-button"
-                                    href={paypalHref}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    PayPal {amountLabel}
-                                  </a>
-                                ) : null}
-                                {otherHref ? (
-                                  <a
-                                    className="player-v2-inline-button"
-                                    href={otherHref}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    {tipJar.links.otherLabel || 'Tip link'}
-                                  </a>
-                                ) : null}
+                                <a
+                                  className="player-v2-inline-button player-v2-feedback-submit"
+                                  href={communityChestOneTimeHref(chest.kofiUrl)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ minHeight: 44, flex: '1 1 140px', textAlign: 'center' }}
+                                >
+                                  Donate once
+                                </a>
+                                <a
+                                  className="player-v2-inline-button"
+                                  href={communityChestMonthlyHref(
+                                    chest.membershipUrl,
+                                    chest.kofiUrl,
+                                  )}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ minHeight: 44, flex: '1 1 140px', textAlign: 'center' }}
+                                >
+                                  Join monthly
+                                </a>
                               </div>
                             </div>
-                          );
-                        })()}
-                        {tipStatus === 'venmo-copied' && tipVenmoHandle ? (
-                          <span className="player-v2-feedback-status" role="status">
-                            Copied {tipVenmoHandle} — paste into Venmo’s To field.
-                          </span>
-                        ) : null}
-                        {tipStatus === 'error' ? (
-                          <span
-                            className="player-v2-feedback-status player-v2-feedback-status--error"
-                            role="status"
-                          >
-                            {tipError || 'Could not tip right now.'}
-                          </span>
-                        ) : null}
-                        <button
-                          type="button"
-                          className="player-v2-inline-button"
-                          style={{ marginTop: 8 }}
-                          onClick={() => setTipOpen(false)}
-                        >
-                          Close
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ) : null}
+                          ) : null}
+                        </>
+                      );
+                    })()
+                  : null}
 
                 <div className={`player-v2-sheet-row${requestOpen ? ' player-v2-sheet-row--stacked' : ''}`}>
                   <div className="player-v2-sheet-copy">

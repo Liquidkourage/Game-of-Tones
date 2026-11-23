@@ -572,8 +572,13 @@ function sanitizeVenueSettings(raw) {
     defaultSnippetLength: dsl,
     volumeCap: vc,
   };
-  // Keep tip jar even when disabled so Connect account id survives venue branding edits.
-  if (o.tipJar != null || tipJar.stripeConnectAccountId || tipJar.enabled) {
+  // Keep tip jar even when disabled so Connect account id / Kommunity Chest survive venue branding edits.
+  if (
+    o.tipJar != null ||
+    tipJar.stripeConnectAccountId ||
+    tipJar.enabled ||
+    (tipJar.communityChest && tipJar.communityChest.enabled)
+  ) {
     out.tipJar = tipJar;
   }
   return out;

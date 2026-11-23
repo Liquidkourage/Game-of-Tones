@@ -57,12 +57,57 @@ function normalizeTipLinkInput(s, rail) {
   if (rail === 'paypal' && /^@?[A-Za-z0-9._-]{3,30}$/.test(t)) {
     return `https://paypal.me/${t.replace(/^@/, '')}`;
   }
+  if (rail === 'kofi') {
+    // Bare Ko-fi page slug (e.g. kommunitychest)
+    if (/^[A-Za-z0-9_-]{2,40}$/.test(t)) {
+      return `https://ko-fi.com/${t}`;
+    }
+    if (/^ko-fi\.com\/[A-Za-z0-9_./?#&=%-]+$/i.test(t) || /^www\.ko-fi\.com\//i.test(t)) {
+      return `https://${t.replace(/^www\./i, '')}`;
+    }
+  }
 
   // Bare domain / path (e.g. venmo.com/LiquidKourage) → https
   if (/^[a-z0-9.-]+\.[a-z]{2,}([/?#].*)?$/i.test(t) || t.startsWith('www.')) {
     return `https://${t}`;
   }
   return t;
+}
+
+/** Prefer https://ko-fi.com/... pages for Kommunity Chest deep links. */
+function sanitizeKofiUrl(s, maxLen = 500) {
+  const href = sanitizeTipLink(s, maxLen, 'kofi');
+  if (!href) return '';
+  try {
+    const u = new URL(href);
+    const host = u.hostname.replace(/^www\./i, '').toLowerCase();
+    if (host !== 'ko-fi.com') return '';
+    return u.href.slice(0, maxLen);
+  } catch {
+    return '';
+  }
+}
+
+const DEFAULT_COMMUNITY_CHEST_URL = 'https://ko-fi.com/kommunitychest';
+
+function sanitizeCommunityChest(raw) {
+  if (raw == null) return undefined;
+  const o = typeof raw === 'object' ? raw : {};
+  let kofiUrl = sanitizeKofiUrl(o.kofiUrl || o.url || '');
+  if (!kofiUrl && o.enabled === true) kofiUrl = DEFAULT_COMMUNITY_CHEST_URL;
+  const membershipUrl = sanitizeKofiUrl(o.membershipUrl || '') || undefined;
+  const enabled = o.enabled === true && Boolean(kofiUrl);
+  // Nothing to store until the host enables or pastes a URL / membership link.
+  if (!enabled && !kofiUrl && !membershipUrl && o.enabled !== false) return undefined;
+  return {
+    enabled,
+    displayName: trimStr(o.displayName, 60) || 'Kommunity Chest',
+    blurb:
+      trimStr(o.blurb, 160) ||
+      'Donations help community members in need — not a tip to the host.',
+    kofiUrl: kofiUrl || DEFAULT_COMMUNITY_CHEST_URL,
+    ...(membershipUrl ? { membershipUrl } : {}),
+  };
 }
 
 /** Allow https links and common payment app schemes. */
@@ -121,6 +166,7 @@ function sanitizeTipJar(raw) {
   }
   const accountId = trimStr(o.stripeConnectAccountId, 120);
   const deepLinkNote = trimStr(o.deepLinkNote, 80) || undefined;
+  const communityChest = sanitizeCommunityChest(o.communityChest);
   return {
     enabled: o.enabled === true,
     displayName: trimStr(o.displayName, 60) || undefined,
@@ -130,26 +176,50 @@ function sanitizeTipJar(raw) {
     links,
     stripeConnectAccountId: accountId || undefined,
     stripeConnectChargesEnabled: o.stripeConnectChargesEnabled === true,
+    ...(communityChest ? { communityChest } : {}),
   };
 }
 
 /** Player-safe payload (no Connect account id). */
 function tipJarPublicPayload(tipJar) {
   const t = sanitizeTipJar(tipJar);
-  if (!t.enabled) return null;
+  const communityChest =
+    t.communityChest && t.communityChest.enabled === true && t.communityChest.kofiUrl
+      ? {
+          enabled: true,
+          displayName: t.communityChest.displayName || 'Kommunity Chest',
+          blurb:
+            t.communityChest.blurb ||
+            'Donations help community members in need — not a tip to the host.',
+          kofiUrl: t.communityChest.kofiUrl,
+          ...(t.communityChest.membershipUrl
+            ? { membershipUrl: t.communityChest.membershipUrl }
+            : {}),
+        }
+      : null;
   const hasLinks = Boolean(
     t.links.venmo || t.links.cashapp || t.links.paypal || t.links.otherUrl,
   );
-  const cardTipsEnabled = Boolean(t.stripeConnectAccountId && t.stripeConnectChargesEnabled);
-  if (!hasLinks && !cardTipsEnabled) return null;
+  const cardTipsEnabled = Boolean(
+    t.enabled && t.stripeConnectAccountId && t.stripeConnectChargesEnabled,
+  );
+  // Host tip rails only when tip jar is enabled; Kommunity Chest can be always-on alone.
+  const hostLinks = t.enabled ? t.links : {};
+  const hostHasLinks = Boolean(
+    t.enabled && (hostLinks.venmo || hostLinks.cashapp || hostLinks.paypal || hostLinks.otherUrl),
+  );
+  if (!t.enabled && !communityChest) return null;
+  if (t.enabled && !hasLinks && !cardTipsEnabled && !communityChest) return null;
+  if (!t.enabled && !communityChest) return null;
   return {
     enabled: true,
     displayName: t.displayName || 'Tip the host',
     deepLinkNote: t.deepLinkNote || 'Tempo tip',
     presetCents: t.presetCents,
     allowCustomAmount: t.allowCustomAmount,
-    links: t.links,
+    links: hostHasLinks || cardTipsEnabled ? hostLinks : {},
     cardTipsEnabled,
+    ...(communityChest ? { communityChest } : {}),
   };
 }
 
@@ -210,6 +280,19 @@ async function patchTipJarForOrganization(db, organizationId, patch) {
       ...merged,
       links: { ...current.links, ...patch.links },
     }).links;
+  }
+  if (
+    patch &&
+    typeof patch === 'object' &&
+    patch.communityChest &&
+    typeof patch.communityChest === 'object'
+  ) {
+    const nextChest = sanitizeCommunityChest({
+      ...(current.communityChest || {}),
+      ...patch.communityChest,
+    });
+    if (nextChest) merged.communityChest = nextChest;
+    else delete merged.communityChest;
   }
   const nextVs = { ...vs, tipJar: merged };
   await db.query(`UPDATE organizations SET venue_settings = $2::jsonb WHERE id = $1`, [
@@ -417,7 +500,10 @@ module.exports = {
   TIP_MIN_CENTS,
   TIP_MAX_CENTS,
   DEFAULT_PRESETS,
+  DEFAULT_COMMUNITY_CHEST_URL,
   sanitizeTipJar,
+  sanitizeCommunityChest,
+  sanitizeKofiUrl,
   tipJarPublicPayload,
   ensureHostTipsTable,
   getTipJarForOrganization,
