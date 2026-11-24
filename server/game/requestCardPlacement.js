@@ -103,41 +103,71 @@ function approvedRequestSongsForPlayer(songRequests, player, poolById = null) {
   return out;
 }
 
+function defaultShuffle(arr) {
+  const a = Array.isArray(arr) ? arr.slice() : [];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = a[i];
+    a[i] = a[j];
+    a[j] = tmp;
+  }
+  return a;
+}
+
 /**
- * Ensure must-have songs appear on the pick list (same length). Swaps out random non-must picks.
- * Songs already on the card are left in place; order of remaining slots is reshuffled lightly via swap targets.
+ * Build a card pick list: place the player's request songs into random slots first,
+ * then fill remaining slots from the pool (excluding those already placed).
+ * Prefer this over post-hoc end-of-list swaps (which clustered requests at the bottom).
+ *
+ * @param {object[]} poolSongs full pool available for this card geometry
+ * @param {object[]} mustHaveSongs player's approved request songs (already pool-filtered)
+ * @param {number} songsNeeded 24 or 25
+ * @param {(arr: any[]) => any[]} [shuffleFn] injectable shuffle (tests / server properShuffle)
  */
-function ensurePlayerRequestSongsOnPick(pickSongs, mustHaveSongs, songsNeeded) {
+function buildPickWithGuaranteedRequests(poolSongs, mustHaveSongs, songsNeeded, shuffleFn) {
   const need = Math.max(0, Math.floor(Number(songsNeeded)) || 0);
-  const pick = Array.isArray(pickSongs) ? pickSongs.filter((s) => s && s.id).slice(0, need) : [];
-  const must = Array.isArray(mustHaveSongs) ? mustHaveSongs.filter((s) => s && s.id) : [];
-  if (need === 0 || must.length === 0) return pick;
-
-  const onCard = new Set(pick.map((s) => String(s.id)));
-  const missing = [];
-  const missingSeen = new Set();
-  for (const song of must) {
+  if (need === 0) return [];
+  const shuffle = typeof shuffleFn === 'function' ? shuffleFn : defaultShuffle;
+  const pool = Array.isArray(poolSongs) ? poolSongs.filter((s) => s && s.id) : [];
+  const must = [];
+  const mustSeen = new Set();
+  for (const song of Array.isArray(mustHaveSongs) ? mustHaveSongs : []) {
+    if (!song || !song.id) continue;
     const id = String(song.id);
-    if (onCard.has(id) || missingSeen.has(id)) continue;
-    missingSeen.add(id);
-    missing.push(song);
-  }
-  if (missing.length === 0) return pick;
-
-  const mustIds = new Set(must.map((s) => String(s.id)));
-  const replaceableIdx = [];
-  for (let i = 0; i < pick.length; i++) {
-    if (!mustIds.has(String(pick[i].id))) replaceableIdx.push(i);
+    if (mustSeen.has(id)) continue;
+    // Prefer richer pool row when available.
+    const fromPool = pool.find((s) => String(s.id) === id);
+    mustSeen.add(id);
+    must.push(fromPool || song);
+    if (must.length >= need) break;
   }
 
-  let mi = 0;
-  while (mi < missing.length && replaceableIdx.length > 0) {
-    const swapAt = replaceableIdx.pop();
-    const next = missing[mi++];
-    pick[swapAt] = next;
-    onCard.add(String(next.id));
+  const pick = new Array(need).fill(null);
+  const mustPlaced = shuffle(must);
+  const slotOrder = shuffle(Array.from({ length: need }, (_, i) => i));
+  for (let i = 0; i < mustPlaced.length; i++) {
+    pick[slotOrder[i]] = mustPlaced[i];
   }
-  return pick;
+
+  const used = new Set(mustPlaced.map((s) => String(s.id)));
+  const fillers = shuffle(pool.filter((s) => !used.has(String(s.id))));
+  let fi = 0;
+  for (let i = 0; i < need; i++) {
+    if (pick[i]) continue;
+    if (fi >= fillers.length) break;
+    const next = fillers[fi++];
+    pick[i] = next;
+    used.add(String(next.id));
+  }
+  return pick.filter(Boolean).slice(0, need);
+}
+
+/**
+ * @deprecated Prefer buildPickWithGuaranteedRequests(fullPool, must, need, shuffle).
+ * Kept as a thin wrapper for call sites that still pass an already-sliced pick as the pool.
+ */
+function ensurePlayerRequestSongsOnPick(pickSongs, mustHaveSongs, songsNeeded, shuffleFn) {
+  return buildPickWithGuaranteedRequests(pickSongs, mustHaveSongs, songsNeeded, shuffleFn);
 }
 
 module.exports = {
@@ -146,5 +176,6 @@ module.exports = {
   requestedByFieldsFromAttribution,
   applyRequestAttributionToSong,
   approvedRequestSongsForPlayer,
+  buildPickWithGuaranteedRequests,
   ensurePlayerRequestSongsOnPick,
 };

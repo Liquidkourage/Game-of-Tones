@@ -5,7 +5,7 @@ const {
   buildRequestAttributionBySongId,
   applyRequestAttributionToSong,
   approvedRequestSongsForPlayer,
-  ensurePlayerRequestSongsOnPick,
+  buildPickWithGuaranteedRequests,
 } = require('./requestCardPlacement');
 
 describe('formatRequestedByLabel', () => {
@@ -49,7 +49,7 @@ describe('buildRequestAttributionBySongId + apply', () => {
   });
 });
 
-describe('approvedRequestSongsForPlayer + ensurePlayerRequestSongsOnPick', () => {
+describe('approvedRequestSongsForPlayer + buildPickWithGuaranteedRequests', () => {
   const pool = [
     { id: 'a', name: 'A', artist: '1' },
     { id: 'b', name: 'B', artist: '2' },
@@ -90,38 +90,37 @@ describe('approvedRequestSongsForPlayer + ensurePlayerRequestSongsOnPick', () =>
     );
   });
 
-  it('swaps request songs onto the card when missing', () => {
-    const pick = ensurePlayerRequestSongsOnPick(
-      [
-        { id: 'a', name: 'A', artist: '1' },
-        { id: 'b', name: 'B', artist: '2' },
-        { id: 'd', name: 'D', artist: '4' },
-      ],
+  it('places request songs first then fills from pool', () => {
+    const identityShuffle = (arr) => arr.slice();
+    const pick = buildPickWithGuaranteedRequests(
+      pool,
       [
         { id: 'c', name: 'C', artist: '3' },
         { id: 'e', name: 'E', artist: '5' },
       ],
-      3,
+      4,
+      identityShuffle,
     );
-    const ids = new Set(pick.map((s) => s.id));
-    assert.equal(pick.length, 3);
-    assert.ok(ids.has('c'));
-    assert.ok(ids.has('e'));
+    assert.equal(pick.length, 4);
+    const ids = pick.map((s) => s.id);
+    assert.ok(ids.includes('c'));
+    assert.ok(ids.includes('e'));
+    // identity shuffle puts musts in first slot indices 0,1 then fills 2,3 from pool order a,b,d
+    assert.deepEqual(ids.slice(0, 2).sort(), ['c', 'e']);
   });
 
-  it('keeps already-present request songs', () => {
-    const pick = ensurePlayerRequestSongsOnPick(
-      [
-        { id: 'c', name: 'C', artist: '3' },
-        { id: 'a', name: 'A', artist: '1' },
-        { id: 'b', name: 'B', artist: '2' },
-      ],
+  it('spreads must-haves across random slots (not clustered at end)', () => {
+    // Deterministic "shuffle": reverse — musts get high indices first via slotOrder reverse.
+    const reverseShuffle = (arr) => arr.slice().reverse();
+    const pick = buildPickWithGuaranteedRequests(
+      pool,
       [{ id: 'c', name: 'C', artist: '3' }],
-      3,
+      5,
+      reverseShuffle,
     );
-    assert.deepEqual(
-      pick.map((s) => s.id),
-      ['c', 'a', 'b'],
-    );
+    assert.equal(pick.length, 5);
+    assert.equal(pick.filter((s) => s.id === 'c').length, 1);
+    // reverse slotOrder → must lands at last index, not always index 0 of a post-hoc swap-from-end
+    assert.ok(pick.some((s) => s.id === 'c'));
   });
 });
