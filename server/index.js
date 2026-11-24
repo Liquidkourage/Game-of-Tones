@@ -5586,10 +5586,7 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
             try {
               const late = await spErr.getCurrentPlaybackState();
               const wantMs = room.currentSongStartMs || 0;
-              if (
-                SpotifyService.playbackItemMatchesTrackId(late?.item, nextSong.id) ||
-                SpotifyService.isAudibleNearEarlyStart(late, wantMs, { trackId: nextSong.id })
-              ) {
+              if (SpotifyService.playbackItemMatchesTrackId(late?.item, nextSong.id)) {
                 room._spotifyNotPlayingSoftRetries = 0;
                 routineServerLog(
                   '✅ Soft recover: late check — audio already on called clip (no skip)',
@@ -14164,10 +14161,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             const spSoft = spotifyFor(roomId);
             const late = await spSoft.getCurrentPlaybackState();
             const wantMs = room.currentSongStartMs || 0;
-            if (
-              SpotifyService.playbackItemMatchesTrackId(late?.item, firstSong.id) ||
-              SpotifyService.isAudibleNearEarlyStart(late, wantMs, { trackId: firstSong.id })
-            ) {
+            if (SpotifyService.playbackItemMatchesTrackId(late?.item, firstSong.id)) {
               room._spotifyNotPlayingSoftRetries = 0;
               routineServerLog(
                 '✅ Start Game soft recover: late check — audio already on called clip (no toast)',
@@ -17950,6 +17944,16 @@ function isSpotifyHttp429(e) {
   return !!(e && (e.statusCode === 429 || e?.body?.error?.status === 429));
 }
 
+/** OAuth client id/secret mismatch — catalog or org credential path. */
+function isSpotifyInvalidClientError(e) {
+  if (!e) return false;
+  const bodyErr = e?.body?.error;
+  if (bodyErr === 'invalid_client') return true;
+  if (bodyErr && typeof bodyErr === 'object' && bodyErr.error === 'invalid_client') return true;
+  const msg = `${e?.message || ''} ${e?.body?.error_description || ''} ${e?.error_description || ''}`;
+  return /invalid_client/i.test(msg);
+}
+
 function sendSpotify429IfNeeded(res, error) {
   if (!isSpotifyHttp429(error)) return false;
   const h = error.headers || {};
@@ -18973,8 +18977,11 @@ app.get('/api/spotify/catalog/packs', async (req, res) => {
           const stale = await loadCatalogPackSummariesCacheRow(cacheKey);
           if (stale && Array.isArray(stale.data.packs) && stale.data.packs.length > 0) {
             const is429 = isSpotifyHttp429(fetchErr);
+            const badClient = isSpotifyInvalidClientError(fetchErr);
             routineServerLog(
-              `[catalog] GET /api/spotify/catalog/packs?force=1: live fetch failed — returning stale Postgres cache${is429 ? ' (429)' : ''}`
+              `[catalog] GET /api/spotify/catalog/packs?force=1: live fetch failed — returning stale Postgres cache${
+                is429 ? ' (429)' : badClient ? ' (invalid_client)' : ''
+              }`
             );
             return res.json({
               success: true,
@@ -18989,7 +18996,9 @@ app.get('/api/spotify/catalog/packs', async (req, res) => {
               manualRefreshCooldownMs,
               message: is429
                 ? 'Spotify is rate-limiting catalog discovery. Showing the last saved official packs list — try again after cooldown.'
-                : 'Could not refresh official packs from Spotify. Showing the last saved list.',
+                : badClient
+                  ? 'Spotify rejected the catalog app credentials (invalid_client). Showing the last saved packs — reconnect Spotify or check Admin catalog/org client id+secret.'
+                  : 'Could not refresh official packs from Spotify. Showing the last saved list.',
             });
           }
         }
@@ -19058,8 +19067,11 @@ app.get('/api/spotify/catalog/packs', async (req, res) => {
       if (db) {
         const stale = await loadCatalogPackSummariesCacheRow(cacheKey);
         if (stale && Array.isArray(stale.data.packs) && stale.data.packs.length > 0) {
+          const badClient = isSpotifyInvalidClientError(fetchErr);
           routineServerLog(
-            '[catalog] GET /api/spotify/catalog/packs: live fetch failed — returning stale Postgres cache'
+            `[catalog] GET /api/spotify/catalog/packs: live fetch failed — returning stale Postgres cache${
+              badClient ? ' (invalid_client)' : ''
+            }`
           );
           return res.json({
             success: true,
@@ -19070,6 +19082,13 @@ app.get('/api/spotify/catalog/packs', async (req, res) => {
             catalogCacheStale: true,
             catalogCacheUpdatedAt: stale.updatedAtIso,
             manualRefreshCooldownMs,
+            ...(badClient
+              ? {
+                  refreshFailed: true,
+                  message:
+                    'Spotify rejected the catalog app credentials (invalid_client). Showing the last saved packs — reconnect Spotify or check Admin catalog/org client id+secret.',
+                }
+              : {}),
           });
         }
       }
@@ -19101,7 +19120,17 @@ app.get('/api/spotify/catalog/packs', async (req, res) => {
     });
   } catch (error) {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
-    console.error('GET /api/spotify/catalog/packs:', error);
+    if (isSpotifyInvalidClientError(error)) {
+      console.warn(
+        '[catalog] GET /api/spotify/catalog/packs: invalid_client — catalog/org Spotify credentials do not match Spotify. Reconnect or fix Admin client id+secret.',
+      );
+      return res.status(503).json({
+        error: 'spotify_invalid_client',
+        message:
+          'Spotify rejected the app credentials (invalid_client). Reconnect Spotify, or check Admin platform/org catalog client id and secret.',
+      });
+    }
+    console.error('GET /api/spotify/catalog/packs:', error?.message || error);
     res.status(500).json({ error: 'catalog_packs_failed', message: error?.message || 'Failed to load catalog packs' });
   }
 });

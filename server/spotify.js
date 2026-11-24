@@ -48,17 +48,29 @@ function playbackItemMatchesTrackId(item, trackId) {
 /**
  * After a context play, audio may already be mid-Early on a linked/market id.
  * Soft-recover must not re-fire context@Early (audible restart) when this is true.
- * Window is tight (~snippet length) so a previous track still playing far past its own
- * position is not mistaken for "already on Early".
+ *
+ * When `trackId` is set: only succeed if Connect reports that track (incl. linked_from).
+ * Never treat "progress near Early while a *previous* song is still playing" as success —
+ * that caused false confirms and audible hiccups on album-context Requests plays.
+ * item=none Connect lag: return false so callers keep polling (do not guess).
  */
 function isAudibleNearEarlyStart(state, wantMs, { trackId = null } = {}) {
   if (!state?.is_playing) return false;
-  if (trackId && playbackItemMatchesTrackId(state.item, trackId)) return true;
   const prog = Number(state.progress_ms || 0);
   const early = Math.max(0, Math.floor(Number(wantMs) || 0));
   if (!(early > 0) || !Number.isFinite(prog)) return false;
-  // Mid-clip after Early only — previous-song progress far from this Early must not match.
-  return prog >= early - 5000 && prog <= early + 35000;
+  // Mid-clip after Early only — progress far from this Early must not match.
+  const nearEarly = prog >= early - 5000 && prog <= early + 35000;
+  if (!nearEarly) return false;
+  if (trackId) {
+    const hasItemId = !!(
+      state.item &&
+      (state.item.id || state.item.linked_from?.id || state.item.linkedFrom?.id)
+    );
+    if (!hasItemId) return false;
+    return playbackItemMatchesTrackId(state.item, trackId);
+  }
+  return true;
 }
 
 /**
@@ -1854,9 +1866,9 @@ class SpotifyService {
     };
 
     /** Poll — Windows Connect often returns item=none for a few hundred ms after a successful play. */
-    const confirmPlaying = async (label, maxAttempts = 5) => {
+    const confirmPlaying = async (label, maxAttempts = 5, firstDelayMs = 450) => {
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        await new Promise((r) => setTimeout(r, attempt === 1 ? 450 : 400));
+        await new Promise((r) => setTimeout(r, attempt === 1 ? firstDelayMs : 400));
         let snap = await readSnap();
         // Correct item loaded but paused — nudge resume (common right after context bind).
         if (trackId && snap.matchesTrack && !snap.playing) {
@@ -1878,10 +1890,10 @@ class SpotifyService {
         if (ok) return true;
         // Bound with correct item even if is_playing flickers — don't destroy the session.
         if (await settleBoundTrack(snap, `${label}#${attempt}`)) return true;
-        // Context play already started mid-Early audio (linked/market id may not match yet) —
-        // treat as success; never fall through to soft-recover context replay.
+        // Mid-Early on the *called* track only (linked/market id OK). Never accept previous song.
         if (
           snap.playing &&
+          snap.matchesTrack &&
           positionMs > 0 &&
           isAudibleNearEarlyStart(snap.state, positionMs, { trackId })
         ) {
@@ -1900,8 +1912,9 @@ class SpotifyService {
         routineSpotifyLog(`🎵 startPlayback context_uri ${ctxKind} @${positionMs}ms`);
         await playViaContext(positionMs);
         if (!confirm) return;
-        // Longer first poll — Connect confirm lags while Early audio is already audible.
-        if (await confirmPlaying('after-context', 8)) return;
+        // Album context (Requests) lags Connect more often — slightly longer first poll + more attempts.
+        const albumCtx = Boolean(contextAlbumId);
+        if (await confirmPlaying('after-context', albumCtx ? 10 : 8, albumCtx ? 650 : 450)) return;
 
         // Extra grace: if the right item finally appears, settle — do NOT bind@0 (audible restart).
         {
@@ -1982,6 +1995,14 @@ class SpotifyService {
       await this.spotifyApi.pause({ device_id: deviceId });
     } catch (error) {
       this._rethrowIfRateLimited(error, 'pausePlayback');
+      // Connect often returns Restriction when already paused / device policy blip —
+      // treat as success so bingo / round-complete pause does not spam host logs.
+      if (this.isRestrictionError(error)) {
+        routineSpotifyLog(
+          '⏸️ pausePlayback: Restriction violated (treating as paused — Connect quirk)',
+        );
+        return;
+      }
       console.error('Error pausing playback:', error);
       throw error;
     }
